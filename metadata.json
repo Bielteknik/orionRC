@@ -1,0 +1,5 @@
+{
+  "name": "Meteoroloji Gözlem Platformu Back",
+  "description": "IoT sensörleri, canlı kameralar ve yapay zeka destekli asistan ile gelişmiş bir meteorolojik veri toplama ve değerlendirme platformu.",
+  "requestFramePermissions": []
+}

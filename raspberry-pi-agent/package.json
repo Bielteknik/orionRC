@@ -1,0 +1,30 @@
+{
+  "name": "orion-agent-ts",
+  "version": "1.0.0",
+  "description": "TypeScript-based agent for reading sensor data on Raspberry Pi and sending it to a remote server.",
+  "main": "dist/agent.js",
+  "scripts": {
+    "start": "node dist/agent.js",
+    "build": "tsc",
+    "dev": "ts-node src/agent.ts"
+  },
+  "keywords": [
+    "iot",
+    "raspberry-pi",
+    "typescript",
+    "sensors"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.7.2",
+    "serialport": "^12.0.0",
+    "i2c-bus": "^5.2.2",
+    "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}

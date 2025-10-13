@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Meteoroloji Gözlem Platformu</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS for interactive map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+    <script>
+      // On page load or when changing themes, best to add inline in `head` to avoid FOUC
+      if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark')
+      } else {
+        document.documentElement.classList.remove('dark')
+      }
+    </script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              'primary': '#FFFFFF',      // White, for cards
+              'secondary': '#F9FAFB',    // Gray-50, for page background
+              'accent': '#E95420',       // Ubuntu Orange
+              'muted': '#6B7281',        // gray-500
+              'success': '#10B981',      // emerald-500
+              'danger': '#EF4444',       // red-500
+              'warning': '#F59E0B',      // amber-500
+              'ubuntu-purple': '#77216F',
+              'ubuntu-orange': '#E95420',
+              'orange': {
+                600: '#DD4B1A' // Darker orange for hover
+              },
+              'purple': {
+                400: '#c084fc',
+              },
+              'teal': {
+                400: '#2dd4bf',
+              },
+            },
+          }
+        }
+      }
+    </script>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "recharts": "https://aistudiocdn.com/recharts@^3.2.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.23.0",
+    "path": "https://aistudiocdn.com/path@^0.12.7",
+    "fs/": "https://aistudiocdn.com/fs@^0.0.1-security/",
+    "axios": "https://aistudiocdn.com/axios@^1.12.2",
+    "url": "https://aistudiocdn.com/url@^0.11.4",
+    "sqlite3": "https://aistudiocdn.com/sqlite3@^5.1.7",
+    "sqlite": "https://aistudiocdn.com/sqlite@^5.1.1",
+    "i2c-bus": "https://aistudiocdn.com/i2c-bus@^5.2.3"
+  }
+}
+</script>
+</head>
+  <body class="bg-secondary text-gray-800 dark:bg-gray-900 dark:text-gray-300">
+    <div id="root"></div>
+    <!-- PDF Generation Libraries -->
+    <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
+    <script src="https://unpkg.com/jspdf-autotable@latest/dist/jspdf.plugin.autotable.js"></script>
+    <!-- Leaflet JS for interactive map -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+     crossorigin=""></script>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

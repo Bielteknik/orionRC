@@ -1,0 +1,30 @@
+{
+  "name": "meteoroloji-gözlem-platformu-back",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "recharts": "^3.2.1",
+    "react-dom": "^19.2.0",
+    "@google/genai": "^1.23.0",
+    "path": "^0.12.7",
+    "fs": "^0.0.1-security",
+    "axios": "^1.12.2",
+    "url": "^0.11.4",
+    "sqlite3": "^5.1.7",
+    "sqlite": "^5.1.1",
+    "i2c-bus": "^5.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
+}
