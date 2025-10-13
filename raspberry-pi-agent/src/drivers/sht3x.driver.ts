@@ -28,59 +28,79 @@ export default class Sht3xDriver implements ISensorDriver {
     async read(config: { address: string; bus?: number }): Promise<Record<string, any> | null> {
         const address = parseInt(config.address, 16);
         const busNumber = config.bus || 1;
+        const maxRetries = 3;
 
         if (isNaN(address)) {
             console.error("     -> HATA (SHT3x): Geçersiz I2C adresi belirtilmiş.");
             return null;
         }
 
-        let i2cBus: I2CBus | null = null;
-        try {
-            console.log(`     -> SHT3x sensörü okunuyor... Adres: 0x${address.toString(16)}, Bus: ${busNumber}`);
-            
-            // I2C bus'ı aç
-            i2cBus = openSync(busNumber);
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            let i2cBus: I2CBus | null = null;
+            try {
+                console.log(`     -> SHT3x okunuyor... Adres: 0x${address.toString(16)}, Bus: ${busNumber} (Deneme ${attempt}/${maxRetries})`);
+                
+                // I2C bus'ı aç
+                i2cBus = openSync(busNumber);
 
-            // Ölçüm komutunu gönder
-            const writeBuffer = Buffer.from(CMD_MEASURE_HPM);
-            i2cBus.i2cWriteSync(address, writeBuffer.length, writeBuffer);
+                // Ölçüm komutunu gönder
+                const writeBuffer = Buffer.from(CMD_MEASURE_HPM);
+                i2cBus.i2cWriteSync(address, writeBuffer.length, writeBuffer);
 
-            // Sensörün ölçüm yapması için bekle
-            await new Promise(resolve => setTimeout(resolve, MEASUREMENT_DELAY));
+                // Sensörün ölçüm yapması için bekle
+                await new Promise(resolve => setTimeout(resolve, MEASUREMENT_DELAY));
 
-            // 6 byte veri oku: [Sıcaklık MSB, Sıcaklık LSB, Sıcaklık CRC, Nem MSB, Nem LSB, Nem CRC]
-            const readBuffer = Buffer.alloc(6);
-            i2cBus.i2cReadSync(address, readBuffer.length, readBuffer);
+                // 6 byte veri oku: [Sıcaklık MSB, Sıcaklık LSB, Sıcaklık CRC, Nem MSB, Nem LSB, Nem CRC]
+                const readBuffer = Buffer.alloc(6);
+                i2cBus.i2cReadSync(address, readBuffer.length, readBuffer);
 
-            // Veri bütünlüğünü CRC ile kontrol et
-            const tempCRC = calculateCRC(readBuffer.slice(0, 2));
-            const humCRC = calculateCRC(readBuffer.slice(3, 5));
+                // Veri bütünlüğünü CRC ile kontrol et
+                const tempCRC = calculateCRC(readBuffer.slice(0, 2));
+                const humCRC = calculateCRC(readBuffer.slice(3, 5));
+                const receivedTempCRC = readBuffer[2];
+                const receivedHumCRC = readBuffer[5];
 
-            if (tempCRC !== readBuffer[2] || humCRC !== readBuffer[5]) {
-                 console.error("     -> HATA (SHT3x): CRC kontrolü başarısız! Veri bozuk olabilir.");
-                 return null;
-            }
+                if (tempCRC !== receivedTempCRC || humCRC !== receivedHumCRC) {
+                     console.warn(`     -> UYARI (SHT3x): CRC kontrolü başarısız!`);
+                     console.warn(`     -> Ham Veri Buffer: <${readBuffer.toString('hex')}>`);
+                     console.warn(`     -> Sıcaklık: Hesaplanan CRC=0x${tempCRC.toString(16)}, Alınan CRC=0x${receivedTempCRC.toString(16)}`);
+                     console.warn(`     -> Nem:      Hesaplanan CRC=0x${humCRC.toString(16)}, Alınan CRC=0x${receivedHumCRC.toString(16)}`);
+                     
+                     if (attempt === maxRetries) {
+                         console.error("     -> HATA (SHT3x): Maksimum deneme sayısına ulaşıldı, okuma başarısız.");
+                         return null;
+                     }
+                     await new Promise(resolve => setTimeout(resolve, 100)); // Tekrar denemeden önce kısa bir süre bekle
+                     continue; // Sonraki denemeye geç
+                }
 
-            // Ham veriyi sıcaklık ve neme dönüştür (datasheet formülleri)
-            const rawTemp = readBuffer.readUInt16BE(0);
-            const rawHumidity = readBuffer.readUInt16BE(3);
+                // Ham veriyi sıcaklık ve neme dönüştür (datasheet formülleri)
+                const rawTemp = readBuffer.readUInt16BE(0);
+                const rawHumidity = readBuffer.readUInt16BE(3);
 
-            const temperature = -45 + 175 * (rawTemp / 65535);
-            const humidity = 100 * (rawHumidity / 65535);
+                const temperature = -45 + 175 * (rawTemp / 65535);
+                const humidity = 100 * (rawHumidity / 65535);
 
-            return {
-                temperature: parseFloat(temperature.toFixed(2)),
-                humidity: parseFloat(humidity.toFixed(2))
-            };
+                // Başarılı, veriyi döndür ve döngüden çık
+                return {
+                    temperature: parseFloat(temperature.toFixed(2)),
+                    humidity: parseFloat(humidity.toFixed(2))
+                };
 
-        } catch (error) {
-            console.error(`     -> HATA (SHT3x): I2C bus üzerinden okuma yapılamadı.`, error);
-            return null;
-        } finally {
-            // I2C bus'ı her zaman kapat
-            if (i2cBus) {
-                i2cBus.closeSync();
+            } catch (error) {
+                 if (attempt === maxRetries) {
+                    console.error(`     -> HATA (SHT3x): I2C bus üzerinden okuma yapılamadı.`, error);
+                    return null;
+                }
+                 await new Promise(resolve => setTimeout(resolve, 100)); // Hata durumunda da tekrar denemeden önce bekle
+            } finally {
+                // I2C bus'ı her zaman kapat
+                if (i2cBus) {
+                    i2cBus.closeSync();
+                }
             }
         }
+        // Tüm denemeler başarısız olursa null döndür
+        return null;
     }
 }

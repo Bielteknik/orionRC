@@ -1,37 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Sensor, SensorStatus } from '../types';
+import { Sensor, SensorStatus, Station } from '../types';
 import Card from '../components/common/Card';
-import { AddIcon, SearchIcon, SettingsIcon, StationIcon, SensorIcon as GenericSensorIcon } from '../components/icons/Icons';
-import { MOCK_STATIONS } from './Stations';
+import { AddIcon, SearchIcon, SettingsIcon, StationIcon, SensorIcon as GenericSensorIcon, ExclamationIcon } from '../components/icons/Icons';
 import AddSensorDrawer from '../components/AddSensorDrawer';
 import Skeleton from '../components/common/Skeleton';
-
-
-// Mock Data
-export const MOCK_SENSORS: Sensor[] = [
-  // Station 1
-  { id: 'S001', name: 'Sıcaklık Sensörü 1', type: 'Sıcaklık', stationId: 'STN01', status: SensorStatus.Active, value: 24.5, unit: '°C', battery: 85, lastUpdate: '1 dakika önce' },
-  { id: 'S002', name: 'Nem Sensörü 1', type: 'Nem', stationId: 'STN01', status: SensorStatus.Active, value: 68, unit: '%', battery: 92, lastUpdate: '1 dakika önce' },
-  { id: 'S003', name: 'Rüzgar Hızı Sensörü 1', type: 'Rüzgar Hızı', stationId: 'STN01', status: SensorStatus.Active, value: 12, unit: 'km/h', battery: 78, lastUpdate: '2 dakika önce' },
-  { id: 'S014', name: 'Rüzgar Yönü Sensörü 1', type: 'Rüzgar Yönü', stationId: 'STN01', status: SensorStatus.Active, value: 210, unit: '°', battery: 78, lastUpdate: '2 dakika önce' },
-  { id: 'S004', name: 'Basınç Sensörü 1', type: 'Basınç', stationId: 'STN01', status: SensorStatus.Active, value: 1013, unit: 'hPa', battery: 88, lastUpdate: '1 dakika önce' },
-  
-  // Station 2
-  { id: 'S005', name: 'Yağmur Dedektörü', type: 'Yağış', stationId: 'STN02', status: SensorStatus.Error, value: 0, unit: 'mm', battery: 5, lastUpdate: '1 saat önce' },
-  { id: 'S006', name: 'UV Sensörü', type: 'UV İndeksi', stationId: 'STN02', status: SensorStatus.Maintenance, value: 5.6, unit: '', battery: 99, lastUpdate: '3 saat önce' },
-  { id: 'S008', name: 'Rüzgar Yönü KM', type: 'Rüzgar Yönü', stationId: 'STN02', status: SensorStatus.Active, value: 270, unit: '°', battery: 81, lastUpdate: '3 dakika önce' },
-  { id: 'S009', name: 'Sıcaklık Sensörü KM', type: 'Sıcaklık', stationId: 'STN02', status: SensorStatus.Active, value: 19.8, unit: '°C', battery: 95, lastUpdate: '3 dakika önce' },
-  { id: 'S010', name: 'Nem Sensörü KM', type: 'Nem', stationId: 'STN02', status: SensorStatus.Active, value: 75, unit: '%', battery: 91, lastUpdate: '3 dakika önce' },
-  { id: 'S011', name: 'Rüzgar Hızı Sensörü KM', type: 'Rüzgar Hızı', stationId: 'STN02', status: SensorStatus.Active, value: 25, unit: 'km/h', battery: 88, lastUpdate: '4 dakika önce' },
-  
-  // Station 3
-  { id: 'S007', name: 'Sıcaklık Sensörü 2', type: 'Sıcaklık', stationId: 'STN03', status: SensorStatus.Active, value: 22.1, unit: '°C', battery: 76, lastUpdate: '5 dakika önce' },
-
-  // Station 4
-  { id: 'S012', name: 'Zirve Sıcaklık', type: 'Sıcaklık', stationId: 'STN04', status: SensorStatus.Inactive, value: 15.2, unit: '°C', battery: 0, lastUpdate: '3 saat önce' },
-  { id: 'S013', name: 'Zirve Nem', type: 'Nem', stationId: 'STN04', status: SensorStatus.Inactive, value: 80, unit: '%', battery: 0, lastUpdate: '3 saat önce' },
-];
-
+import { getSensors, getStations } from '../services/apiService';
 
 const SENSOR_UNITS: { [key: string]: string } = {
     'Sıcaklık': '°C',
@@ -51,8 +24,7 @@ const StatCard: React.FC<{ title: string; value: string | number; colorClass?: s
   </Card>
 );
 
-const SensorCard: React.FC<{ sensor: Sensor; onEdit: (sensor: Sensor) => void }> = ({ sensor, onEdit }) => {
-    const station = MOCK_STATIONS.find(s => s.id === sensor.stationId);
+const SensorCard: React.FC<{ sensor: Sensor; stationName: string; onEdit: (sensor: Sensor) => void }> = ({ sensor, stationName, onEdit }) => {
     const batteryColor = sensor.battery > 20 ? 'bg-green-400' : 'bg-red-500';
 
     return (
@@ -93,7 +65,7 @@ const SensorCard: React.FC<{ sensor: Sensor; onEdit: (sensor: Sensor) => void }>
                         <StationIcon className="w-5 h-5 text-white flex-shrink-0" />
                         <div>
                             <p className="text-xs text-white/80">İstasyon</p>
-                            <p className="font-semibold text-sm text-white">{station?.name || sensor.stationId}</p>
+                            <p className="font-semibold text-sm text-white">{stationName || sensor.stationId}</p>
                         </div>
                     </div>
 
@@ -126,20 +98,38 @@ const SensorCard: React.FC<{ sensor: Sensor; onEdit: (sensor: Sensor) => void }>
 }
 
 const Sensors: React.FC = () => {
-  const [sensors, setSensors] = useState<Sensor[]>(MOCK_SENSORS);
+  const [sensors, setSensors] = useState<Sensor[]>([]);
+  const [stations, setStations] = useState<Station[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<SensorStatus | 'all'>('all');
   const [typeFilter, setTypeFilter] = useState<string | 'all'>('all');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingSensor, setEditingSensor] = useState<Sensor | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 750);
-    return () => clearTimeout(timer);
+    const fetchData = async () => {
+        try {
+            setIsLoading(true);
+            setError(null);
+            const [sensorsData, stationsData] = await Promise.all([getSensors(), getStations()]);
+            setSensors(sensorsData);
+            setStations(stationsData);
+        } catch (err) {
+            setError('Sensör verileri yüklenirken bir hata oluştu.');
+            console.error(err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    fetchData();
   }, []);
 
-  const { total, active, error, avgBattery } = useMemo(() => {
+  const stationMap = useMemo(() => new Map(stations.map(s => [s.id, s.name])), [stations]);
+
+  const { total, active, error: errorCount, avgBattery } = useMemo(() => {
+    if (sensors.length === 0) return { total: 0, active: 0, error: 0, avgBattery: 0 };
     const activeSensors = sensors.filter(s => s.status === SensorStatus.Active);
     const totalBattery = sensors.reduce((acc, s) => acc + s.battery, 0);
     return {
@@ -153,7 +143,6 @@ const Sensors: React.FC = () => {
   const sensorTypes = useMemo(() => [...new Set(sensors.map(s => s.type))], [sensors]);
 
   const filteredSensors = useMemo(() => {
-    const stationMap = new Map(MOCK_STATIONS.map(s => [s.id, s.name]));
     return sensors
       .filter(sensor => statusFilter === 'all' || sensor.status === statusFilter)
       .filter(sensor => typeFilter === 'all' || sensor.type === typeFilter)
@@ -162,7 +151,7 @@ const Sensors: React.FC = () => {
         return sensor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                stationName.toLowerCase().includes(searchTerm.toLowerCase());
       });
-  }, [sensors, searchTerm, statusFilter, typeFilter]);
+  }, [sensors, searchTerm, statusFilter, typeFilter, stationMap]);
   
   const handleOpenAddDrawer = () => {
     setEditingSensor(null);
@@ -175,6 +164,7 @@ const Sensors: React.FC = () => {
   };
   
   const handleSaveSensor = (sensorData: Partial<Sensor> & { id?: string }) => {
+     // Saving is mocked for now until POST/PUT endpoints are implemented
      if (sensorData.id) { // Update existing sensor
         setSensors(prev => prev.map(s => s.id === sensorData.id ? { ...s, ...sensorData, lastUpdate: 'şimdi' } as Sensor : s));
      } else { // Add new sensor
@@ -212,7 +202,7 @@ const Sensors: React.FC = () => {
         {isLoading ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24"/>) : <>
             <StatCard title="Toplam Sensör" value={total} />
             <StatCard title="Aktif Sensör" value={active} colorClass="text-success" />
-            <StatCard title="Hatalı Sensör" value={error} colorClass="text-danger" />
+            <StatCard title="Hatalı Sensör" value={errorCount} colorClass="text-danger" />
             <StatCard title="Ortalama Batarya" value={`${avgBattery}%`} />
         </>}
       </div>
@@ -256,15 +246,22 @@ const Sensors: React.FC = () => {
              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-[340px] rounded-xl" />)}
             </div>
+        ) : error ? (
+            <Card>
+                <div className="text-center py-8 text-danger flex flex-col items-center justify-center gap-2">
+                    <ExclamationIcon className="w-12 h-12"/>
+                    <p className="font-semibold">{error}</p>
+                </div>
+            </Card>
         ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {filteredSensors.map(sensor => (
-                <SensorCard key={sensor.id} sensor={sensor} onEdit={handleOpenEditDrawer} />
+                <SensorCard key={sensor.id} sensor={sensor} stationName={stationMap.get(sensor.stationId) || ''} onEdit={handleOpenEditDrawer} />
             ))}
           </div>
         )}
 
-      {filteredSensors.length === 0 && !isLoading && (
+      {filteredSensors.length === 0 && !isLoading && !error && (
           <Card>
               <div className="text-center py-8 text-muted">
                   <p>Arama kriterlerinize uygun sensör bulunamadı.</p>
@@ -278,7 +275,7 @@ const Sensors: React.FC = () => {
             setEditingSensor(null);
         }}
         onSave={handleSaveSensor}
-        stations={MOCK_STATIONS}
+        stations={stations}
         sensorToEdit={editingSensor}
       />
     </div>

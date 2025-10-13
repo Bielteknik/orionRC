@@ -1,8 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { DeviceConfig, Station } from './types';
-import { MOCK_STATIONS_DATA } from './mockData';
+import { DeviceConfig } from './types';
+import { MOCK_STATIONS_DATA, MOCK_SENSORS_DATA, MOCK_CAMERAS_DATA } from './mockData';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -41,10 +41,8 @@ const authenticateDevice = (req: express.Request, res: express.Response, next: e
 
 // --- API Routes ---
 
-const apiRouter = express.Router();
-
 // [Agent Endpoint] Get device configuration
-apiRouter.get('/v3/device/:deviceId/config/', authenticateDevice, (req: express.Request, res: express.Response) => {
+app.get('/api/v3/device/:deviceId/config/', authenticateDevice, (req: express.Request, res: express.Response) => {
     const { deviceId } = req.params;
     console.log(`Configuration requested for device: ${deviceId}`);
 
@@ -87,7 +85,7 @@ apiRouter.get('/v3/device/:deviceId/config/', authenticateDevice, (req: express.
 });
 
 // [Agent Endpoint] Submit sensor readings
-apiRouter.post('/v3/readings/submit/', authenticateDevice, (req: express.Request, res: express.Response) => {
+app.post('/api/v3/readings/submit/', authenticateDevice, (req: express.Request, res: express.Response) => {
     const reading = req.body;
     
     // In a real application, you would validate this data and save it to a database.
@@ -99,15 +97,19 @@ apiRouter.post('/v3/readings/submit/', authenticateDevice, (req: express.Request
 
 
 // [Frontend Endpoint] Get all stations
-apiRouter.get('/v3/stations', (req: express.Request, res: express.Response) => {
-    // In a real application, you would fetch this from a database.
-    // For now, we return the mock data.
+app.get('/api/v3/stations', (req: express.Request, res: express.Response) => {
     res.json(MOCK_STATIONS_DATA);
 });
 
+// [Frontend Endpoint] Get all sensors
+app.get('/api/v3/sensors', (req: express.Request, res: express.Response) => {
+    res.json(MOCK_SENSORS_DATA);
+});
 
-// Use the API router for all routes starting with /api
-app.use('/api', apiRouter);
+// [Frontend Endpoint] Get all cameras
+app.get('/api/v3/cameras', (req: express.Request, res: express.Response) => {
+    res.json(MOCK_CAMERAS_DATA);
+});
 
 
 // --- Root Route for Health Check ---

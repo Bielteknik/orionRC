@@ -1,8 +1,7 @@
 import React, { useMemo } from 'react';
 import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend, Tooltip } from 'recharts';
 import { useTheme } from './ThemeContext';
-import { MOCK_SENSORS } from '../pages/Sensors';
-import { Station } from '../types';
+import { Station, Sensor } from '../types';
 
 const DIRECTIONS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 const SPEED_BINS = [
@@ -14,10 +13,10 @@ const SPEED_BINS = [
 ];
 
 // Generate mock data for the wind rose chart based on selected stations
-const generateMockWindData = (stations: Station[]) => {
+const generateMockWindData = (stations: Station[], sensors: Sensor[]) => {
     const stationIds = stations.map(s => s.id);
-    const windSpeedSensors = MOCK_SENSORS.filter(s => s.type === 'Rüzgar Hızı' && stationIds.includes(s.stationId));
-    const windDirSensors = MOCK_SENSORS.filter(s => s.type === 'Rüzgar Yönü' && stationIds.includes(s.stationId));
+    const windSpeedSensors = sensors.filter(s => s.type === 'Rüzgar Hızı' && stationIds.includes(s.stationId));
+    const windDirSensors = sensors.filter(s => s.type === 'Rüzgar Yönü' && stationIds.includes(s.stationId));
     
     if (windSpeedSensors.length === 0 || windDirSensors.length === 0) {
         return [];
@@ -59,16 +58,17 @@ const processWindData = (data: { speed: number, direction: number }[]) => {
 
 interface WindRoseChartProps {
     stations: Station[];
+    sensors: Sensor[];
 }
 
-const WindRoseChart: React.FC<WindRoseChartProps> = ({ stations }) => {
+const WindRoseChart: React.FC<WindRoseChartProps> = ({ stations, sensors }) => {
   const { theme } = useTheme();
   const tickColor = theme === 'dark' ? '#9CA3AF' : '#6B7281';
 
   const chartData = useMemo(() => {
-    const mockData = generateMockWindData(stations);
+    const mockData = generateMockWindData(stations, sensors);
     return processWindData(mockData);
-  }, [stations]);
+  }, [stations, sensors]);
 
   if (stations.length === 0) {
       return (
@@ -77,6 +77,14 @@ const WindRoseChart: React.FC<WindRoseChartProps> = ({ stations }) => {
           </div>
       );
   }
+   if (!chartData || chartData.length === 0) {
+      return (
+          <div className="h-full w-full p-4 flex flex-col items-center justify-center text-muted dark:text-gray-400">
+              <p>Seçili istasyon(lar) için Rüzgar Yönü/Hızı sensörü bulunamadı.</p>
+          </div>
+      );
+  }
+
 
   return (
     <div className="h-full w-full p-4 flex flex-col">
@@ -97,7 +105,7 @@ const WindRoseChart: React.FC<WindRoseChartProps> = ({ stations }) => {
                             stroke={bin.color} 
                             fill={bin.color} 
                             fillOpacity={0.7} 
-                            stackId="a"
+                            // Fix: Removed invalid 'stackId' prop from Radar component.
                         />
                     ))}
                 </RadarChart>

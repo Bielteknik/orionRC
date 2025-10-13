@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from 'react';
-import { Report, ReportConfig, ReportSchedule } from '../types';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Report, ReportConfig, ReportSchedule, Station, Sensor } from '../types';
 import Card from '../components/common/Card';
 import AddReportDrawer from '../components/AddReportDrawer';
 import ScheduleReportDrawer from '../components/ScheduleReportDrawer';
 import { AddIcon, SearchIcon, DownloadIcon, EditIcon, DeleteIcon, CalendarIcon } from '../components/icons/Icons';
-import { MOCK_STATIONS } from './Stations';
-import { MOCK_SENSORS } from './Sensors';
+// Fix: Removed incorrect mock data imports. Data will be fetched from the API.
+import { getStations, getSensors } from '../services/apiService';
 import { robotoFontBase64 } from '../services/pdfFonts';
 
 const MOCK_REPORTS: Report[] = [
@@ -25,28 +25,46 @@ interface SensorReading {
     id: string; sensorId: string; stationId: string; sensorName: string; stationName: string; sensorType: string; value: number; unit: string; timestamp: string;
 }
 
-const MOCK_SENSOR_READINGS: SensorReading[] = MOCK_SENSORS.flatMap(sensor =>
-    Array.from({ length: 20 }, (_, i) => {
-        const date = new Date();
-        date.setHours(date.getHours() - i);
-        const valueFluctuation = (Math.random() - 0.5) * (sensor.value * 0.1);
-        const station = MOCK_STATIONS.find(s => s.id === sensor.stationId);
-        return {
-            id: `${sensor.id}-reading-${i}`, sensorId: sensor.id, stationId: sensor.stationId, sensorName: sensor.name, stationName: station?.name || 'Bilinmeyen İstasyon', sensorType: sensor.type, value: parseFloat((sensor.value + valueFluctuation).toFixed(1)), unit: sensor.unit, timestamp: date.toLocaleString('tr-TR'),
-        };
-    })
-);
-
-
 const Reports: React.FC = () => {
     const [reports, setReports] = useState<Report[]>(MOCK_REPORTS);
     const [schedules, setSchedules] = useState<ReportSchedule[]>(MOCK_SCHEDULES);
+    const [stations, setStations] = useState<Station[]>([]);
+    const [sensors, setSensors] = useState<Sensor[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('generated');
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [isScheduleDrawerOpen, setIsScheduleDrawerOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
-    const sensorTypes = useMemo(() => [...new Set(MOCK_SENSORS.map(s => s.type))], []);
+    useEffect(() => {
+        const fetchData = async () => {
+            setIsLoading(true);
+            try {
+                const [stationsData, sensorsData] = await Promise.all([getStations(), getSensors()]);
+                setStations(stationsData);
+                setSensors(sensorsData);
+            } catch (error) {
+                console.error("Failed to fetch data for reports:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchData();
+    }, []);
+
+    const MOCK_SENSOR_READINGS: SensorReading[] = useMemo(() => sensors.flatMap(sensor =>
+        Array.from({ length: 20 }, (_, i) => {
+            const date = new Date();
+            date.setHours(date.getHours() - i);
+            const valueFluctuation = (Math.random() - 0.5) * (sensor.value * 0.1);
+            const station = stations.find(s => s.id === sensor.stationId);
+            return {
+                id: `${sensor.id}-reading-${i}`, sensorId: sensor.id, stationId: sensor.stationId, sensorName: sensor.name, stationName: station?.name || 'Bilinmeyen İstasyon', sensorType: sensor.type, value: parseFloat((sensor.value + valueFluctuation).toFixed(1)), unit: sensor.unit, timestamp: date.toLocaleString('tr-TR'),
+            };
+        })
+    ), [sensors, stations]);
+
+    const sensorTypes = useMemo(() => [...new Set(sensors.map(s => s.type))], [sensors]);
 
     const filteredReports = reports.filter(report => report.title.toLowerCase().includes(searchTerm.toLowerCase()));
     const filteredSchedules = schedules.filter(schedule => schedule.name.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -73,14 +91,15 @@ const Reports: React.FC = () => {
         doc.setFontSize(11); doc.setTextColor(128); doc.text(`Oluşturma Tarihi: ${new Date(report.createdAt).toLocaleString('tr-TR')}`, 14, 30);
         if(config) {
             doc.setFontSize(12); doc.setTextColor(40); doc.text("Uygulanan Filtreler", 14, 45); doc.setLineWidth(0.5); doc.line(14, 46, 200, 46);
+            // Fix: Added optional chaining and replaced mock data with fetched state data to prevent type and runtime errors.
             let filterText = `Tarih Aralığı: ${config.dateRangePreset}\n`;
-            filterText += `İstasyonlar: ${config.selectedStations.length > 0 ? MOCK_STATIONS.filter(s => config.selectedStations.includes(s.id)).map(s => s.name).join(', ') : 'Tümü'}\n`;
-            filterText += `Sensör Tipleri: ${config.selectedSensorTypes.length > 0 ? config.selectedSensorTypes.join(', ') : 'Tümü'}`;
+            filterText += `İstasyonlar: ${config.selectedStations?.length > 0 ? stations.filter(s => config.selectedStations.includes(s.id)).map(s => s.name).join(', ') : 'Tümü'}\n`;
+            filterText += `Sensör Tipleri: ${config.selectedSensorTypes?.length > 0 ? config.selectedSensorTypes.join(', ') : 'Tümü'}`;
             doc.setFontSize(10); doc.setTextColor(80); doc.text(filterText, 14, 52);
         }
         const reportData = MOCK_SENSOR_READINGS.filter(reading => {
-            const stationMatch = config ? config.selectedStations.length === 0 || config.selectedStations.includes(reading.stationId) : true;
-            const sensorTypeMatch = config ? config.selectedSensorTypes.length === 0 || config.selectedSensorTypes.includes(reading.sensorType) : true;
+            const stationMatch = config?.selectedStations?.length === 0 || config?.selectedStations?.includes(reading.stationId) !== false;
+            const sensorTypeMatch = config?.selectedSensorTypes?.length === 0 || config?.selectedSensorTypes?.includes(reading.sensorType) !== false;
             return stationMatch && sensorTypeMatch;
         });
         const tableData = reportData.map(d => [d.timestamp, d.stationName, d.sensorName, d.sensorType, `${d.value} ${d.unit}`]);
@@ -125,8 +144,8 @@ const Reports: React.FC = () => {
                 </tbody></table></div>{filteredSchedules.length === 0 && (<div className="text-center py-8 text-muted"><p>Zamanlanmış rapor bulunamadı.</p></div>)}</Card>
             )}
             
-            <AddReportDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} onSave={handleSaveReport} stations={MOCK_STATIONS} sensorTypes={sensorTypes}/>
-            <ScheduleReportDrawer isOpen={isScheduleDrawerOpen} onClose={() => setIsScheduleDrawerOpen(false)} onSave={handleSaveSchedule} stations={MOCK_STATIONS} sensorTypes={sensorTypes}/>
+            <AddReportDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} onSave={handleSaveReport} stations={stations} sensorTypes={sensorTypes}/>
+            <ScheduleReportDrawer isOpen={isScheduleDrawerOpen} onClose={() => setIsScheduleDrawerOpen(false)} onSave={handleSaveSchedule} stations={stations} sensorTypes={sensorTypes}/>
         </div>
     );
 };

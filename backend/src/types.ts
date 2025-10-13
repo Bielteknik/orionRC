@@ -46,3 +46,40 @@ export interface Station {
   activeSensorCount?: number;
   onlineCameraCount?: number;
 }
+
+export enum SensorStatus {
+    Active = 'Aktif',
+    Inactive = 'Pasif',
+    Error = 'Hatalı',
+    Maintenance = 'Bakımda'
+}
+
+export interface Sensor {
+  id: string;
+  name: string;
+  type: string;
+  stationId: string;
+  status: SensorStatus;
+  value: number;
+  unit: string;
+  battery: number;
+  lastUpdate: string;
+}
+
+export enum CameraStatus {
+    Online = 'Çevrimiçi',
+    Offline = 'Çevrimdışı',
+    Recording = 'Kaydediyor',
+}
+export interface Camera {
+  id: string;
+  name: string;
+  stationId: string;
+  status: CameraStatus;
+  streamUrl: string;
+  rtspUrl: string;
+  cameraType: string;
+  viewDirection: string;
+  fps: number;
+  photos: string[];
+}

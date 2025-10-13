@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Trend, Station, WidgetConfig } from '../types';
+import { Trend, Station, WidgetConfig, Sensor } from '../types';
 import Card from '../components/common/Card';
 import FullMap from '../components/common/FullMap';
 import AddWidgetModal from '../components/AddWidgetModal';
@@ -8,20 +8,17 @@ import WindRoseChart from '../components/WindRoseChart';
 import Skeleton from '../components/common/Skeleton';
 import ChartSettingsModal, { ChartStyle } from '../components/ChartSettingsModal';
 import { useTheme } from '../components/ThemeContext';
-import { TemperatureIcon, HumidityIcon, WindSockIcon, GaugeIcon, TrendUpIcon, TrendDownIcon, TrendStableIcon, PaletteIcon, ChartBarIcon, MapIcon, AddIcon, DeleteIcon, CalendarIcon } from '../components/icons/Icons';
-import { MOCK_STATIONS } from './Stations';
-import { MOCK_SENSORS } from './Sensors';
+import { TemperatureIcon, HumidityIcon, WindSockIcon, GaugeIcon, TrendUpIcon, TrendDownIcon, TrendStableIcon, PaletteIcon, ChartBarIcon, MapIcon, AddIcon, DeleteIcon, CalendarIcon, ExclamationIcon } from '../components/icons/Icons';
+import { getStations, getSensors } from '../services/apiService';
 import MultiSelectDropdown from '../components/common/MultiSelectDropdown';
 
 
 // Constants & Defaults
 const DEFAULT_COLORS = ['#E95420', '#77216F', '#2dd4bf', '#c084fc', '#f59e0b', '#10b981', '#ef4444', '#3b82f6'];
 const unitMap: {[key: string]: string} = { 'Sıcaklık': '°C', 'Nem': '%', 'Rüzgar Hızı': 'km/h', 'Basınç': 'hPa', 'Yağış': 'mm', 'UV İndeksi': '', 'Rüzgar Yönü': '°' };
-const ALL_SENSOR_TYPES = [...new Set(MOCK_SENSORS.map(s => s.type))];
+
 const INITIAL_CHART_STYLES: Record<string, ChartStyle> = {};
-ALL_SENSOR_TYPES.forEach((type, index) => {
-    INITIAL_CHART_STYLES[type] = { stroke: DEFAULT_COLORS[index % DEFAULT_COLORS.length], type: 'monotone' };
-});
+
 
 const DEFAULT_WIDGETS: WidgetConfig[] = [
     { id: 'card-temp', type: 'dataCard', config: { title: 'Ortalama Sıcaklık', sensorType: 'Sıcaklık' }, gridArea: '1 / 1 / 2 / 2' },
@@ -44,7 +41,7 @@ const getPastDateString = (daysAgo: number) => {
 
 // --- WIDGET COMPONENTS ---
 
-const DataCardWidget: React.FC<{ title: string; sensorType: string; stations: Station[] }> = ({ title, sensorType, stations }) => {
+const DataCardWidget: React.FC<{ title: string; sensorType: string; stations: Station[]; sensors: Sensor[] }> = ({ title, sensorType, stations, sensors }) => {
     const [data, setData] = useState({ value: 'N/A', trend: Trend.Stable, change: '0.0%' });
     const prevValueRef = useRef<number | null>(null);
 
@@ -59,13 +56,13 @@ const DataCardWidget: React.FC<{ title: string; sensorType: string; stations: St
     };
 
     useEffect(() => {
-        if (stations.length === 0) {
+        if (stations.length === 0 || sensors.length === 0) {
             setData({ value: 'N/A', trend: Trend.Stable, change: '0.0%' });
             prevValueRef.current = null;
             return;
         }
 
-        const relevantSensors = MOCK_SENSORS.filter(sensor => 
+        const relevantSensors = sensors.filter(sensor => 
             stations.some(station => station.id === sensor.stationId) && sensor.type === sensorType
         );
 
@@ -101,7 +98,7 @@ const DataCardWidget: React.FC<{ title: string; sensorType: string; stations: St
 
         return () => clearTimeout(timeoutId);
 
-    }, [sensorType, stations]);
+    }, [sensorType, stations, sensors]);
 
     const trendIcons = { [Trend.Up]: <TrendUpIcon className="text-danger" />, [Trend.Down]: <TrendDownIcon className="text-success" />, [Trend.Stable]: <TrendStableIcon className="text-muted dark:text-gray-400" /> };
     return (
@@ -243,44 +240,88 @@ const WidgetWrapper: React.FC<{
 
 const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }> = ({ onViewStationDetails }) => {
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [stations, setStations] = useState<Station[]>([]);
+    const [sensors, setSensors] = useState<Sensor[]>([]);
+    
     const [activeTab, setActiveTab] = useState<'analytics' | 'map'>('analytics');
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isAddWidgetModalOpen, setIsAddWidgetModalOpen] = useState(false);
     const [widgets, setWidgets] = useState<WidgetConfig[]>([]);
     const draggedWidgetId = useRef<string | null>(null);
 
-    const [selectedStationIds, setSelectedStationIds] = useState<string[]>(() => MOCK_STATIONS.map(s => s.id));
-    const [selectedSensorTypes, setSelectedSensorTypes] = useState<string[]>(() => ALL_SENSOR_TYPES);
+    const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
+    const [selectedSensorTypes, setSelectedSensorTypes] = useState<string[]>([]);
     const [dateRange, setDateRange] = useState({ start: getPastDateString(7), end: getPastDateString(0) });
     
-    const stationOptions = useMemo(() => MOCK_STATIONS.map(s => ({ value: s.id, label: s.name })), []);
-    const sensorTypeOptions = useMemo(() => ALL_SENSOR_TYPES.map(type => ({ value: type, label: type })), []);
+    const allSensorTypes = useMemo(() => [...new Set(sensors.map(s => s.type))], [sensors]);
+
+    useEffect(() => {
+        allSensorTypes.forEach((type, index) => {
+            if (!INITIAL_CHART_STYLES[type]) {
+                INITIAL_CHART_STYLES[type] = { stroke: DEFAULT_COLORS[index % DEFAULT_COLORS.length], type: 'monotone' };
+            }
+        });
+    }, [allSensorTypes]);
+    
+    const stationOptions = useMemo(() => stations.map(s => ({ value: s.id, label: s.name })), [stations]);
+    const sensorTypeOptions = useMemo(() => allSensorTypes.map(type => ({ value: type, label: type })), [allSensorTypes]);
     
     const filteredStations = useMemo(() => 
-        MOCK_STATIONS.filter(s => selectedStationIds.includes(s.id)),
-        [selectedStationIds]
+        stations.filter(s => selectedStationIds.includes(s.id)),
+        [selectedStationIds, stations]
     );
+
+    // Fetch initial data
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                setIsLoading(true);
+                setError(null);
+                const [stationsData, sensorsData] = await Promise.all([getStations(), getSensors()]);
+                setStations(stationsData);
+                setSensors(sensorsData);
+                // Select all stations by default on first load
+                setSelectedStationIds(stationsData.map(s => s.id));
+            } catch (err) {
+                setError('Pano verileri yüklenirken bir hata oluştu.');
+                console.error(err);
+            } finally {
+                // Load widgets after data fetching
+                try {
+                    const savedWidgets = localStorage.getItem('dashboardWidgets');
+                    if (savedWidgets) {
+                        setWidgets(JSON.parse(savedWidgets));
+                    } else {
+                        setWidgets(DEFAULT_WIDGETS);
+                    }
+                } catch (error) {
+                    setWidgets(DEFAULT_WIDGETS);
+                }
+                setIsLoading(false);
+            }
+        };
+
+        fetchData();
+    }, []);
 
     // Automatically update selectable sensor types based on selected stations
     useEffect(() => {
         if (selectedStationIds.length === 0) {
-            // If no stations are selected, show no sensor widgets
             setSelectedSensorTypes([]);
             return;
         }
 
         if (selectedStationIds.length === 1) {
-            // If one station is selected, show all its available sensor types
             const stationId = selectedStationIds[0];
-            const stationSensors = MOCK_SENSORS.filter(s => s.stationId === stationId);
+            const stationSensors = sensors.filter(s => s.stationId === stationId);
             const availableTypes = [...new Set(stationSensors.map(s => s.type))];
             setSelectedSensorTypes(availableTypes);
             return;
         }
 
-        // If multiple stations are selected, find common sensor types
         const sensorTypesByStation = selectedStationIds.map(id => 
-            new Set(MOCK_SENSORS.filter(s => s.stationId === id).map(s => s.type))
+            new Set(sensors.filter(s => s.stationId === id).map(s => s.type))
         );
         
         if(sensorTypesByStation.length === 0) {
@@ -294,7 +335,7 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
 
         setSelectedSensorTypes(Array.from(commonTypes));
 
-    }, [selectedStationIds]);
+    }, [selectedStationIds, sensors]);
 
     const filteredWidgets = useMemo(() => {
         return widgets.filter(widget => {
@@ -302,28 +343,11 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
                 return selectedSensorTypes.includes(widget.config.sensorType);
             }
             if (widget.type === 'windRose') {
-                // Show WindRose chart if both speed and direction sensors are available/selected
                 return selectedSensorTypes.includes('Rüzgar Yönü') && selectedSensorTypes.includes('Rüzgar Hızı');
             }
             return true;
         });
     }, [widgets, selectedSensorTypes]);
-
-    // Load layout from localStorage or use default
-    useEffect(() => {
-        try {
-            const savedWidgets = localStorage.getItem('dashboardWidgets');
-            if (savedWidgets) {
-                setWidgets(JSON.parse(savedWidgets));
-            } else {
-                setWidgets(DEFAULT_WIDGETS);
-            }
-        } catch (error) {
-            setWidgets(DEFAULT_WIDGETS);
-        }
-        const timer = setTimeout(() => setIsLoading(false), 1000); // Simulate loading
-        return () => clearTimeout(timer);
-    }, []);
 
     // Save layout to localStorage
     useEffect(() => {
@@ -386,48 +410,42 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
             {activeTab === 'analytics' && (
                 <div className="overflow-y-auto pt-4 space-y-4">
                     <Card>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
-                            <div className="w-full">
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">İstasyonlar</label>
-                                <MultiSelectDropdown options={stationOptions} selected={selectedStationIds} onChange={setSelectedStationIds} label="İstasyon"/>
-                            </div>
-                            <div className="w-full">
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sensör Tipleri (Otomatik)</label>
-                                <MultiSelectDropdown options={sensorTypeOptions} selected={selectedSensorTypes} onChange={setSelectedSensorTypes} label="Sensör"/>
-                            </div>
-                             <div className="w-full">
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Zaman Aralığı</label>
-                                <div className="flex items-center gap-2 bg-secondary dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5">
-                                    <CalendarIcon className="w-5 h-5 text-muted dark:text-gray-400"/>
-                                    <input 
-                                        type="date" 
-                                        value={dateRange.start}
-                                        onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                                        className="bg-transparent focus:outline-none text-sm w-full"
-                                    />
-                                    <span className="text-muted dark:text-gray-400">-</span>
-                                     <input 
-                                        type="date" 
-                                        value={dateRange.end}
-                                        onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                                        className="bg-transparent focus:outline-none text-sm w-full"
-                                    />
+                         {isLoading ? <Skeleton className="h-24"/> : error ? (
+                             <div className="text-center py-4 text-danger flex items-center justify-center gap-2"><ExclamationIcon/><span>{error}</span></div>
+                         ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
+                                <div className="w-full">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">İstasyonlar</label>
+                                    <MultiSelectDropdown options={stationOptions} selected={selectedStationIds} onChange={setSelectedStationIds} label="İstasyon"/>
+                                </div>
+                                <div className="w-full">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sensör Tipleri (Otomatik)</label>
+                                    <MultiSelectDropdown options={sensorTypeOptions} selected={selectedSensorTypes} onChange={setSelectedSensorTypes} label="Sensör"/>
+                                </div>
+                                <div className="w-full">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Zaman Aralığı</label>
+                                    <div className="flex items-center gap-2 bg-secondary dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5">
+                                        <CalendarIcon className="w-5 h-5 text-muted dark:text-gray-400"/>
+                                        <input type="date" value={dateRange.start} onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))} className="bg-transparent focus:outline-none text-sm w-full" />
+                                        <span className="text-muted dark:text-gray-400">-</span>
+                                        <input type="date" value={dateRange.end} onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))} className="bg-transparent focus:outline-none text-sm w-full" />
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                         )}
                     </Card>
 
                     {isLoading ? (
                         <div className="grid grid-cols-4 gap-6 auto-rows-[120px]">
-                            {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className={i > 3 ? "col-span-2" : "col-span-1"}/>)}
+                            {Array.from({ length: 9 }).map((_, i) => <Skeleton key={i} className={i > 3 ? "col-span-2" : "col-span-1"}/>)}
                         </div>
-                    ) : (
+                    ) : error ? null : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 auto-rows-[minmax(120px,_auto)]">
                            {filteredWidgets.map(widget => (
                                 <WidgetWrapper key={widget.id} widget={widget} onRemove={handleRemoveWidget} onDragStart={handleDragStart} onDrop={handleDrop}>
-                                    {widget.type === 'dataCard' && <DataCardWidget title={widget.config.title} sensorType={widget.config.sensorType} stations={filteredStations} />}
+                                    {widget.type === 'dataCard' && <DataCardWidget title={widget.config.title} sensorType={widget.config.sensorType} stations={filteredStations} sensors={sensors} />}
                                     {widget.type === 'sensorChart' && <SensorChartWidget sensorType={widget.config.sensorType} stations={filteredStations} dateRange={dateRange} styles={INITIAL_CHART_STYLES} />}
-                                    {widget.type === 'windRose' && <WindRoseChart stations={filteredStations} />}
+                                    {widget.type === 'windRose' && <WindRoseChart stations={filteredStations} sensors={sensors} />}
                                 </WidgetWrapper>
                            ))}
                            {filteredWidgets.length === 0 && (
@@ -442,11 +460,19 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
                 </div>
             )}
             {activeTab === 'map' && (
-                <div className="flex-grow pt-4"><div className="h-full bg-primary dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-hidden"><FullMap stations={MOCK_STATIONS} onViewStationDetails={onViewStationDetails} /></div></div>
+                <div className="flex-grow pt-4">
+                    {isLoading ? <Skeleton className="h-full w-full rounded-lg"/> : error ? (
+                        <Card><div className="text-center py-8 text-danger flex items-center justify-center gap-2"><ExclamationIcon/><span>Harita verileri yüklenemedi.</span></div></Card>
+                    ) : (
+                        <div className="h-full bg-primary dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-hidden">
+                            <FullMap stations={stations} onViewStationDetails={onViewStationDetails} />
+                        </div>
+                    )}
+                </div>
             )}
 
-            <ChartSettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} sensorTypes={ALL_SENSOR_TYPES} initialStyles={INITIAL_CHART_STYLES} onSave={(s) => { console.log(s); setIsSettingsModalOpen(false);}}/>
-            <AddWidgetModal isOpen={isAddWidgetModalOpen} onClose={() => setIsAddWidgetModalOpen(false)} onAddWidget={handleAddWidget} sensorTypes={ALL_SENSOR_TYPES} />
+            <ChartSettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} sensorTypes={allSensorTypes} initialStyles={INITIAL_CHART_STYLES} onSave={(s) => { console.log(s); setIsSettingsModalOpen(false);}}/>
+            <AddWidgetModal isOpen={isAddWidgetModalOpen} onClose={() => setIsAddWidgetModalOpen(false)} onAddWidget={handleAddWidget} sensorTypes={allSensorTypes} />
         </div>
     );
 };

@@ -1,12 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Station, Sensor, Camera, SensorStatus, CameraStatus } from '../types';
-import { MOCK_STATIONS } from './Stations';
-import { MOCK_SENSORS } from './Sensors';
-import { MOCK_CAMERAS } from './Cameras';
+import { getStations } from '../services/apiService';
+import { getSensors } from '../services/apiService';
+import { getCameras } from '../services/apiService';
 import Card from '../components/common/Card';
 import InteractiveMap from '../components/common/InteractiveMap';
 import Pagination from '../components/common/Pagination';
-import { ArrowLeftIcon, SensorIcon, CameraIcon, SettingsIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, OnlineIcon, OfflineIcon, PlayIcon, PhotographIcon, SearchIcon } from '../components/icons/Icons';
+import Skeleton from '../components/common/Skeleton';
+import { ArrowLeftIcon, SensorIcon, CameraIcon, SettingsIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, OnlineIcon, OfflineIcon, PlayIcon, PhotographIcon, SearchIcon, ExclamationIcon } from '../components/icons/Icons';
 
 interface StationDetailProps {
   stationId: string;
@@ -27,25 +28,6 @@ interface SensorReading {
 const ITEMS_PER_PAGE_DATA = 10;
 const ITEMS_PER_PAGE_SENSORS = 6;
 const ITEMS_PER_PAGE_CAMERAS = 4;
-
-
-// Generate more realistic mock sensor readings
-const MOCK_SENSOR_READINGS: SensorReading[] = MOCK_SENSORS.flatMap(sensor =>
-    Array.from({ length: 50 }, (_, i) => {
-        const date = new Date();
-        date.setHours(date.getHours() - i * 3);
-        const valueFluctuation = (Math.random() - 0.5) * (sensor.value * 0.1); // +/- 5% fluctuation
-        return {
-            id: `${sensor.id}-reading-${i}`,
-            sensorId: sensor.id,
-            sensorName: sensor.name,
-            sensorType: sensor.type,
-            value: parseFloat((sensor.value + valueFluctuation).toFixed(1)),
-            unit: sensor.unit,
-            timestamp: date.toLocaleString('tr-TR'),
-        };
-    })
-);
 
 const statusInfo: Record<string, { text: string, className: string }> = {
     active: { text: 'Aktif', className: 'bg-gray-800 text-white' },
@@ -106,7 +88,7 @@ const CameraCard: React.FC<{ camera: Camera; onView: (id: string) => void; }> = 
     return (
          <Card className="p-0 overflow-hidden flex flex-col">
             <div className="relative">
-                <img src={camera.streamUrl} alt={camera.name} className={`w-full h-72 object-cover ${camera.status === CameraStatus.Offline ? 'filter grayscale' : ''}`} />
+                <img src={`https://picsum.photos/seed/${camera.id}/800/600`} alt={camera.name} className={`w-full h-72 object-cover ${camera.status === CameraStatus.Offline ? 'filter grayscale' : ''}`} />
                 <div className="absolute top-3 left-3 flex items-center space-x-2">
                     <span className={`flex items-center space-x-1.5 text-xs px-2 py-1 rounded-md font-semibold text-white ${status.className}`}>
                         <div className={`w-1.5 h-1.5 rounded-full ${status.isLive ? 'bg-white animate-pulse' : 'bg-white/70'}`}></div>
@@ -139,26 +121,73 @@ const TabContent: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 );
 
 const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onViewCamera }) => {
+  const [station, setStation] = useState<Station | null>(null);
+  const [sensors, setSensors] = useState<Sensor[]>([]);
+  const [cameras, setCameras] = useState<Camera[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [activeTab, setActiveTab] = useState('Veriler');
   const [dataSearchTerm, setDataSearchTerm] = useState('');
   const [dataPage, setDataPage] = useState(1);
   const [sensorPage, setSensorPage] = useState(1);
   const [cameraPage, setCameraPage] = useState(1);
 
-  const station = useMemo(() => MOCK_STATIONS.find(s => s.id === stationId), [stationId]);
-  const sensors = useMemo(() => MOCK_SENSORS.filter(s => s.stationId === stationId), [stationId]);
-  const cameras = useMemo(() => MOCK_CAMERAS.filter(c => c.stationId === stationId), [stationId]);
-  
-  const stationSensorReadings = useMemo(() =>
-    MOCK_SENSOR_READINGS.filter(reading => sensors.some(s => s.id === reading.sensorId)), [sensors]);
+  useEffect(() => {
+    const fetchData = async () => {
+        try {
+            setIsLoading(true);
+            setError(null);
+            const [stationsData, sensorsData, camerasData] = await Promise.all([
+                getStations(), getSensors(), getCameras()
+            ]);
+            
+            const currentStation = stationsData.find(s => s.id === stationId);
+            if (currentStation) {
+                setStation(currentStation);
+                setSensors(sensorsData.filter(s => s.stationId === stationId));
+                setCameras(camerasData.filter(c => c.stationId === stationId));
+            } else {
+                throw new Error("İstasyon bulunamadı");
+            }
+
+        } catch (err) {
+            setError('İstasyon detayları yüklenirken bir hata oluştu.');
+            console.error(err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    fetchData();
+  }, [stationId]);
+
+  // Generate mock sensor readings for the station's sensors
+  const MOCK_SENSOR_READINGS: SensorReading[] = useMemo(() => {
+      if (sensors.length === 0) return [];
+      return sensors.flatMap(sensor =>
+          Array.from({ length: 50 }, (_, i) => {
+              const date = new Date();
+              date.setHours(date.getHours() - i * 3);
+              const valueFluctuation = (Math.random() - 0.5) * (sensor.value * 0.1);
+              return {
+                  id: `${sensor.id}-reading-${i}`,
+                  sensorId: sensor.id,
+                  sensorName: sensor.name,
+                  sensorType: sensor.type,
+                  value: parseFloat((sensor.value + valueFluctuation).toFixed(1)),
+                  unit: sensor.unit,
+                  timestamp: date.toLocaleString('tr-TR'),
+              };
+          })
+      );
+  }, [sensors]);
   
   const filteredSensorReadings = useMemo(() =>
-    stationSensorReadings.filter(reading =>
+    MOCK_SENSOR_READINGS.filter(reading =>
       reading.sensorName.toLowerCase().includes(dataSearchTerm.toLowerCase()) ||
       reading.sensorType.toLowerCase().includes(dataSearchTerm.toLowerCase())
-    ), [stationSensorReadings, dataSearchTerm]);
+    ), [MOCK_SENSOR_READINGS, dataSearchTerm]);
 
-  // Paginated data
   const paginatedSensorReadings = useMemo(() => {
     const startIndex = (dataPage - 1) * ITEMS_PER_PAGE_DATA;
     return filteredSensorReadings.slice(startIndex, startIndex + ITEMS_PER_PAGE_DATA);
@@ -173,11 +202,21 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
     const startIndex = (cameraPage - 1) * ITEMS_PER_PAGE_CAMERAS;
     return cameras.slice(startIndex, startIndex + ITEMS_PER_PAGE_CAMERAS);
   }, [cameras, cameraPage]);
+  
+  if (isLoading) {
+    return (
+        <div className="space-y-6">
+            <Skeleton className="h-12 w-1/2" />
+            <Card className="p-0"><Skeleton className="h-[600px] w-full" /></Card>
+        </div>
+    );
+  }
 
-  if (!station) {
+  if (error || !station) {
     return (
       <div className="text-center py-10">
-        <h2 className="text-xl font-semibold">İstasyon Bulunamadı</h2>
+        <ExclamationIcon className="w-12 h-12 mx-auto mb-2 text-danger"/>
+        <h2 className="text-xl font-semibold text-danger">{error || 'İstasyon Bulunamadı'}</h2>
         <p className="text-muted">Seçilen istasyon mevcut değil veya bir hata oluştu.</p>
         <button onClick={onBack} className="mt-4 px-4 py-2 bg-accent text-white rounded-md">Geri Dön</button>
       </div>

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Station } from '../types';
+import { Station, Sensor, Camera } from '../types';
 
 // IMPORTANT: Replace this with your actual backend URL.
 // For local development, you might use 'http://localhost:8000'.
@@ -29,7 +29,30 @@ export const getStations = async (): Promise<Station[]> => {
     }
 };
 
-// You can add other API functions here as you build out the application.
-// For example:
-// export const getSensors = async () => { ... };
-// export const getStationById = async (id: string) => { ... };
+/**
+ * Fetches all sensors from the backend.
+ * @returns A promise that resolves to an array of Sensor objects.
+ */
+export const getSensors = async (): Promise<Sensor[]> => {
+    try {
+        const response = await apiClient.get('/sensors');
+        return response.data;
+    } catch (error) {
+        console.error("Error fetching sensors:", error);
+        throw new Error('Sensör verileri alınamadı.');
+    }
+};
+
+/**
+ * Fetches all cameras from the backend.
+ * @returns A promise that resolves to an array of Camera objects.
+ */
+export const getCameras = async (): Promise<Camera[]> => {
+    try {
+        const response = await apiClient.get('/cameras');
+        return response.data;
+    } catch (error) {
+        console.error("Error fetching cameras:", error);
+        throw new Error('Kamera verileri alınamadı.');
+    }
+};

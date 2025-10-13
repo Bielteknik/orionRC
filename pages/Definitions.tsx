@@ -1,9 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Card from '../components/common/Card';
 import { AddIcon, EditIcon, DeleteIcon, StationIcon } from '../components/icons/Icons';
-import { AlertRule, Severity, AlertCondition, Station } from '../types';
-import { MOCK_STATIONS } from './Stations';
-import { MOCK_SENSORS } from './Sensors';
+import { AlertRule, Severity, AlertCondition, Station, Sensor } from '../types';
+import { getStations, getSensors } from '../services/apiService';
 import DefinitionModal from '../components/DefinitionModal';
 
 type DefinitionType = 'stationTypes' | 'sensorTypes' | 'cameraTypes';
@@ -150,6 +149,9 @@ const Definitions: React.FC = () => {
     const [definitions, setDefinitions] = useState(MOCK_DEFINITIONS);
     const [alertRules, setAlertRules] = useState<AlertRule[]>(MOCK_ALERT_RULES);
     const [isRuleDrawerOpen, setIsRuleDrawerOpen] = useState(false);
+    const [stations, setStations] = useState<Station[]>([]);
+    const [sensors, setSensors] = useState<Sensor[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
     const [isDefModalOpen, setIsDefModalOpen] = useState(false);
     const [modalConfig, setModalConfig] = useState<{
@@ -158,8 +160,23 @@ const Definitions: React.FC = () => {
         title: string;
     }>({ type: null, item: undefined, title: '' });
 
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                setIsLoading(true);
+                const [stationsData, sensorsData] = await Promise.all([getStations(), getSensors()]);
+                setStations(stationsData);
+                setSensors(sensorsData);
+            } catch (err) {
+                console.error("Error fetching data for definitions:", err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchData();
+    }, []);
 
-    const sensorTypes = useMemo(() => [...new Set(MOCK_SENSORS.map(s => s.type))], []);
+    const sensorTypes = useMemo(() => [...new Set(sensors.map(s => s.type))], [sensors]);
 
     const handleSaveRule = (newRule: Omit<AlertRule, 'id'>) => {
         const ruleToAdd: AlertRule = {
@@ -262,7 +279,7 @@ const Definitions: React.FC = () => {
                                 {rule.stationIds.length > 0 && (
                                     <div className="flex items-center gap-2 text-xs text-muted mt-2 pt-2 border-t border-gray-200">
                                         <StationIcon className="w-4 h-4" />
-                                        <span>Sadece şu istasyonlarda geçerli: {MOCK_STATIONS.filter(s => rule.stationIds.includes(s.id)).map(s => s.name).join(', ')}</span>
+                                        <span>Sadece şu istasyonlarda geçerli: {stations.filter(s => rule.stationIds.includes(s.id)).map(s => s.name).join(', ')}</span>
                                     </div>
                                 )}
                             </div>
@@ -274,7 +291,7 @@ const Definitions: React.FC = () => {
                 isOpen={isRuleDrawerOpen}
                 onClose={() => setIsRuleDrawerOpen(false)}
                 onSave={handleSaveRule}
-                stations={MOCK_STATIONS}
+                stations={stations}
                 sensorTypes={sensorTypes}
             />
              <DefinitionModal 

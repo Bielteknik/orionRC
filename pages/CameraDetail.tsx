@@ -1,9 +1,10 @@
-import React, { useMemo } from 'react';
-import { Camera, CameraStatus } from '../types';
-import { MOCK_CAMERAS } from './Cameras';
-import { MOCK_STATIONS } from './Stations';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Camera, CameraStatus, Station } from '../types';
+import { getCameras } from '../services/apiService';
+import { getStations } from '../services/apiService';
 import Card from '../components/common/Card';
-import { ArrowLeftIcon, CameraIcon as VideoIcon, PlayIcon, FullscreenIcon, PhotographIcon } from '../components/icons/Icons';
+import Skeleton from '../components/common/Skeleton';
+import { ArrowLeftIcon, CameraIcon as VideoIcon, PlayIcon, FullscreenIcon, PhotographIcon, ExclamationIcon } from '../components/icons/Icons';
 
 interface CameraDetailProps {
   cameraId: string;
@@ -11,13 +12,54 @@ interface CameraDetailProps {
 }
 
 const CameraDetail: React.FC<CameraDetailProps> = ({ cameraId, onBack }) => {
-  const camera = useMemo(() => MOCK_CAMERAS.find(c => c.id === cameraId), [cameraId]);
-  const station = useMemo(() => MOCK_STATIONS.find(s => s.id === camera?.stationId), [camera]);
+  const [camera, setCamera] = useState<Camera | null>(null);
+  const [station, setStation] = useState<Station | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  useEffect(() => {
+    const fetchData = async () => {
+        try {
+            setIsLoading(true);
+            setError(null);
+            const [camerasData, stationsData] = await Promise.all([getCameras(), getStations()]);
+            const currentCamera = camerasData.find(c => c.id === cameraId);
+            if (currentCamera) {
+                const currentStation = stationsData.find(s => s.id === currentCamera.stationId);
+                setCamera(currentCamera);
+                setStation(currentStation || null);
+            } else {
+                 throw new Error("Kamera bulunamadı");
+            }
+        } catch (err) {
+            setError('Kamera detayları yüklenirken bir hata oluştu.');
+            console.error(err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    fetchData();
+  }, [cameraId]);
 
-  if (!camera || !station) {
+
+  if (isLoading) {
+      return (
+          <div className="max-w-5xl mx-auto space-y-4">
+              <Skeleton className="h-8 w-24" />
+              <Card className="p-0 overflow-hidden shadow-2xl">
+                  <Skeleton className="h-14 w-full" />
+                  <Skeleton className="aspect-video w-full" />
+                  <Skeleton className="h-20 w-full" />
+              </Card>
+          </div>
+      )
+  }
+
+  if (error || !camera || !station) {
     return (
       <div className="text-center py-10">
-        <h2 className="text-xl font-semibold">Kamera Bulunamadı</h2>
+        <ExclamationIcon className="w-12 h-12 mx-auto mb-2 text-danger"/>
+        <h2 className="text-xl font-semibold text-danger">{error || 'Kamera Bulunamadı'}</h2>
         <p className="text-muted">Seçilen kamera mevcut değil veya bir hata oluştu.</p>
         <button onClick={onBack} className="mt-4 px-4 py-2 bg-accent text-white rounded-md">Geri Dön</button>
       </div>
@@ -63,14 +105,14 @@ const CameraDetail: React.FC<CameraDetailProps> = ({ cameraId, onBack }) => {
                         className="w-full h-full object-contain"
                         controls
                         autoPlay
-                        poster={camera.streamUrl}
+                        poster={`https://picsum.photos/seed/${camera.id}/800/600`}
                     >
                         <source src={camera.streamUrl} type="video/mp4" />
                         Tarayıcınız video etiketini desteklemiyor.
                     </video>
                 ) : (
                     <>
-                        <img src={camera.streamUrl} alt="Offline Camera" className="w-full h-full object-contain filter grayscale" />
+                        <img src={`https://picsum.photos/seed/${camera.id}/800/600`} alt="Offline Camera" className="w-full h-full object-contain filter grayscale" />
                         <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center">
                             <p className="text-white text-lg font-semibold">Kamera Çevrimdışı</p>
                             <p className="text-gray-400">Canlı yayın başlatılamıyor.</p>

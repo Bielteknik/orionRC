@@ -1,18 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Camera, CameraStatus } from '../types';
+import { Camera, CameraStatus, Station } from '../types';
 import Card from '../components/common/Card';
-import { AddIcon, FilterIcon, SearchIcon, PlayIcon, ListIcon, GridIcon } from '../components/icons/Icons';
+import { AddIcon, FilterIcon, SearchIcon, PlayIcon, ListIcon, GridIcon, ExclamationIcon } from '../components/icons/Icons';
 import AddCameraDrawer from '../components/AddCameraDrawer';
-import { MOCK_STATIONS } from './Stations';
 import Skeleton from '../components/common/Skeleton';
-
-export const MOCK_CAMERAS: Camera[] = [
-    { id: 'cam1', name: 'Kuzey Kamera', stationId: 'STN01', status: CameraStatus.Online, streamUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4', viewDirection: 'Kuzey Yönü', fps: 30, photos: ['https://picsum.photos/seed/p1/200/150','https://picsum.photos/seed/p2/200/150','https://picsum.photos/seed/p3/200/150'], rtspUrl: 'rtsp://192.168.1.10/stream1', cameraType: 'Sabit Dome Kamera' },
-    { id: 'cam2', name: 'Güney Kamera', stationId: 'STN01', status: CameraStatus.Recording, streamUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4', viewDirection: 'Güney Yönü', fps: 30, photos: ['https://picsum.photos/seed/p4/200/150','https://picsum.photos/seed/p5/200/150'], rtspUrl: 'rtsp://192.168.1.11/stream1', cameraType: 'PTZ Kamera' },
-    { id: 'cam3', name: 'İstasyon C - Çatı', stationId: 'STN03', status: CameraStatus.Online, streamUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', viewDirection: 'Çatı', fps: 25, photos: [], rtspUrl: 'rtsp://192.168.1.12/stream1', cameraType: 'Geniş Açılı Kamera' },
-    { id: 'cam4', name: 'İstasyon B - Doğu Cephe', stationId: 'STN02', status: CameraStatus.Offline, streamUrl: 'https://picsum.photos/seed/cam4/800/600', viewDirection: 'Doğu Cephe', fps: 0, photos: [], rtspUrl: 'rtsp://192.168.1.13/stream1', cameraType: 'Termal Kamera' },
-    { id: 'cam5', name: 'Depo Alanı', stationId: 'STN02', status: CameraStatus.Online, streamUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4', viewDirection: 'İç Mekan', fps: 30, photos: [], rtspUrl: 'rtsp://192.168.1.14/stream1', cameraType: 'Sabit Dome Kamera' },
-];
+import { getCameras, getStations } from '../services/apiService';
 
 const MosaicView: React.FC<{ cameras: Camera[], onViewDetails: (id: string) => void }> = ({ cameras, onViewDetails }) => {
     const onlineCameras = cameras.filter(c => c.status !== CameraStatus.Offline);
@@ -47,28 +39,46 @@ interface CamerasProps {
 }
 
 const Cameras: React.FC<CamerasProps> = ({ onViewDetails }) => {
-    const [cameras, setCameras] = useState<Camera[]>(MOCK_CAMERAS);
+    const [cameras, setCameras] = useState<Camera[]>([]);
+    const [stations, setStations] = useState<Station[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<CameraStatus | 'all'>('all');
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [viewMode, setViewMode] = useState<'list' | 'mosaic'>('list');
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const timer = setTimeout(() => setIsLoading(false), 750);
-        return () => clearTimeout(timer);
+        const fetchData = async () => {
+            try {
+                setIsLoading(true);
+                setError(null);
+                const [camerasData, stationsData] = await Promise.all([getCameras(), getStations()]);
+                setCameras(camerasData);
+                setStations(stationsData);
+            } catch (err) {
+                setError('Kamera verileri yüklenirken bir hata oluştu.');
+                console.error(err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchData();
     }, []);
+
+    const stationMap = useMemo(() => new Map(stations.map(s => [s.id, s.name])), [stations]);
 
     const filteredCameras = useMemo(() => {
     return cameras
       .filter(camera => statusFilter === 'all' || camera.status === statusFilter)
       .filter(camera => 
         camera.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        MOCK_STATIONS.find(s => s.id === camera.stationId)?.name.toLowerCase().includes(searchTerm.toLowerCase())
+        (stationMap.get(camera.stationId) || '').toLowerCase().includes(searchTerm.toLowerCase())
       );
-    }, [cameras, searchTerm, statusFilter]);
+    }, [cameras, searchTerm, statusFilter, stationMap]);
 
     const handleSaveCamera = (newCameraData: Omit<Camera, 'id' | 'photos' | 'fps' | 'streamUrl'>) => {
+        // Saving is mocked for now
         const newCamera: Camera = {
             id: `cam${Date.now()}`,
             ...newCameraData,
@@ -122,6 +132,13 @@ const Cameras: React.FC<CamerasProps> = ({ onViewDetails }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {Array.from({length: 6}).map((_, i) => <Skeleton key={i} className="h-96 rounded-xl"/>)}
         </div>
+      ) : error ? (
+        <Card>
+            <div className="text-center py-8 text-danger flex flex-col items-center justify-center gap-2">
+                <ExclamationIcon className="w-12 h-12"/>
+                <p className="font-semibold">{error}</p>
+            </div>
+        </Card>
       ) : viewMode === 'mosaic' ? (
         <MosaicView cameras={filteredCameras} onViewDetails={onViewDetails} />
       ) : (
@@ -170,7 +187,7 @@ const Cameras: React.FC<CamerasProps> = ({ onViewDetails }) => {
             ))}
         </div>
       )}
-      {filteredCameras.length === 0 && !isLoading && (
+      {filteredCameras.length === 0 && !isLoading && !error && (
             <div className="md:col-span-2 lg:col-span-3 text-center py-16">
                  <Card>
                     <p className="text-muted">Arama kriterlerinize uygun kamera bulunamadı.</p>
@@ -181,7 +198,7 @@ const Cameras: React.FC<CamerasProps> = ({ onViewDetails }) => {
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
         onSave={handleSaveCamera}
-        stations={MOCK_STATIONS}
+        stations={stations}
       />
     </div>
   );
