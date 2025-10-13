@@ -1,5 +1,5 @@
 import { ISensorDriver } from "../types";
-import { openSync, I2cBus } from 'i2c-bus';
+import { openSync, I2CBus } from 'i2c-bus';
 
 // SHT3x sensörü için I2C komutları
 const CMD_MEASURE_HPM = [0x2C, 0x06]; // Yüksek Tekrarlanabilirlikte Tek Ölçüm
@@ -34,7 +34,7 @@ export default class Sht3xDriver implements ISensorDriver {
             return null;
         }
 
-        let i2cBus: I2cBus | null = null;
+        let i2cBus: I2CBus | null = null;
         try {
             console.log(`     -> SHT3x sensörü okunuyor... Adres: 0x${address.toString(16)}, Bus: ${busNumber}`);
             
