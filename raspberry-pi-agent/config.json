@@ -1,10 +1,9 @@
-
 {
   "server": {
-    "base_url": "http://localhost:8000"
+    "base_url": "https://meteoroloji.ejderapi.com.tr"
   },
   "device": {
-    "id": "YOUR_UNIQUE_DEVICE_ID",
-    "token": "YOUR_DEVICE_TOKEN"
+    "id": "ejder3200-01",
+    "token": "REPLACE_WITH_YOUR_DEVICE_AUTH_TOKEN_FROM_PLESK"
   }
 }

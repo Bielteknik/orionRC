@@ -1,5 +1,5 @@
 {
-  "name": "Meteoroloji Gözlem Platformu Back",
-  "description": "IoT sensörleri, canlı kameralar ve yapay zeka destekli asistan ile gelişmiş bir meteorolojik veri toplama ve değerlendirme platformu.",
+  "name": "Meteoroloji Gözlem Platformu",
+  "description": "IoT sensörleri, canlı kameralar ve yapay zeka destekli asistan ile gelişmiş bir meteorolojik veri toplama ve değerlendirme platformu. Bu proje hem React tabanlı ön yüzü hem de Node.js tabanlı arka yüzü (backend) içerir.",
   "requestFramePermissions": []
 }

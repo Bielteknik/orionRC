@@ -1,5 +1,5 @@
 {
-  "name": "meteoroloji-gözlem-platformu-back",
+  "name": "meteoroloji-gözlem-platformu",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -19,7 +19,10 @@
     "url": "^0.11.4",
     "sqlite3": "^5.1.7",
     "sqlite": "^5.1.1",
-    "i2c-bus": "^5.2.3"
+    "i2c-bus": "^5.2.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

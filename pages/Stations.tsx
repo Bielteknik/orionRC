@@ -4,6 +4,7 @@ import Card from '../components/common/Card';
 import { AddIcon, SearchIcon, LocationPinIcon, SensorIcon, CameraIcon, SettingsIcon, ExclamationIcon } from '../components/icons/Icons';
 import AddStationDrawer from '../components/AddStationModal';
 import Skeleton from '../components/common/Skeleton';
+import { getStations } from '../services/apiService';
 
 
 export const MOCK_STATIONS: Station[] = [
@@ -106,16 +107,30 @@ interface StationsProps {
 }
 
 const Stations: React.FC<StationsProps> = ({ onViewDetails }) => {
-  const [stations, setStations] = useState<Station[]>(MOCK_STATIONS);
+  const [stations, setStations] = useState<Station[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [unassignedSensors, setUnassignedSensors] = useState(MOCK_UNASSIGNED_SENSORS_DATA);
   const [unassignedCameras, setUnassignedCameras] = useState(MOCK_UNASSIGNED_CAMERAS_DATA);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 750);
-    return () => clearTimeout(timer);
+    const fetchStations = async () => {
+        try {
+            setIsLoading(true);
+            setError(null);
+            const data = await getStations();
+            setStations(data);
+        } catch (err) {
+            setError('İstasyon verileri yüklenirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
+            console.error(err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    fetchStations();
   }, []);
 
   const filteredStations = useMemo(() => {
@@ -126,6 +141,7 @@ const Stations: React.FC<StationsProps> = ({ onViewDetails }) => {
   }, [stations, searchTerm]);
   
   const handleSaveStation = (newStationData: { name: string; location: string; locationCoords: { lat: number; lng: number; }; selectedSensorIds: string[]; selectedCameraIds: string[] }) => {
+    // This part remains mock until we have POST endpoints
     const newStation: Station = {
       id: `STN${Date.now()}`,
       name: newStationData.name,
@@ -173,8 +189,15 @@ const Stations: React.FC<StationsProps> = ({ onViewDetails }) => {
       
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-[312px] rounded-xl" />)}
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[312px] rounded-xl" />)}
         </div>
+      ) : error ? (
+        <Card>
+            <div className="text-center py-8 text-danger">
+                <ExclamationIcon className="w-12 h-12 mx-auto mb-2"/>
+                <p className="font-semibold">{error}</p>
+            </div>
+        </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {filteredStations.map(station => (
@@ -183,7 +206,7 @@ const Stations: React.FC<StationsProps> = ({ onViewDetails }) => {
         </div>
       )}
 
-       {filteredStations.length === 0 && !isLoading && (
+       {filteredStations.length === 0 && !isLoading && !error && (
             <Card>
                 <div className="text-center py-8 text-muted">
                     <p>Arama kriterlerinize uygun istasyon bulunamadı.</p>

@@ -72,7 +72,7 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ options, sele
                                 // Fix: The ref callback was returning a boolean value, which is not a valid return type for a ref. Wrapped in a block to return void.
                                 ref={el => {
                                     if (el) {
-                                        el.indeterminate = selected.length > 0 && selected.length < options.length
+                                        el.indeterminate = selected.length > 0 && selected.length < options.length;
                                     }
                                 }}
                             />
