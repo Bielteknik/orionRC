@@ -20,10 +20,12 @@
     "axios": "^1.7.2",
     "serialport": "^12.0.0",
     "i2c-bus": "^5.2.2",
-    "sqlite3": "^5.1.7"
+    "sqlite3": "^5.1.7",
+    "sqlite": "^5.1.1"
   },
   "devDependencies": {
     "@types/node": "^20.12.12",
+    "@types/i2c-bus": "^5.1.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5"
   }

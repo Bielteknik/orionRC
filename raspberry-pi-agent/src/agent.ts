@@ -4,11 +4,9 @@ import path from 'path';
 import sqlite3 from 'sqlite3';
 import { open, Database } from 'sqlite';
 import { DeviceConfig, ReadingPayload, SensorConfig, ISensorDriver, AgentState } from './types';
-import { fileURLToPath } from 'url';
 
-// ES modüllerinde __dirname için düzeltme
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// CommonJS modül sisteminde __dirname global olarak mevcuttur.
+// ES modül düzeltmesine gerek yoktur.
 
 // --- Yardımcı Fonksiyonlar ---
 const logger = {
@@ -45,7 +43,7 @@ class OrionAgent {
     private baseUrl: string = '';
     private token: string = '';
     private deviceId: string = '';
-    private dbPath: string = path.join(__dirname, 'offline_queue.db');
+    private dbPath: string = path.join(__dirname, '..', 'offline_queue.db');
     private db!: Database;
     private deviceConfig: DeviceConfig | null = null;
     private driverManager: DriverManager = new DriverManager();
@@ -195,7 +193,7 @@ class OrionAgent {
             if (items.length > 0) {
                  logger.log(`Çevrimdışı kuyrukta ${items.length} kayıt var, gönderiliyor...`);
                  for (const item of items) {
-                    const success = await this._sendDataToServer(JSON.parse(item.payload));
+                    const success = await this._sendDataToServer(JSON.parse(item.payload as string));
                     if (success) {
                         logger.log(`Kuyruk (ID: ${item.id}) başarıyla gönderildi.`);
                         await this.db.run("DELETE FROM readings WHERE id = ?", item.id);
@@ -274,5 +272,5 @@ class OrionAgent {
 }
 
 // Agent'ı başlat
-const agent = new OrionAgent(path.join(__dirname, '../config.json'));
+const agent = new OrionAgent(path.join(__dirname, '..', 'config.json'));
 agent.run().catch(err => logger.error("Beklenmedik bir hata oluştu ve agent durdu.", err));
