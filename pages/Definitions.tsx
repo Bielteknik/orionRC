@@ -117,7 +117,7 @@ const AddAlertRuleDrawer: React.FC<AddAlertRuleDrawerProps> = ({ isOpen, onClose
         <div className={`fixed inset-0 z-50 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
             <div className="absolute inset-0 bg-black/60" onClick={onClose}></div>
             <div className={`absolute inset-y-0 right-0 bg-secondary w-full max-w-lg transform transition-transform duration-300 ease-in-out flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-                <header className="flex items-center justify-between p-4 border-b border-gray-200 bg-primary"><h2 className="text-xl font-bold text-gray-900">Yeni Alarm Kuralı Ekle</h2><button onClick={onClose}><svg/></button></header>
+                <header className="flex items-center justify-between p-4 border-b border-gray-200 bg-primary"><h2 className="text-xl font-bold text-gray-900">Yeni Alarm Kuralı Ekle</h2><button onClick={onClose} className="p-2 text-muted hover:bg-gray-100 rounded-full"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button></header>
                 <main className="flex-1 overflow-y-auto p-6 space-y-4">
                     {error && <div className="bg-danger/10 text-danger p-3 rounded-md">{error}</div>}
                     <div className="bg-primary p-4 rounded-lg border space-y-4">
