@@ -1,145 +1,196 @@
-import express, { Request, Response } from 'express';
+// backend/src/server.ts
+// Fix: Removed named imports for Request, Response, NextFunction to avoid conflicts with global DOM/Fetch types.
+import express from 'express';
 import path from 'path';
-import { GoogleGenAI } from '@google/genai';
+import 'dotenv/config';
+import { GoogleGenAI, GenerateContentResponse } from '@google/genai';
 import { initializeDatabase } from './database';
 import * as dataService from './dataService';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+let ai: GoogleGenAI | null = null;
+if (!process.env.API_KEY) {
+    console.warn("API_KEY environment variable not set. Gemini Assistant will not work.");
+} else {
+    ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+}
+
 // --- Middleware ---
 app.use(express.json());
 
-// --- Gemini API Setup ---
-// The API key MUST be obtained exclusively from the environment variable `process.env.API_KEY`.
-if (!process.env.API_KEY) {
-    console.error("FATAL ERROR: API_KEY environment variable is not set.");
-    process.exit(1);
-}
-// FIX: Initialize GoogleGenAI with a named apiKey parameter.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Custom middleware for on-the-fly TSX/TS transpilation
+const babel = require('@babel/core');
+const fs = require('fs/promises');
+
+// Fix: Used express.Request, express.Response, and express.NextFunction to specify Express types and resolve conflicts.
+app.use(async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (req.path.endsWith('.tsx') || req.path.endsWith('.ts')) {
+        try {
+            const filePath = path.join(__dirname, '..', '..', 'httpdocs', req.path);
+            const source = await fs.readFile(filePath, 'utf8');
+            const result = await babel.transformAsync(source, {
+                presets: ['@babel/preset-react', '@babel/preset-typescript'],
+                filename: req.path // Important for presets to work correctly
+            });
+            if (result && result.code) {
+                res.setHeader('Content-Type', 'application/javascript');
+                res.send(result.code);
+            } else {
+                next();
+            }
+        } catch (error) {
+            console.error(`Babel transpilation error for ${req.path}:`, error);
+            next(error);
+        }
+    } else {
+        next();
+    }
+});
+
+// Serve static files from the httpdocs directory
+const httpdocsPath = path.join(__dirname, '..', '..', 'httpdocs');
+app.use(express.static(httpdocsPath, {
+    extensions: ['html', 'htm', 'tsx', 'ts'],
+    setHeaders: (res, filePath) => {
+        if (path.extname(filePath) === '.tsx' || path.extname(filePath) === '.ts') {
+            res.setHeader('Content-Type', 'application/javascript');
+        }
+    }
+}));
 
 
 // --- API Routes ---
+const apiRouter = express.Router();
 
-// GET /api/stations
-app.get('/api/stations', async (req: Request, res: Response) => {
+// Fix: Used express.Request and express.Response for all route handlers.
+apiRouter.get('/stations', async (req: express.Request, res: express.Response) => {
     try {
-        const stations = await dataService.getAllStations();
+        const stations = await dataService.getStations();
         res.json(stations);
     } catch (error) {
-        console.error("Error fetching stations:", error);
-        res.status(500).json({ message: "İstasyon verileri alınırken bir sunucu hatası oluştu." });
+        res.status(500).json({ message: "Failed to fetch stations" });
     }
 });
 
-// GET /api/sensors
-app.get('/api/sensors', async (req: Request, res: Response) => {
+// Fix: Used express.Request and express.Response for all route handlers.
+apiRouter.post('/stations', async (req: express.Request, res: express.Response) => {
     try {
-        const sensors = await dataService.getAllSensors();
+        await dataService.createStation(req.body);
+        res.status(201).json({ message: 'Station created' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to create station' });
+    }
+});
+
+// Fix: Used express.Request and express.Response for all route handlers.
+apiRouter.get('/sensors', async (req: express.Request, res: express.Response) => {
+    try {
+        const sensors = await dataService.getSensors();
         res.json(sensors);
     } catch (error) {
-        console.error("Error fetching sensors:", error);
-        res.status(500).json({ message: "Sensör verileri alınırken bir sunucu hatası oluştu." });
+        res.status(500).json({ message: "Failed to fetch sensors" });
     }
 });
 
-// GET /api/cameras
-app.get('/api/cameras', async (req: Request, res: Response) => {
+// Fix: Used express.Request and express.Response for all route handlers.
+apiRouter.post('/sensors', async (req: express.Request, res: express.Response) => {
     try {
-        const cameras = await dataService.getAllCameras();
+        await dataService.createSensor(req.body);
+        res.status(201).json({ message: 'Sensor created' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to create sensor' });
+    }
+});
+
+// Fix: Used express.Request and express.Response for all route handlers.
+apiRouter.get('/cameras', async (req: express.Request, res: express.Response) => {
+    try {
+        const cameras = await dataService.getCameras();
         res.json(cameras);
     } catch (error) {
-        console.error("Error fetching cameras:", error);
-        res.status(500).json({ message: "Kamera verileri alınırken bir sunucu hatası oluştu." });
+        res.status(500).json({ message: "Failed to fetch cameras" });
     }
 });
 
-// POST /api/gemini-chat-stream
-app.post('/api/gemini-chat-stream', async (req: Request, res: Response) => {
-    const { message } = req.body;
-
-    if (!message) {
-        return res.status(400).json({ error: 'Mesaj içeriği boş olamaz.' });
+// Fix: Used express.Request and express.Response for all route handlers.
+apiRouter.post('/cameras', async (req: express.Request, res: express.Response) => {
+    try {
+        await dataService.createCamera(req.body);
+        res.status(201).json({ message: 'Camera created' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to create camera' });
     }
+});
+
+// Fix: Used express.Request and express.Response for all route handlers.
+apiRouter.post('/gemini-chat-stream', async (req: express.Request, res: express.Response) => {
+    if (!ai) return res.status(500).json({ error: 'API_KEY not configured.' });
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ error: 'Message is required' });
 
     try {
-        // FIX: Use ai.models.generateContentStream for streaming responses.
-        const streamingResponse = await ai.models.generateContentStream({
+        const result = await ai.models.generateContentStream({
             model: 'gemini-2.5-flash',
             contents: message,
-        });
-        
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.setHeader('Transfer-Encoding', 'chunked');
-
-        for await (const chunk of streamingResponse) {
-            // FIX: Access the text directly from the chunk.
-            if (chunk.text) {
-                res.write(chunk.text);
+            config: {
+                systemInstruction: 'You are a helpful assistant for the ORION meteorological platform.',
             }
+        });
+
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        for await (const chunk of result) {
+            res.write(chunk.text);
         }
         res.end();
-
     } catch (error) {
-        console.error('Gemini API Error:', error);
-        if (!res.headersSent) {
-            res.status(500).json({ error: 'Yapay zeka asistanıyla iletişim kurulamadı.' });
-        } else {
-            res.end();
-        }
+        console.error('Error streaming from Gemini:', error);
+        if (!res.headersSent) res.status(500).json({ error: 'AI assistant error.' });
+        else res.end();
     }
 });
 
-
-// --- Agent Routes ---
-
-// GET /api/config/:deviceId
-app.get('/api/config/:deviceId', async (req: Request, res: Response) => {
+// Fix: Used express.Request and express.Response for all route handlers.
+apiRouter.get('/config/:deviceId', async (req: express.Request, res: express.Response) => {
     try {
         const config = await dataService.getDeviceConfig(req.params.deviceId);
         res.json(config);
     } catch (error) {
-        console.error(`Error getting config for device ${req.params.deviceId}:`, error);
-        res.status(500).json({ message: "Cihaz yapılandırması alınamadı." });
+        res.status(500).json({ message: "Failed to get device config" });
     }
 });
 
-// POST /api/submit-reading
-app.post('/api/submit-reading', async (req: Request, res: Response) => {
+// Fix: Used express.Request and express.Response for all route handlers.
+apiRouter.post('/submit-reading', async (req: express.Request, res: express.Response) => {
     try {
-        const result = await dataService.saveSensorReading(req.body);
-        res.status(200).json(result);
+        await dataService.submitReading(req.body);
+        res.status(200).json({ message: 'Data received' });
     } catch (error) {
-        console.error("Error saving sensor reading:", error);
-        res.status(500).json({ message: "Sensör verisi kaydedilemedi." });
+        res.status(500).json({ message: 'Failed to process reading' });
     }
 });
 
-// --- Serve Frontend ---
-// Serve static files from the React build directory
-app.use(express.static(path.join(__dirname, '..', '..', 'dist')));
+app.use('/api', apiRouter);
 
-// The "catchall" handler: for any request that doesn't match one above,
-// send back React's index.html file.
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', '..', 'dist', 'index.html'));
+// --- Serve React App for all non-API routes ---
+// Fix: Used express.Request and express.Response for all route handlers.
+app.get('*', (req: express.Request, res: express.Response) => {
+    res.sendFile(path.join(httpdocsPath, 'index.html'));
 });
-
 
 // --- Server Initialization ---
 async function startServer() {
     try {
-        console.log("Sunucu başlatılıyor...");
+        console.log('[Server] Initializing...');
         await initializeDatabase();
-        await dataService.seedDatabase();
+        // The call to populateDatabaseWithMockData() has been removed.
         
         app.listen(PORT, () => {
-            console.log(`🚀 Sunucu http://localhost:${PORT} adresinde çalışıyor`);
-            console.log("Frontend build dosyaları sunuluyor. API endpointleri '/api' altında.");
+            console.log(`[Server] 🚀 Sunucu http://localhost:${PORT} adresinde çalışıyor.`);
         });
     } catch (error) {
-        console.error("Sunucu başlatılamadı:", error);
+        console.error('[Server] Sunucu başlatılamadı:', error);
         process.exit(1);
     }
 }
