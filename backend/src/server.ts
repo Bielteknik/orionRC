@@ -5,6 +5,7 @@ import { GoogleGenAI } from '@google/genai';
 import * as dataService from './dataService';
 import { DeviceConfig } from './types';
 
+// Let TypeScript infer the type of the express app to avoid overload resolution issues.
 const app = express();
 // The frontend and backend will be served from the same origin in production.
 // For development, you might run them on different ports and need CORS.
@@ -59,7 +60,8 @@ app.post('/api/gemini-chat-stream', async (req, res) => {
         
         const stream = await ai.models.generateContentStream({
             model: 'gemini-2.5-flash',
-            contents: [{ parts: [{ text: message }] }],
+            // The `contents` field for a single text prompt should be a string for `generateContentStream`.
+            contents: message,
         });
 
         // Write each chunk to the response as it arrives
