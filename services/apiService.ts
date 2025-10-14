@@ -1,56 +1,47 @@
-import axios from 'axios';
-import { Station, Sensor, Camera } from '../types.ts';
+import { Station, Sensor, Camera } from '../types';
 
-// IMPORTANT: This is now pointing to the production backend.
-const API_BASE_URL = 'https://meteoroloji.ejderapi.com.tr/api';
+// Use a relative path for API calls, assuming the backend is served on the same host
+// or a proxy is set up in development.
+const API_BASE_URL = '/api';
 
-const apiClient = axios.create({
-    baseURL: API_BASE_URL,
-    headers: {
-        'Content-Type': 'application/json',
+/**
+ * A generic fetcher function to handle API requests and errors.
+ * @param url The API endpoint to fetch.
+ * @param options Optional fetch options.
+ * @returns A promise that resolves to the JSON response.
+ */
+async function fetcher<T>(endpoint: string, options?: RequestInit): Promise<T> {
+    try {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+        if (!response.ok) {
+            const errorInfo = await response.json().catch(() => ({ message: 'Bilinmeyen bir sunucu hatası oluştu.' }));
+            throw new Error(errorInfo.message || `HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    } catch (error) {
+        console.error(`API service error fetching ${endpoint}:`, error);
+        // Re-throw the error to be handled by the calling component
+        throw error;
     }
-});
+}
 
 /**
  * Fetches all stations from the backend.
- * @returns A promise that resolves to an array of Station objects.
  */
-export const getStations = async (): Promise<Station[]> => {
-    try {
-        const response = await apiClient.get('/stations');
-        return response.data;
-    } catch (error) {
-        console.error("Error fetching stations:", error);
-        // In a real-world app, you might want to handle this error more gracefully,
-        // e.g., by showing a toast notification to the user.
-        throw new Error('İstasyon verileri alınamadı.');
-    }
+export const getStations = (): Promise<Station[]> => {
+    return fetcher<Station[]>('/stations');
 };
 
 /**
  * Fetches all sensors from the backend.
- * @returns A promise that resolves to an array of Sensor objects.
  */
-export const getSensors = async (): Promise<Sensor[]> => {
-    try {
-        const response = await apiClient.get('/sensors');
-        return response.data;
-    } catch (error) {
-        console.error("Error fetching sensors:", error);
-        throw new Error('Sensör verileri alınamadı.');
-    }
+export const getSensors = (): Promise<Sensor[]> => {
+    return fetcher<Sensor[]>('/sensors');
 };
 
 /**
  * Fetches all cameras from the backend.
- * @returns A promise that resolves to an array of Camera objects.
  */
-export const getCameras = async (): Promise<Camera[]> => {
-    try {
-        const response = await apiClient.get('/cameras');
-        return response.data;
-    } catch (error) {
-        console.error("Error fetching cameras:", error);
-        throw new Error('Kamera verileri alınamadı.');
-    }
+export const getCameras = (): Promise<Camera[]> => {
+    return fetcher<Camera[]>('/cameras');
 };

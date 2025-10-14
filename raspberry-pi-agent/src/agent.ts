@@ -241,13 +241,13 @@ class OrionAgent {
     
     private setupGracefulShutdown() {
         // Fix: Cast process to any to bypass incorrect type definitions for 'on'.
-        (process as any).on('SIGINT', async () => {
+        process.on('SIGINT', async () => {
             logger.log("\n--- Kapatma sinyali (Ctrl+C) alındı. ---");
             logger.log("Kalan veriler gönderilmeye çalışılıyor...");
             await this._processOfflineQueue();
             logger.log("--- ORION Agent kapatıldı. ---");
             // Fix: Cast process to any to bypass incorrect type definitions for 'exit'.
-            (process as any).exit(0);
+            process.exit(0);
         });
     }
 
