@@ -89,3 +89,17 @@ export interface ReadingPayload {
     sensor: number; // The numeric ID of the sensor from DeviceConfig
     value: Record<string, any>; // The parsed data, e.g., { "temperature": 22.5, "humidity": 45.1 }
 }
+
+export type Severity = 'Kritik' | 'Uyarı' | 'Bilgi';
+
+export interface Notification {
+    id: string;
+    ruleId: string;
+    message: string;
+    stationName: string;
+    sensorName: string;
+    triggeredValue: string;
+    timestamp: string;
+    severity: Severity;
+    isRead: boolean;
+}

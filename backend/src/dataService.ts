@@ -1,6 +1,6 @@
 // backend/src/dataService.ts
 import { getDb } from './database';
-import { Station, Sensor, Camera, DeviceConfig, ReadingPayload, SensorStatus, CameraStatus } from './types';
+import { Station, Sensor, Camera, DeviceConfig, ReadingPayload, SensorStatus, CameraStatus, Notification, Severity } from './types';
 
 // --- Frontend API Functions ---
 
@@ -42,6 +42,16 @@ export async function getCameras(): Promise<Camera[]> {
     const cameras = await db.all<Omit<Camera, 'photos'>[]>('SELECT * FROM cameras');
     return cameras.map(c => ({...c, photos: []}));
 }
+
+export async function getNotifications(): Promise<Notification[]> {
+    const db = getDb();
+    const notifications = await db.all<any[]>('SELECT * FROM notifications ORDER BY timestamp DESC');
+    return notifications.map(n => ({
+        ...n,
+        isRead: n.isRead === 1,
+    }));
+}
+
 
 export async function createStation(stationData: any): Promise<void> {
     const db = getDb();
@@ -129,26 +139,34 @@ export async function submitReading(payload: ReadingPayload): Promise<void> {
     const { sensor: sensorNumericId, value } = payload;
     console.log(`[DataService] Veri alındı - Sensör ID: ${sensorNumericId}, Değer: ${JSON.stringify(value)}`);
 
-    // This is still a simplified logic that needs a proper mapping between
-    // the agent's numeric sensor ID and the database's string sensor ID.
-    // For now, this will fail gracefully if no sensors are in the DB.
-    
-    const sensorToUpdate = await db.get<Sensor>('SELECT * FROM sensors LIMIT 1'); // Placeholder logic
+    // Gerçek bir sistemde bu, sensorNumericId'yi bir istasyonla eşleştirir.
+    // Bu demo için, varsayılan olarak ilk istasyondaki ('STATION001') sensörleri güncelleyeceğiz.
+    const stationId = 'STATION001'; 
+    const now = new Date().toISOString();
 
-    if(sensorToUpdate){
-         if (value.temperature !== undefined) {
-            await db.run(
-                `UPDATE sensors SET value = ?, lastUpdate = ? WHERE type = ? AND stationId = ?`,
-                [value.temperature, new Date().toISOString(), 'Sıcaklık', sensorToUpdate.stationId]
-            );
-        }
-        if (value.humidity !== undefined) {
-             await db.run(
-                `UPDATE sensors SET value = ?, lastUpdate = ? WHERE type = ? AND stationId = ?`,
-                [value.humidity, new Date().toISOString(), 'Nem', sensorToUpdate.stationId]
-            );
-        }
+    let sensorUpdated = false;
+    if (value.temperature !== undefined) {
+        const result = await db.run(
+            `UPDATE sensors SET value = ?, lastUpdate = ? WHERE type = ? AND stationId = ?`,
+            value.temperature, now, 'Sıcaklık', stationId
+        );
+        if (result.changes > 0) sensorUpdated = true;
+    }
+    if (value.humidity !== undefined) {
+         const result = await db.run(
+            `UPDATE sensors SET value = ?, lastUpdate = ? WHERE type = ? AND stationId = ?`,
+            value.humidity, now, 'Nem', stationId
+        );
+        if (result.changes > 0) sensorUpdated = true;
+    }
+    
+    if (sensorUpdated) {
+        // İstasyonun son güncelleme zamanını da güncelle
+        await db.run(
+            `UPDATE stations SET lastUpdate = ? WHERE id = ?`,
+            now, stationId
+        );
     } else {
-        console.warn(`[DataService] Güncellenecek sensör bulunamadı. Veritabanı boş olabilir.`);
+        console.warn(`[DataService] Güncellenecek sensör bulunamadı. Gelen veri: ${JSON.stringify(value)}`);
     }
 }

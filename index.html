@@ -1,3 +1,60 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ORION Gözlem Platformu</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --color-primary: #ffffff;
+            --color-secondary: #f9fafb;
+            --color-text-base: #1f2937;
+            --color-text-muted: #6b7281;
+            --color-accent: #f97316; /* orange-500 */
+            --color-accent-hover: #ea580c; /* orange-600 */
+            --color-success: #22c55e; /* green-500 */
+            --color-danger: #ef4444; /* red-500 */
+            --color-warning: #f59e0b; /* amber-500 */
+        }
+        .dark {
+            --color-primary: #1f2937; /* gray-800 */
+            --color-secondary: #374151; /* gray-700 */
+            --color-text-base: #f9fafb; /* gray-50 */
+            --color-text-muted: #9ca3af; /* gray-400 */
+        }
+        body { 
+            background-color: var(--color-secondary);
+            color: var(--color-text-base);
+        }
+        .bg-primary { background-color: var(--color-primary); }
+        .bg-secondary { background-color: var(--color-secondary); }
+        .text-muted { color: var(--color-text-muted); }
+        .text-accent { color: var(--color-accent); }
+        .bg-accent { background-color: var(--color-accent); }
+        .border-accent { border-color: var(--color-accent); }
+        .ring-accent { --tw-ring-color: var(--color-accent); }
+        .focus\:ring-accent:focus { --tw-ring-color: var(--color-accent); }
+        .text-accent-dark { color: var(--color-accent-hover); }
+        .hover\:bg-orange-600:hover { background-color: var(--color-accent-hover); }
+        .text-success { color: var(--color-success); }
+        .bg-success { background-color: var(--color-success); }
+        .text-danger { color: var(--color-danger); }
+        .bg-danger { background-color: var(--color-danger); }
+        .text-warning { color: var(--color-warning); }
+        .bg-warning { background-color: var(--color-warning); }
+
+        .bg-danger\/10 { background-color: rgba(239, 68, 68, 0.1); }
+        .bg-warning\/10 { background-color: rgba(245, 158, 11, 0.1); }
+        .bg-blue-500\/10 { background-color: rgba(59, 130, 246, 0.1); }
+        .bg-success\/10 { background-color: rgba(34, 197, 94, 0.1); }
+        .bg-accent\/10 { background-color: rgba(249, 115, 22, 0.1); }
+        .has-\[:checked\]\:bg-accent\/10:has(:checked) { background-color: rgba(249, 115, 22, 0.1); }
+        .has-\[:checked\]\:border-accent\/50:has(:checked) { border-color: rgba(249, 115, 22, 0.5); }
+    </style>
 <script type="importmap">
 {
   "imports": {
@@ -11,12 +68,16 @@
     "sqlite3": "https://aistudiocdn.com/sqlite3@^5.1.7",
     "sqlite": "https://aistudiocdn.com/sqlite@^5.1.1",
     "express": "https://aistudiocdn.com/express@^5.1.0",
-    "cors": "https://aistudiocdn.com/cors@^2.8.5",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.24.0",
     "dotenv/": "https://aistudiocdn.com/dotenv@^17.2.3/",
-    "fs": "https://aistudiocdn.com/fs@^0.0.1-security",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.24.0",
     "@babel/core": "https://aistudiocdn.com/@babel/core@^7.28.4"
   }
 }
 </script>
-full contents of index.html
+</head>
+<body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+</body>
+</html>

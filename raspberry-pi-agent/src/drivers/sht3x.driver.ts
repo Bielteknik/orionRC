@@ -1,7 +1,6 @@
 import { ISensorDriver } from "../types";
 // import { openSync } from 'i2c-bus'; // This would be used in a real hardware implementation
 
-// Fix: Changed SensorDriver to ISensorDriver to match the exported type.
 export default class SHT3xDriver implements ISensorDriver {
     /**
      * Reads temperature and humidity from an SHT3x sensor via I2C.

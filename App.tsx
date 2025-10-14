@@ -13,18 +13,34 @@ import CameraDetail from './pages/CameraDetail.tsx';
 import { ThemeProvider } from './components/ThemeContext.tsx';
 import Notifications from './pages/Notifications.tsx';
 import GeminiAssistant from './components/GeminiAssistant.tsx';
-
-const MOCK_NOTIFICATIONS_INITIAL: Notification[] = [];
+import { getNotifications } from './services/apiService.ts';
 
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.Dashboard);
   const [viewingStationId, setViewingStationId] = useState<string | null>(null);
   const [viewingCameraId, setViewingCameraId] = useState<string | null>(null);
-  const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS_INITIAL);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  useEffect(() => {
+    // Backend'den başlangıç bildirimlerini çek
+    const fetchNotifications = async () => {
+      try {
+        const fetchedNotifications = await getNotifications();
+        setNotifications(fetchedNotifications);
+      } catch (error) {
+        console.error("Bildirimler çekilemedi:", error);
+        // Burada bir hata bildirimi gösterilebilir
+      }
+    };
+
+    fetchNotifications();
+  }, []);
+
 
   const handleMarkAllAsRead = () => {
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    // TODO: Backend'e de bu bilgiyi gönder
   };
 
   const handleViewAllNotifications = () => {

@@ -1,4 +1,4 @@
-import { Station, Sensor, Camera } from '../types';
+import { Station, Sensor, Camera, Notification } from '../types';
 
 // Use a relative path for API calls, assuming the backend is served on the same host
 // or a proxy is set up in development.
@@ -44,4 +44,11 @@ export const getSensors = (): Promise<Sensor[]> => {
  */
 export const getCameras = (): Promise<Camera[]> => {
     return fetcher<Camera[]>('/cameras');
+};
+
+/**
+ * Fetches all notifications from the backend.
+ */
+export const getNotifications = (): Promise<Notification[]> => {
+    return fetcher<Notification[]>('/notifications');
 };
