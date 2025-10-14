@@ -83,7 +83,7 @@ export interface Camera {
   fps: number;
   photos: string[];
 }
-// FIX: Added ReadingPayload interface to define the shape of data sent from the agent.
+
 // Data payload sent from the agent to the server
 export interface ReadingPayload {
     sensor: number; // The numeric ID of the sensor from DeviceConfig
