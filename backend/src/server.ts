@@ -1,6 +1,12 @@
+// FIX: Changed express import to use the default export. This, combined with
+// using explicit types like `express.Request`, helps prevent type conflicts with
+// global types or other libraries.
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+// FIX: Import ServerResponse to explicitly type the `res` object in `express.static`'s `setHeaders` option.
+import { ServerResponse } from 'http';
 import { DeviceConfig } from './types';
 import { MOCK_STATIONS_DATA, MOCK_SENSORS_DATA, MOCK_CAMERAS_DATA } from './mockData';
 
@@ -17,17 +23,18 @@ const DEVICE_AUTH_TOKEN = process.env.DEVICE_AUTH_TOKEN || 'EjderMeteo_Rpi_Secre
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
 
 // Parse incoming JSON requests
+// FIX: This call previously failed due to type conflicts. The fixes in this file resolve it.
 app.use(express.json());
 
 // Simple logging middleware
-// FIX: Using fully qualified types to avoid resolution issues.
+// FIX: Use `express.Request`, `express.Response`, and `express.NextFunction` to ensure correct types are used.
 app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
     next();
 });
 
 // Simple token authentication middleware for devices
-// FIX: Using fully qualified types to avoid resolution issues.
+// FIX: Use `express.Request`, `express.Response`, and `express.NextFunction` to ensure correct types are used.
 const authenticateDevice = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const authHeader = req.headers.authorization;
     const expectedToken = `Token ${DEVICE_AUTH_TOKEN}`;
@@ -41,7 +48,6 @@ const authenticateDevice = (req: express.Request, res: express.Response, next: e
 
 
 // --- API Router Setup ---
-// FIX: Using express.Router() to create a router instance.
 const apiRouter = express.Router();
 app.use('/api', apiRouter);
 
@@ -49,14 +55,14 @@ app.use('/api', apiRouter);
 // --- API Routes ---
 
 // API Health Check
-// FIX: Using fully qualified types to avoid resolution issues.
+// FIX: Use `express.Request` and `express.Response` to ensure correct types are used.
 apiRouter.get('/', (req: express.Request, res: express.Response) => {
     res.json({ status: 'API is running' });
 });
 
 
 // [Agent Endpoint] Get device configuration
-// FIX: Using fully qualified types to avoid resolution issues.
+// FIX: Use `express.Request` and `express.Response` to ensure correct types are used.
 apiRouter.get('/config/:deviceId', authenticateDevice, (req: express.Request, res: express.Response) => {
     const { deviceId } = req.params;
     console.log(`Configuration requested for device: ${deviceId}`);
@@ -83,7 +89,7 @@ apiRouter.get('/config/:deviceId', authenticateDevice, (req: express.Request, re
 });
 
 // [Agent Endpoint] Submit sensor readings
-// FIX: Using fully qualified types to avoid resolution issues.
+// FIX: Use `express.Request` and `express.Response` to ensure correct types are used.
 apiRouter.post('/submit-reading', authenticateDevice, (req: express.Request, res: express.Response) => {
     const reading = req.body;
     
@@ -126,21 +132,46 @@ apiRouter.post('/submit-reading', authenticateDevice, (req: express.Request, res
 
 
 // [Frontend Endpoint] Get all stations
-// FIX: Using fully qualified types to avoid resolution issues.
+// FIX: Use `express.Request` and `express.Response` to ensure correct types are used.
 apiRouter.get('/stations', (req: express.Request, res: express.Response) => {
     res.json(MOCK_STATIONS_DATA);
 });
 
 // [Frontend Endpoint] Get all sensors
-// FIX: Using fully qualified types to avoid resolution issues.
+// FIX: Use `express.Request` and `express.Response` to ensure correct types are used.
 apiRouter.get('/sensors', (req: express.Request, res: express.Response) => {
     res.json(MOCK_SENSORS_DATA);
 });
 
 // [Frontend Endpoint] Get all cameras
-// FIX: Using fully qualified types to avoid resolution issues.
+// FIX: Use `express.Request` and `express.Response` to ensure correct types are used.
 apiRouter.get('/cameras', (req: express.Request, res: express.Response) => {
     res.json(MOCK_CAMERAS_DATA);
+});
+
+// --- Frontend Serving ---
+// Serve static files from the httpdocs directory, which is two levels above the dist folder
+const httpdocsPath = path.join(__dirname, '..', '..', 'httpdocs');
+// FIX: This call previously failed due to type conflicts. The fixes in this file resolve it.
+app.use(express.static(httpdocsPath, {
+  // Allow Express to search for .tsx, .ts files for extensionless URLs
+  extensions: ['tsx', 'ts', 'js', 'html'],
+  // FIX: Explicitly type `res` as `ServerResponse` to fix `setHeader` property not found error.
+  setHeaders: (res: ServerResponse, filePath: string) => {
+    // For module scripts, the browser requires a valid JS MIME type.
+    // We serve them as application/javascript to satisfy this requirement,
+    // and Babel (with type="text/babel") will transpile them before execution.
+    if (filePath.endsWith('.tsx') || filePath.endsWith('.ts')) {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    }
+  }
+}));
+
+// For any other request that doesn't match an API route or a static file,
+// serve the index.html file to support client-side routing.
+// FIX: Use `express.Request` and `express.Response` to ensure correct types are used.
+app.get('*', (req: express.Request, res: express.Response) => {
+  res.sendFile(path.join(httpdocsPath, 'index.html'));
 });
 
 

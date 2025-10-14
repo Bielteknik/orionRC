@@ -23,7 +23,8 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
-    "buffer": "^6.0.3"
+    "buffer": "^6.0.3",
+    "http": "^0.0.1-security"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

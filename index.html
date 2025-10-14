@@ -47,7 +47,9 @@
         }
       }
     </script>
-  <script type="importmap">
+    <!-- Babel Standalone for in-browser TSX transpilation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script type="importmap">
 {
   "imports": {
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
@@ -65,7 +67,8 @@
     "cors": "https://aistudiocdn.com/cors@^2.8.5",
     "dotenv": "https://aistudiocdn.com/dotenv@^17.2.3",
     "express": "https://aistudiocdn.com/express@^5.1.0",
-    "buffer": "https://aistudiocdn.com/buffer@^6.0.3"
+    "buffer": "https://aistudiocdn.com/buffer@^6.0.3",
+    "http": "https://aistudiocdn.com/http@^0.0.1-security"
   }
 }
 </script>
@@ -78,5 +81,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
      crossorigin=""></script>
+    <!-- Main application entry point, transpiled by Babel -->
+    <script type="text/babel" data-presets="react,typescript" data-type="module" src="/index.tsx"></script>
   </body>
 </html>
