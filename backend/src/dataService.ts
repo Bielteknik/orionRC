@@ -1,79 +1,81 @@
-import { MOCK_STATIONS_DATA, MOCK_SENSORS_DATA, MOCK_CAMERAS_DATA } from './mockData';
-import { Station, Sensor, Camera, DeviceConfig, SensorConfig } from './types';
+import { getDb } from './database';
+import { Station, Sensor, Camera } from './types';
 
-// Simple in-memory data store. In a real app, this would interact with a database.
-let stations: Station[] = MOCK_STATIONS_DATA;
-let sensors: Sensor[] = MOCK_SENSORS_DATA;
-let cameras: Camera[] = MOCK_CAMERAS_DATA;
-
-// --- Frontend Data Services ---
-
-export const getAllStations = (): Station[] => {
-    // Simulate dynamic data by updating counts on each request
-    return stations.map(station => ({
-        ...station,
-        sensorCount: sensors.filter(s => s.stationId === station.id).length,
-        cameraCount: cameras.filter(c => c.stationId === station.id).length,
-    }));
-};
-
-export const getAllSensors = (): Sensor[] => {
-    return sensors;
-};
-
-export const getAllCameras = (): Camera[] => {
-    return cameras;
-};
-
-// --- Agent Data Services ---
-
-export const getDeviceConfig = (deviceId: string): DeviceConfig => {
-    // In a real system, you'd look up the deviceId and return its specific configuration.
-    // For this mock, we'll assume the deviceId corresponds to 'STN001' and create a sample config.
-    const stationSensors = sensors.filter(s => s.stationId === 'STN001');
-
-    const sensorConfigs: SensorConfig[] = stationSensors.map((sensor, index) => {
-        // Mocking some config based on sensor type
-        let driver = 'virtual';
-        let config: any = {};
-        if (sensor.type === 'Sıcaklık' || sensor.type === 'Nem') {
-            driver = 'sht3x';
-            config = { address: '0x44', bus: 1 };
-        } else if (sensor.type === 'Basınç') {
-            driver = 'hx711_load_cell';
-            config = { port: '/dev/ttyUSB0' };
-        }
+/**
+ * Fetches all stations from the database and calculates sensor/camera counts.
+ */
+export async function getAllStations(): Promise<Station[]> {
+    const db = await getDb();
+    // In a real application, these counts would be more efficient, maybe with triggers or a view.
+    const stations = await db.all('SELECT * FROM stations');
+    
+    const stationsWithCounts = await Promise.all(stations.map(async (station) => {
+        const sensorCountResult = await db.get('SELECT COUNT(*) as count FROM sensors WHERE stationId = ?', station.id);
+        const cameraCountResult = await db.get('SELECT COUNT(*) as count FROM cameras WHERE stationId = ?', station.id);
         
+        // This makes the returned object match the frontend's expected `Station` type
         return {
-            id: index + 1, // Agent might use a different ID system
-            name: sensor.name,
-            is_active: true,
-            interface: config.address ? 'i2c' : 'serial',
-            parser_config: {
-                driver: driver,
-            },
-            config: config
+            ...station,
+            locationCoords: { lat: station.lat, lng: station.lng },
+            sensorCount: sensorCountResult.count,
+            cameraCount: cameraCountResult.count,
+            // Mocking dynamic fields that aren't in the DB
+            systemHealth: 98,
+            avgBattery: 95,
+            dataFlow: 12.5,
+            activeSensorCount: sensorCountResult.count,
+            onlineCameraCount: cameraCountResult.count,
         };
+    }));
+
+    return stationsWithCounts as unknown as Station[];
+}
+
+/**
+ * Fetches all sensors from the database.
+ */
+export async function getAllSensors(): Promise<Sensor[]> {
+    const db = await getDb();
+    const sensors = await db.all('SELECT * FROM sensors');
+    return sensors as Sensor[];
+}
+
+/**
+ * Fetches all cameras from the database.
+ */
+export async function getAllCameras(): Promise<Camera[]> {
+    const db = await getDb();
+    const cameras = await db.all('SELECT * FROM cameras');
+    // The `photos` array is not in the database schema, so we add it here.
+    return cameras.map(cam => ({ ...cam, photos: [] })) as Camera[];
+}
+
+/**
+ * Updates a sensor's value in the database based on a reading from the agent.
+ */
+export async function updateSensorReading(sensorId: number, valueData: Record<string, any>): Promise<void> {
+    const db = await getDb();
+    
+    // Extract the primary numeric value from the complex value object.
+    const mainValue = valueData.temperature ?? valueData.humidity ?? valueData.weight_kg ?? valueData.distance_cm ?? 0;
+    
+    // The agent uses numeric IDs from its config, but the DB uses string IDs (e.g., 'SEN01').
+    // We need to find the correct string ID based on the numeric part.
+    const sensors: { id: string }[] = await db.all('SELECT id FROM sensors');
+    const targetSensor = sensors.find(s => {
+        const numericPart = s.id.replace(/\D/g, ''); // Remove all non-digit characters
+        return parseInt(numericPart, 10) === sensorId;
     });
 
-    return {
-        sensors: sensorConfigs,
-    };
-};
-
-export const updateSensorValue = (sensorId: number, reading: Record<string, any>) => {
-    // This is a mock function. It maps the agent's sensor ID back to our mock sensor data.
-    // A real implementation would have a more robust mapping.
-    // Let's assume sensorId 1 is 'SEN01', 2 is 'SEN02' etc. for STN001
-    const sensorToUpdate = sensors.find(s => s.id === `SEN0${sensorId}`);
-    if (sensorToUpdate) {
-        // A simple update logic, could be more complex
-        const key = Object.keys(reading)[0];
-        if (key && typeof reading[key] === 'number') {
-            sensorToUpdate.value = reading[key];
-            sensorToUpdate.lastUpdate = new Date().toISOString();
-        }
+    if (targetSensor) {
+        await db.run(
+            'UPDATE sensors SET value = ?, lastUpdate = ? WHERE id = ?',
+            typeof mainValue === 'number' ? mainValue.toFixed(2) : mainValue,
+            new Date().toISOString(),
+            targetSensor.id
+        );
+        console.log(`[DataService] Updated sensor ${targetSensor.id} with value ${mainValue}`);
     } else {
-        console.warn(`[DataService] Could not find sensor with mock ID mapping for agent ID: ${sensorId}`);
+        console.warn(`[DataService] Could not find sensor with numeric ID ${sensorId} to update.`);
     }
 }

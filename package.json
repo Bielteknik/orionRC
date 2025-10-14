@@ -9,21 +9,17 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "recharts": "^3.2.1",
+    "axios": "^1.12.2",
     "fs": "^0.0.1-security",
     "path": "^0.12.7",
     "sqlite3": "^5.1.7",
     "sqlite": "^5.1.1",
-    "i2c-bus": "^5.2.3",
-    "buffer": "^6.0.3",
     "express": "^5.1.0",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.3",
-    "@babel/core": "^7.28.4",
-    "@google/genai": "^1.24.0",
-    "react-dom": "^19.2.0",
-    "axios": "^1.12.2",
-    "recharts": "^3.2.1",
-    "react": "^19.2.0"
+    "@google/genai": "^1.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
