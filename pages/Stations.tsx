@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Station, Sensor, Camera, SensorStatus, CameraStatus } from '../types';
-import { getStations, getSensors, getCameras } from '../services/apiService';
+import { getStations, getSensors, getCameras, deleteStation as apiDeleteStation } from '../services/apiService';
 import Card from '../components/common/Card';
-import { AddIcon, SearchIcon, StationIcon, SensorIcon, CameraIcon } from '../components/icons/Icons';
+import { AddIcon, SearchIcon, StationIcon, SensorIcon, CameraIcon, DeleteIcon } from '../components/icons/Icons';
 import AddStationDrawer from '../components/AddStationModal'; // Corrected component name based on file
 import Skeleton from '../components/common/Skeleton';
 
@@ -12,7 +12,7 @@ const statusStyles: Record<string, { bg: string; text: string; }> = {
     inactive: { bg: 'bg-gray-200', text: 'text-muted' },
 };
 
-const StationCard: React.FC<{ station: Station; onViewDetails: (id: string) => void }> = ({ station, onViewDetails }) => {
+const StationCard: React.FC<{ station: Station; onViewDetails: (id: string) => void; onDelete: (id: string) => void; }> = ({ station, onViewDetails, onDelete }) => {
     const status = statusStyles[station.status] || statusStyles.inactive;
     return (
         <Card className="p-0 flex flex-col hover:shadow-md transition-shadow">
@@ -25,7 +25,16 @@ const StationCard: React.FC<{ station: Station; onViewDetails: (id: string) => v
                             <p className="text-sm text-muted dark:text-gray-400">{station.location}</p>
                         </div>
                     </div>
-                     <span className={`px-3 py-1 text-xs font-semibold rounded-full ${status.bg} ${status.text}`}>{station.status}</span>
+                    <div className="flex items-center gap-2">
+                        <span className={`px-3 py-1 text-xs font-semibold rounded-full ${status.bg} ${status.text}`}>{station.status}</span>
+                         <button 
+                            onClick={(e) => { e.stopPropagation(); onDelete(station.id); }} 
+                            className="p-1.5 text-muted dark:text-gray-400 hover:text-danger hover:bg-danger/10 rounded-full"
+                            title="İstasyonu Sil"
+                        >
+                            <DeleteIcon className="w-4 h-4" />
+                        </button>
+                    </div>
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
                     <div className="flex items-center gap-2">
@@ -109,6 +118,22 @@ const Stations: React.FC<{ onViewDetails: (stationId: string) => void }> = ({ on
         setCameras(prev => prev.map(c => newStationData.selectedCameraIds.includes(c.id) ? {...c, stationId: newStation.id} : c));
     };
 
+    const handleDeleteStation = async (id: string) => {
+        if (window.confirm('Bu istasyonu silmek istediğinizden emin misiniz? Bu istasyona bağlı tüm sensörler ve kameralar "atanmamış" duruma gelecektir.')) {
+            try {
+                await apiDeleteStation(id);
+                setStations(prev => prev.filter(s => s.id !== id));
+                // Refetch sensors and cameras to update their "unassigned" status
+                const [sensorsData, camerasData] = await Promise.all([getSensors(), getCameras()]);
+                setSensors(sensorsData);
+                setCameras(camerasData);
+            } catch (error) {
+                console.error("İstasyon silinemedi:", error);
+                alert("İstasyon silinirken bir hata oluştu.");
+            }
+        }
+    };
+
 
     return (
         <div className="space-y-6">
@@ -141,7 +166,7 @@ const Stations: React.FC<{ onViewDetails: (stationId: string) => void }> = ({ on
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredStations.map(station => (
-                        <StationCard key={station.id} station={station} onViewDetails={onViewDetails} />
+                        <StationCard key={station.id} station={station} onViewDetails={onViewDetails} onDelete={handleDeleteStation} />
                     ))}
                 </div>
             )}

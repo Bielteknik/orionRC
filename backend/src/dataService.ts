@@ -76,6 +76,12 @@ export async function createStation(stationData: any): Promise<void> {
     }
 }
 
+export async function deleteStation(id: string): Promise<void> {
+    console.log(`[DataService] Deleting station with ID: ${id}`);
+    const db = getDb();
+    await db.run('DELETE FROM stations WHERE id = ?', id);
+}
+
 export async function createSensor(sensorData: any): Promise<void> {
     const db = getDb();
     await db.run(
@@ -89,6 +95,12 @@ export async function createSensor(sensorData: any): Promise<void> {
     );
 }
 
+export async function deleteSensor(id: string): Promise<void> {
+    console.log(`[DataService] Deleting sensor with ID: ${id}`);
+    const db = getDb();
+    await db.run('DELETE FROM sensors WHERE id = ?', id);
+}
+
 export async function createCamera(cameraData: any): Promise<void> {
     const db = getDb();
     await db.run(
@@ -99,6 +111,12 @@ export async function createCamera(cameraData: any): Promise<void> {
         cameraData.status || CameraStatus.Offline,
         '', cameraData.rtspUrl, cameraData.cameraType, cameraData.viewDirection, 30
     );
+}
+
+export async function deleteCamera(id: string): Promise<void> {
+    console.log(`[DataService] Deleting camera with ID: ${id}`);
+    const db = getDb();
+    await db.run('DELETE FROM cameras WHERE id = ?', id);
 }
 
 
@@ -150,14 +168,14 @@ export async function submitReading(payload: ReadingPayload): Promise<void> {
             `UPDATE sensors SET value = ?, lastUpdate = ? WHERE type = ? AND stationId = ?`,
             value.temperature, now, 'Sıcaklık', stationId
         );
-        if (result.changes > 0) sensorUpdated = true;
+        if (result.changes) sensorUpdated = true;
     }
     if (value.humidity !== undefined) {
          const result = await db.run(
             `UPDATE sensors SET value = ?, lastUpdate = ? WHERE type = ? AND stationId = ?`,
             value.humidity, now, 'Nem', stationId
         );
-        if (result.changes > 0) sensorUpdated = true;
+        if (result.changes) sensorUpdated = true;
     }
     
     if (sensorUpdated) {

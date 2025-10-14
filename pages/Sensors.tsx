@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Sensor, Station, SensorStatus } from '../types';
-import { getSensors, getStations } from '../services/apiService';
+import { getSensors, getStations, deleteSensor as apiDeleteSensor } from '../services/apiService';
 import Card from '../components/common/Card';
 import { AddIcon, SearchIcon, FilterIcon, EditIcon, DeleteIcon } from '../components/icons/Icons';
 import AddSensorDrawer from '../components/AddSensorDrawer';
@@ -88,9 +88,15 @@ const Sensors: React.FC = () => {
         }
     };
     
-    const handleDeleteSensor = (id: string) => {
-        if (window.confirm('Bu sensörü silmek istediğinizden emin misiniz?')) {
-            setSensors(prev => prev.filter(s => s.id !== id));
+    const handleDeleteSensor = async (id: string) => {
+        if (window.confirm('Bu sensörü silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) {
+            try {
+                await apiDeleteSensor(id);
+                setSensors(prev => prev.filter(s => s.id !== id));
+            } catch (error) {
+                console.error("Sensör silinemedi:", error);
+                alert("Sensör silinirken bir hata oluştu.");
+            }
         }
     }
 

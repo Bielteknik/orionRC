@@ -45,6 +45,16 @@ apiRouter.post('/stations', async (req, res) => {
     }
 });
 
+apiRouter.delete('/stations/:id', async (req, res) => {
+    try {
+        await dataService.deleteStation(req.params.id);
+        res.status(204).send();
+    } catch (error) {
+        console.error("Failed to delete station:", error);
+        res.status(500).json({ message: 'Failed to delete station' });
+    }
+});
+
 apiRouter.get('/sensors', async (req, res) => {
     try {
         const sensors = await dataService.getSensors();
@@ -64,6 +74,16 @@ apiRouter.post('/sensors', async (req, res) => {
     }
 });
 
+apiRouter.delete('/sensors/:id', async (req, res) => {
+    try {
+        await dataService.deleteSensor(req.params.id);
+        res.status(204).send();
+    } catch (error) {
+        console.error("Failed to delete sensor:", error);
+        res.status(500).json({ message: 'Failed to delete sensor' });
+    }
+});
+
 apiRouter.get('/cameras', async (req, res) => {
     try {
         const cameras = await dataService.getCameras();
@@ -80,6 +100,16 @@ apiRouter.post('/cameras', async (req, res) => {
     } catch (error) {
         console.error("Failed to create camera:", error);
         res.status(500).json({ message: 'Failed to create camera' });
+    }
+});
+
+apiRouter.delete('/cameras/:id', async (req, res) => {
+    try {
+        await dataService.deleteCamera(req.params.id);
+        res.status(204).send();
+    } catch (error) {
+        console.error("Failed to delete camera:", error);
+        res.status(500).json({ message: 'Failed to delete camera' });
     }
 });
 

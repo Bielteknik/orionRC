@@ -17,6 +17,10 @@ async function fetcher<T>(endpoint: string, options?: RequestInit): Promise<T> {
             const errorInfo = await response.json().catch(() => ({ message: 'Bilinmeyen bir sunucu hatası oluştu.' }));
             throw new Error(errorInfo.message || `HTTP error! status: ${response.status}`);
         }
+        // Handle 204 No Content for DELETE requests
+        if (response.status === 204) {
+            return null as T;
+        }
         return response.json();
     } catch (error) {
         console.error(`API service error fetching ${endpoint}:`, error);
@@ -33,10 +37,25 @@ export const getStations = (): Promise<Station[]> => {
 };
 
 /**
+ * Deletes a station by its ID.
+ */
+export const deleteStation = (id: string): Promise<void> => {
+    return fetcher<void>(`/stations/${id}`, { method: 'DELETE' });
+};
+
+
+/**
  * Fetches all sensors from the backend.
  */
 export const getSensors = (): Promise<Sensor[]> => {
     return fetcher<Sensor[]>('/sensors');
+};
+
+/**
+ * Deletes a sensor by its ID.
+ */
+export const deleteSensor = (id: string): Promise<void> => {
+    return fetcher<void>(`/sensors/${id}`, { method: 'DELETE' });
 };
 
 /**
@@ -45,6 +64,14 @@ export const getSensors = (): Promise<Sensor[]> => {
 export const getCameras = (): Promise<Camera[]> => {
     return fetcher<Camera[]>('/cameras');
 };
+
+/**
+ * Deletes a camera by its ID.
+ */
+export const deleteCamera = (id: string): Promise<void> => {
+    return fetcher<void>(`/cameras/${id}`, { method: 'DELETE' });
+};
+
 
 /**
  * Fetches all notifications from the backend.

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Camera, Station, CameraStatus } from '../types';
-import { getCameras, getStations } from '../services/apiService';
+import { getCameras, getStations, deleteCamera as apiDeleteCamera } from '../services/apiService';
 import Card from '../components/common/Card';
-import { AddIcon, SearchIcon, PlayIcon, CameraIcon } from '../components/icons/Icons';
+import { AddIcon, SearchIcon, PlayIcon, CameraIcon, DeleteIcon } from '../components/icons/Icons';
 import AddCameraDrawer from '../components/AddCameraDrawer';
 import Skeleton from '../components/common/Skeleton';
 import Pagination from '../components/common/Pagination';
@@ -15,11 +15,18 @@ const cameraStatusInfo: Record<CameraStatus, { text: string; className: string; 
     [CameraStatus.Offline]: { text: 'Çevrimdışı', className: 'bg-gray-700', isLive: false },
 };
 
-const CameraCard: React.FC<{ camera: Camera, stationName: string, onViewDetails: (id: string) => void }> = ({ camera, stationName, onViewDetails }) => {
+const CameraCard: React.FC<{ camera: Camera, stationName: string, onViewDetails: (id: string) => void, onDelete: (id: string) => void }> = ({ camera, stationName, onViewDetails, onDelete }) => {
     const status = cameraStatusInfo[camera.status];
     return (
-         <Card className="p-0 overflow-hidden flex flex-col hover:shadow-md transition-shadow">
+         <Card className="p-0 overflow-hidden flex flex-col hover:shadow-md transition-shadow group">
             <div className="relative">
+                 <button 
+                    onClick={() => onDelete(camera.id)} 
+                    className="absolute top-2 right-2 z-10 p-1.5 bg-black/40 text-white rounded-full opacity-0 group-hover:opacity-100 hover:bg-danger transition-all"
+                    title="Kamerayı Sil"
+                >
+                    <DeleteIcon className="w-4 h-4" />
+                </button>
                 <img src={`https://picsum.photos/seed/${camera.id}/400/300`} alt={camera.name} className={`w-full h-48 object-cover ${!status.isLive ? 'filter grayscale' : ''}`} />
                 <div className="absolute top-3 left-3 flex items-center space-x-2">
                     <span className={`flex items-center space-x-1.5 text-xs px-2 py-1 rounded-md font-semibold text-white ${status.className}`}>
@@ -100,6 +107,18 @@ const Cameras: React.FC<{ onViewDetails: (cameraId: string) => void }> = ({ onVi
         setCameras(prev => [newCamera, ...prev]);
     };
 
+    const handleDeleteCamera = async (id: string) => {
+        if (window.confirm('Bu kamerayı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) {
+            try {
+                await apiDeleteCamera(id);
+                setCameras(prev => prev.filter(c => c.id !== id));
+            } catch (error) {
+                console.error("Kamera silinemedi:", error);
+                alert("Kamera silinirken bir hata oluştu.");
+            }
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -133,7 +152,8 @@ const Cameras: React.FC<{ onViewDetails: (cameraId: string) => void }> = ({ onVi
                                 key={camera.id} 
                                 camera={camera} 
                                 stationName={stationMap.get(camera.stationId) || 'Atanmamış'}
-                                onViewDetails={onViewDetails} 
+                                onViewDetails={onViewDetails}
+                                onDelete={handleDeleteCamera}
                             />
                         ))}
                     </div>
