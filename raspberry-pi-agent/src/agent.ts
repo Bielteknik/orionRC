@@ -98,7 +98,7 @@ class OrionAgent {
         this.setState(AgentState.CONFIGURING);
         logger.log("Sunucudan cihaz yapılandırması isteniyor...");
         try {
-            const response = await axios.get(`${this.baseUrl}/device/${this.deviceId}/config/`, {
+            const response = await axios.get(`${this.baseUrl}/config/${this.deviceId}`, {
                 headers: { 'Authorization': `Token ${this.token}` },
                 timeout: 15000
             });
@@ -158,7 +158,7 @@ class OrionAgent {
 
     private async _sendDataToServer(payload: ReadingPayload): Promise<boolean> {
          try {
-            const response = await axios.post(`${this.baseUrl}/readings/submit/`, payload, {
+            const response = await axios.post(`${this.baseUrl}/submit-reading`, payload, {
                 headers: { 
                     'Authorization': `Token ${this.token}`,
                     'Content-Type': 'application/json'

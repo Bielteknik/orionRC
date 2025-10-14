@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { DeviceConfig } from './types';
@@ -20,15 +20,15 @@ app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
 app.use(express.json());
 
 // Simple logging middleware
-// FIX: Explicitly added types to the middleware function parameters to resolve overload ambiguity and allow access to properties like `method` and `path`.
-app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+// FIX: Use imported Request, Response, and NextFunction types for middleware parameters to resolve type errors.
+app.use((req: Request, res: Response, next: NextFunction) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
     next();
 });
 
 // Simple token authentication middleware for devices
-// FIX: Added explicit types to middleware parameters to resolve type errors on `req.headers`, `req.ip`, `res.status`, and `res.json`.
-const authenticateDevice = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+// FIX: Use imported Request, Response, and NextFunction types for middleware parameters to resolve type errors.
+const authenticateDevice = (req: Request, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization;
     const expectedToken = `Token ${DEVICE_AUTH_TOKEN}`;
 
@@ -43,8 +43,8 @@ const authenticateDevice = (req: express.Request, res: express.Response, next: e
 // --- API Routes ---
 
 // [Agent Endpoint] Get device configuration
-// FIX: Added explicit types to route handler parameters to resolve type errors on `req.params` and `res.json`.
-app.get('/device/:deviceId/config/', authenticateDevice, (req: express.Request, res: express.Response) => {
+// FIX: Use imported Request and Response types for route handler parameters to resolve type errors.
+app.get('/config/:deviceId', authenticateDevice, (req: Request, res: Response) => {
     const { deviceId } = req.params;
     console.log(`Configuration requested for device: ${deviceId}`);
 
@@ -87,8 +87,8 @@ app.get('/device/:deviceId/config/', authenticateDevice, (req: express.Request, 
 });
 
 // [Agent Endpoint] Submit sensor readings
-// FIX: Added explicit types to route handler parameters to resolve type errors on `req.body` and `res.status`.
-app.post('/readings/submit/', authenticateDevice, (req: express.Request, res: express.Response) => {
+// FIX: Use imported Request and Response types for route handler parameters to resolve type errors.
+app.post('/submit-reading', authenticateDevice, (req: Request, res: Response) => {
     const reading = req.body;
     
     console.log('✅ Received sensor reading:', JSON.stringify(reading, null, 2));
@@ -139,27 +139,27 @@ app.post('/readings/submit/', authenticateDevice, (req: express.Request, res: ex
 
 
 // [Frontend Endpoint] Get all stations
-// FIX: Added explicit types to route handler parameters to resolve type error on `res.json`.
-app.get('/stations', (req: express.Request, res: express.Response) => {
+// FIX: Use imported Request and Response types for route handler parameters to resolve type errors.
+app.get('/stations', (req: Request, res: Response) => {
     res.json(MOCK_STATIONS_DATA);
 });
 
 // [Frontend Endpoint] Get all sensors
-// FIX: Added explicit types to route handler parameters to resolve type error on `res.json`.
-app.get('/sensors', (req: express.Request, res: express.Response) => {
+// FIX: Use imported Request and Response types for route handler parameters to resolve type errors.
+app.get('/sensors', (req: Request, res: Response) => {
     res.json(MOCK_SENSORS_DATA);
 });
 
 // [Frontend Endpoint] Get all cameras
-// FIX: Added explicit types to route handler parameters to resolve type error on `res.json`.
-app.get('/cameras', (req: express.Request, res: express.Response) => {
+// FIX: Use imported Request and Response types for route handler parameters to resolve type errors.
+app.get('/cameras', (req: Request, res: Response) => {
     res.json(MOCK_CAMERAS_DATA);
 });
 
 
 // --- Root Route for Health Check ---
-// FIX: Added explicit types to the route handler parameters to resolve type error on `res.send`.
-app.get('/', (req: express.Request, res: express.Response) => {
+// FIX: Use imported Request and Response types for route handler parameters to resolve type errors.
+app.get('/', (req: Request, res: Response) => {
     res.send('<h1>Meteoroloji Platformu Backend</h1><p>API is running.</p>');
 });
 
