@@ -4,15 +4,16 @@ import Card from '../components/common/Card';
 import AddReportDrawer from '../components/AddReportDrawer';
 import ScheduleReportDrawer from '../components/ScheduleReportDrawer';
 import { AddIcon, SearchIcon, DownloadIcon, EditIcon, DeleteIcon, CalendarIcon } from '../components/icons/Icons';
-// Fix: Removed incorrect mock data imports. Data will be fetched from the API.
 import { getStations, getSensors } from '../services/apiService';
-import { robotoFontBase64 } from '../services/pdfFonts';
+
+// Add XLSX type declaration for the library loaded from CDN
+declare const XLSX: any;
 
 const MOCK_REPORTS: Report[] = [
-  { id: 'RPT001', title: 'Günlük Özet Raporu - 20.07.2024', createdAt: '2024-07-20T09:00:00Z', type: 'daily' },
-  { id: 'RPT002', title: 'Haftalık Sensör Veri Analizi', createdAt: '2024-07-19T18:00:00Z', type: 'weekly' },
-  { id: 'RPT003', title: 'Aylık İstasyon Durum Raporu - Haziran', createdAt: '2024-07-01T10:00:00Z', type: 'monthly' },
-  { id: 'RPT004', title: 'Günlük Özet Raporu - 19.07.2024', createdAt: '2024-07-19T09:00:00Z', type: 'daily' },
+  { id: 'RPT001', title: 'Günlük Özet Raporu - 20.07.2024', createdAt: '2024-07-20T09:00:00Z', type: 'daily', config: { fileFormat: 'XLSX' } as ReportConfig },
+  { id: 'RPT002', title: 'Haftalık Sensör Veri Analizi', createdAt: '2024-07-19T18:00:00Z', type: 'weekly', config: { fileFormat: 'CSV' } as ReportConfig },
+  { id: 'RPT003', title: 'Aylık İstasyon Durum Raporu - Haziran', createdAt: '2024-07-01T10:00:00Z', type: 'monthly', config: { fileFormat: 'XLSX' } as ReportConfig },
+  { id: 'RPT004', title: 'Günlük Özet Raporu - 19.07.2024', createdAt: '2024-07-19T09:00:00Z', type: 'daily', config: { fileFormat: 'XLSX' } as ReportConfig },
 ];
 
 const MOCK_SCHEDULES: ReportSchedule[] = [
@@ -80,32 +81,81 @@ const Reports: React.FC = () => {
         setSchedules(prev => [newSchedule, ...prev]);
     };
 
-    const generatePdfReport = (report: Report) => {
-        const { jsPDF } = (window as any).jspdf;
-        const doc = new jsPDF();
-        const config = report.config;
-        doc.addFileToVFS('Roboto-Regular.ttf', robotoFontBase64);
-        doc.addFont('Roboto-Regular.ttf', 'Roboto', 'normal');
-        doc.setFont('Roboto');
-        doc.setFontSize(20); doc.setTextColor(40); doc.text(report.title, 14, 22);
-        doc.setFontSize(11); doc.setTextColor(128); doc.text(`Oluşturma Tarihi: ${new Date(report.createdAt).toLocaleString('tr-TR')}`, 14, 30);
-        if(config) {
-            doc.setFontSize(12); doc.setTextColor(40); doc.text("Uygulanan Filtreler", 14, 45); doc.setLineWidth(0.5); doc.line(14, 46, 200, 46);
-            // Fix: Added optional chaining and replaced mock data with fetched state data to prevent type and runtime errors.
-            let filterText = `Tarih Aralığı: ${config.dateRangePreset}\n`;
-            filterText += `İstasyonlar: ${config.selectedStations?.length > 0 ? stations.filter(s => config.selectedStations.includes(s.id)).map(s => s.name).join(', ') : 'Tümü'}\n`;
-            filterText += `Sensör Tipleri: ${config.selectedSensorTypes?.length > 0 ? config.selectedSensorTypes.join(', ') : 'Tümü'}`;
-            doc.setFontSize(10); doc.setTextColor(80); doc.text(filterText, 14, 52);
+    const generateCsv = (data: any[], fileName: string) => {
+        if (!data || data.length === 0) {
+            alert('Rapor için veri bulunamadı.');
+            return;
         }
+        const headers = Object.keys(data[0]);
+        const csvContent = [
+            headers.join(';'), // Use semicolon for better Excel compatibility
+            ...data.map(row => headers.map(header => `"${String(row[header]).replace(/"/g, '""')}"`).join(';'))
+        ].join('\n');
+
+        const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `${fileName}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const generateXlsx = (data: any[], fileName: string) => {
+        if (!data || data.length === 0) {
+            alert('Rapor için veri bulunamadı.');
+            return;
+        }
+        const xlsx = (window as any).XLSX;
+        if (typeof xlsx === 'undefined') {
+            console.error('XLSX library is not loaded.');
+            alert('Rapor oluşturma kütüphanesi yüklenemedi. Lütfen internet bağlantınızı kontrol edin.');
+            return;
+        }
+        const ws = xlsx.utils.json_to_sheet(data);
+        const wb = xlsx.utils.book_new();
+        xlsx.utils.book_append_sheet(wb, ws, "Rapor Verileri");
+        xlsx.writeFile(wb, `${fileName}.xlsx`);
+    };
+
+    const handleDownloadReport = (report: Report) => {
+        const { config } = report;
+        if (!config) {
+            alert('Bu rapor için yapılandırma bulunamadı, indirilemiyor.');
+            return;
+        }
+
         const reportData = MOCK_SENSOR_READINGS.filter(reading => {
-            const stationMatch = config?.selectedStations?.length === 0 || config?.selectedStations?.includes(reading.stationId) !== false;
-            const sensorTypeMatch = config?.selectedSensorTypes?.length === 0 || config?.selectedSensorTypes?.includes(reading.sensorType) !== false;
+            const stationMatch = !config.selectedStations || config.selectedStations.length === 0 || config.selectedStations.includes(reading.stationId);
+            const sensorTypeMatch = !config.selectedSensorTypes || config.selectedSensorTypes.length === 0 || config.selectedSensorTypes.includes(reading.sensorType);
             return stationMatch && sensorTypeMatch;
         });
-        const tableData = reportData.map(d => [d.timestamp, d.stationName, d.sensorName, d.sensorType, `${d.value} ${d.unit}`]);
-        (doc as any).autoTable({ head: [['Zaman Damgası', 'İstasyon', 'Sensör', 'Sensör Tipi', 'Değer']], body: tableData, startY: 75, theme: 'grid', headStyles: { fillColor: [31, 41, 55], font: 'Roboto' }, styles: { font: 'Roboto' } });
+
+        const headers = {
+            timestamp: 'Zaman Damgası',
+            stationName: 'İstasyon',
+            sensorName: 'Sensör',
+            sensorType: 'Sensör Tipi',
+            value: 'Değer'
+        };
+
+        const formattedData = reportData.map(d => ({
+            [headers.timestamp]: d.timestamp,
+            [headers.stationName]: d.stationName,
+            [headers.sensorName]: d.sensorName,
+            [headers.sensorType]: d.sensorType,
+            [headers.value]: `${d.value} ${d.unit}`
+        }));
+
         const safeFileName = report.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-        doc.save(`${safeFileName}.pdf`);
+        
+        if (config.fileFormat === 'CSV') {
+            generateCsv(formattedData, safeFileName);
+        } else { // Default to XLSX
+            generateXlsx(formattedData, safeFileName);
+        }
     };
 
     return (
@@ -134,7 +184,7 @@ const Reports: React.FC = () => {
 
             {activeTab === 'generated' && (
                 <Card className="p-0"><div className="overflow-x-auto"><table className="w-full text-sm text-left text-gray-600"><thead className="text-xs text-gray-700 uppercase bg-gray-100"><tr><th scope="col" className="px-6 py-3">Rapor Başlığı</th><th scope="col" className="px-6 py-3">Rapor Tipi</th><th scope="col" className="px-6 py-3">Oluşturulma Tarihi</th><th scope="col" className="px-6 py-3 text-right">İşlemler</th></tr></thead><tbody>
-                {filteredReports.map(report => (<tr key={report.id} className="border-b border-gray-200 hover:bg-gray-50"><td className="px-6 py-4 font-medium text-gray-900">{report.title}</td><td className="px-6 py-4"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${report.type === 'daily' ? 'bg-blue-100 text-blue-800' : report.type === 'weekly' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'}`}>{report.type}</span></td><td className="px-6 py-4 font-mono text-gray-800">{new Date(report.createdAt).toLocaleString('tr-TR')}</td><td className="px-6 py-4 text-right"><button onClick={() => generatePdfReport(report)} className="flex items-center gap-2 text-accent font-semibold py-1 px-3 rounded-lg hover:bg-accent/10 transition-colors text-sm"><DownloadIcon className="w-4 h-4" /><span>İndir</span></button></td></tr>))}
+                {filteredReports.map(report => (<tr key={report.id} className="border-b border-gray-200 hover:bg-gray-50"><td className="px-6 py-4 font-medium text-gray-900">{report.title}</td><td className="px-6 py-4"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${report.type === 'daily' ? 'bg-blue-100 text-blue-800' : report.type === 'weekly' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'}`}>{report.type}</span></td><td className="px-6 py-4 font-mono text-gray-800">{new Date(report.createdAt).toLocaleString('tr-TR')}</td><td className="px-6 py-4 text-right"><button onClick={() => handleDownloadReport(report)} className="flex items-center gap-2 text-accent font-semibold py-1 px-3 rounded-lg hover:bg-accent/10 transition-colors text-sm"><DownloadIcon className="w-4 h-4" /><span>İndir</span></button></td></tr>))}
                 </tbody></table></div>{filteredReports.length === 0 && (<div className="text-center py-8 text-muted"><p>Rapor bulunamadı.</p></div>)}</Card>
             )}
 

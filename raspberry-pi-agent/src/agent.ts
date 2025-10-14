@@ -3,10 +3,12 @@ import fs from 'fs/promises';
 import path from 'path';
 import sqlite3 from 'sqlite3';
 import { open, Database } from 'sqlite';
+import { fileURLToPath } from 'url';
 import { DeviceConfig, ReadingPayload, SensorConfig, ISensorDriver, AgentState } from './types';
 
-// CommonJS modül sisteminde __dirname global olarak mevcuttur.
-// ES modül düzeltmesine gerek yoktur.
+// Fix: Add __dirname definition for ES modules.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // --- Yardımcı Fonksiyonlar ---
 const logger = {
@@ -98,7 +100,7 @@ class OrionAgent {
         this.setState(AgentState.CONFIGURING);
         logger.log("Sunucudan cihaz yapılandırması isteniyor...");
         try {
-            const response = await axios.get(`${this.baseUrl}/api/v3/device/${this.deviceId}/config/`, {
+            const response = await axios.get(`${this.baseUrl}/device/${this.deviceId}/config/`, {
                 headers: { 'Authorization': `Token ${this.token}` },
                 timeout: 15000
             });
@@ -158,7 +160,7 @@ class OrionAgent {
 
     private async _sendDataToServer(payload: ReadingPayload): Promise<boolean> {
          try {
-            const response = await axios.post(`${this.baseUrl}/api/v3/readings/submit/`, payload, {
+            const response = await axios.post(`${this.baseUrl}/readings/submit/`, payload, {
                 headers: { 
                     'Authorization': `Token ${this.token}`,
                     'Content-Type': 'application/json'

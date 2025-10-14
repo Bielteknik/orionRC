@@ -1,10 +1,8 @@
 import axios from 'axios';
 import { Station, Sensor, Camera } from '../types';
 
-// IMPORTANT: Replace this with your actual backend URL.
-// For local development, you might use 'http://localhost:8000'.
-// For production, it will be 'https://meteoroloji.ejderapi.com.tr'.
-const API_BASE_URL = 'https://meteoroloji.ejderapi.com.tr/api/v3';
+// IMPORTANT: This is now pointing to the production backend.
+const API_BASE_URL = 'https://meteoroloji.ejderapi.com.tr';
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL,

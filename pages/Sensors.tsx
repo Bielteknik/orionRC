@@ -16,6 +16,25 @@ const SENSOR_UNITS: { [key: string]: string } = {
     'Rüzgar Yönü': '°'
 };
 
+const formatTimeAgo = (isoString: string | undefined): string => {
+    if (!isoString) return 'bilinmiyor';
+    const date = new Date(isoString);
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (seconds < 10) return "az önce";
+    if (seconds < 60) return `${seconds} saniye önce`;
+    
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} dakika önce`;
+
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} saat önce`;
+
+    const days = Math.floor(hours / 24);
+    return `${days} gün önce`;
+};
+
 
 const StatCard: React.FC<{ title: string; value: string | number; colorClass?: string }> = ({ title, value, colorClass = 'text-gray-900' }) => (
   <Card className="p-4">
@@ -81,7 +100,7 @@ const SensorCard: React.FC<{ sensor: Sensor; stationName: string; onEdit: (senso
                         </div>
                         <div className="bg-white/20 backdrop-blur-sm p-3 rounded-lg">
                             <p className="text-sm text-white/80">Güncelleme</p>
-                            <p className="font-semibold text-sm text-white">{sensor.lastUpdate}</p>
+                            <p className="font-semibold text-sm text-white">{formatTimeAgo(sensor.lastUpdate)}</p>
                         </div>
                     </div>
 
@@ -166,7 +185,7 @@ const Sensors: React.FC = () => {
   const handleSaveSensor = (sensorData: Partial<Sensor> & { id?: string }) => {
      // Saving is mocked for now until POST/PUT endpoints are implemented
      if (sensorData.id) { // Update existing sensor
-        setSensors(prev => prev.map(s => s.id === sensorData.id ? { ...s, ...sensorData, lastUpdate: 'şimdi' } as Sensor : s));
+        setSensors(prev => prev.map(s => s.id === sensorData.id ? { ...s, ...sensorData, lastUpdate: new Date().toISOString() } as Sensor : s));
      } else { // Add new sensor
         const newSensor: Sensor = {
             id: `S${Date.now()}`,
@@ -177,7 +196,7 @@ const Sensors: React.FC = () => {
             value: 0,
             unit: SENSOR_UNITS[sensorData.type || 'Sıcaklık'] || '',
             battery: 100,
-            lastUpdate: 'şimdi',
+            lastUpdate: new Date().toISOString(),
         };
         setSensors(prev => [newSensor, ...prev]);
      }

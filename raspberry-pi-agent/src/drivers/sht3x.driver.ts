@@ -1,5 +1,7 @@
 import { ISensorDriver } from "../types";
 import { openSync, I2CBus } from 'i2c-bus';
+// Fix: Import Buffer to resolve 'Cannot find name' error.
+import { Buffer } from 'buffer';
 
 // SHT3x sensörü için I2C komutları
 const CMD_MEASURE_HPM = [0x2C, 0x06]; // Yüksek Tekrarlanabilirlikte Tek Ölçüm

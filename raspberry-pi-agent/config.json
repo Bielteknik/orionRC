@@ -4,6 +4,6 @@
   },
   "device": {
     "id": "ejder3200-01",
-    "token": "REPLACE_WITH_YOUR_DEVICE_AUTH_TOKEN_FROM_PLESK"
+    "token": "SECRET_AGENT_TOKEN_123"
   }
 }

@@ -29,6 +29,26 @@ const ITEMS_PER_PAGE_DATA = 10;
 const ITEMS_PER_PAGE_SENSORS = 6;
 const ITEMS_PER_PAGE_CAMERAS = 4;
 
+const formatTimeAgo = (isoString: string | undefined): string => {
+    if (!isoString) return 'bilinmiyor';
+    const date = new Date(isoString);
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (seconds < 10) return "az önce";
+    if (seconds < 60) return `${seconds} saniye önce`;
+    
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} dakika önce`;
+
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} saat önce`;
+
+    const days = Math.floor(hours / 24);
+    return `${days} gün önce`;
+};
+
+
 const statusInfo: Record<string, { text: string, className: string }> = {
     active: { text: 'Aktif', className: 'bg-gray-800 text-white' },
     inactive: { text: 'Pasif', className: 'bg-gray-200 text-gray-700' },
@@ -77,7 +97,7 @@ const SensorCard: React.FC<{ sensor: Sensor }> = ({ sensor }) => {
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10.394 2.08a1 1 0 00-.788 0l-7 3.5a1 1 0 00.788 1.84L5 7.11V14.5a1 1 0 001 1h8a1 1 0 001-1V7.11l1.606.414a1 1 0 00.788-1.84l-7-3.5zM3 15.5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" /></svg>
                     </span>
                  </div>
-                <span className="text-muted">{sensor.lastUpdate}</span>
+                <span className="text-muted">{formatTimeAgo(sensor.lastUpdate)}</span>
             </div>
         </Card>
     );
@@ -368,7 +388,7 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
                         </div>
                          <div>
                             <p className="text-xs text-muted text-right">Son Güncelleme</p>
-                            <p className="font-semibold text-gray-800">{station.lastUpdate}</p>
+                            <p className="font-semibold text-gray-800">{formatTimeAgo(station.lastUpdate)}</p>
                         </div>
                     </div>
                     <div className="h-[500px] rounded-lg overflow-hidden">
@@ -379,7 +399,7 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
                             stationName={station.name}
                             statusText={stationStatus.text}
                             statusClassName={stationStatus.className}
-                            lastUpdate={station.lastUpdate}
+                            lastUpdate={formatTimeAgo(station.lastUpdate)}
                         />
                     </div>
                 </TabContent>

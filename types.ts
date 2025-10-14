@@ -103,7 +103,7 @@ export interface SensorDataPoint {
 export interface ReportConfig {
   reportName: string;
   reportType: 'Günlük' | 'Haftalık' | 'Aylık';
-  fileFormat: 'PDF' | 'CSV';
+  fileFormat: 'XLSX' | 'CSV';
   dateRangePreset: 'last24h' | 'last7d' | 'last30d' | 'custom';
   customDateRange: { start: string; end: string };
   selectedStations: string[];

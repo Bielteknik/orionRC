@@ -22,6 +22,26 @@ const MOCK_UNASSIGNED_CAMERAS_DATA = [
   { id: 'C204', name: 'Kamera W', cameraType: 'Geniş Açılı Kamera' },
 ];
 
+const formatTimeAgo = (isoString: string | undefined): string => {
+    if (!isoString) return 'bilinmiyor';
+    const date = new Date(isoString);
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (seconds < 10) return "az önce";
+    if (seconds < 60) return `${seconds} saniye önce`;
+    
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} dakika önce`;
+
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} saat önce`;
+
+    const days = Math.floor(hours / 24);
+    return `${days} gün önce`;
+};
+
+
 const statusInfo: Record<string, { text: string, className: string }> = {
     active: { text: 'Aktif', className: 'bg-white/90 text-gray-900' },
     inactive: { text: 'Pasif', className: 'bg-white/20 backdrop-blur-sm text-white/80' },
@@ -76,7 +96,7 @@ const StationCard: React.FC<{ station: Station, onViewDetails: (id: string) => v
 
             <div className="flex justify-between items-center text-xs text-white/80 pt-2">
                 <span>Son güncelleme</span>
-                <span>{station.lastUpdate}</span>
+                <span>{formatTimeAgo(station.lastUpdate)}</span>
             </div>
 
             <hr className="border-white/20" />
@@ -143,7 +163,7 @@ const Stations: React.FC<StationsProps> = ({ onViewDetails }) => {
       sensorCount: newStationData.selectedSensorIds.length,
       cameraCount: newStationData.selectedCameraIds.length,
       activeAlerts: 0,
-      lastUpdate: 'şimdi',
+      lastUpdate: new Date().toISOString(),
       systemHealth: 100,
       avgBattery: 100,
       dataFlow: 100,

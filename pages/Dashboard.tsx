@@ -72,8 +72,7 @@ const DataCardWidget: React.FC<{ title: string; sensorType: string; stations: St
             return;
         }
 
-        const avgBaseValue = relevantSensors.reduce((acc, s) => acc + s.value, 0) / relevantSensors.length;
-        const currentValue = parseFloat((avgBaseValue + (Math.random() - 0.5) * (avgBaseValue * 0.05)).toFixed(1));
+        const currentValue = relevantSensors.reduce((acc, s) => acc + s.value, 0) / relevantSensors.length;
 
         let trend = Trend.Stable;
         let change = '0.0%';
@@ -87,7 +86,7 @@ const DataCardWidget: React.FC<{ title: string; sensorType: string; stations: St
         }
 
         setData({
-            value: `${currentValue}${unitMap[sensorType] || ''}`,
+            value: `${currentValue.toFixed(1)}${unitMap[sensorType] || ''}`,
             trend: trend,
             change: change
         });
@@ -272,9 +271,9 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
         [selectedStationIds, stations]
     );
 
-    // Fetch initial data
+    // Data fetching logic
     useEffect(() => {
-        const fetchData = async () => {
+        const fetchInitialData = async () => {
             try {
                 setIsLoading(true);
                 setError(null);
@@ -302,7 +301,23 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
             }
         };
 
-        fetchData();
+        const fetchSensorData = async () => {
+            try {
+                const sensorsData = await getSensors();
+                setSensors(sensorsData);
+                 // Also refetch stations to get updated lastUpdate times
+                const stationsData = await getStations();
+                setStations(stationsData);
+            } catch (err) {
+                console.warn("Sensör verileri güncellenemedi:", err);
+            }
+        }
+
+        fetchInitialData();
+
+        const intervalId = setInterval(fetchSensorData, 5000); // Poll every 5 seconds
+
+        return () => clearInterval(intervalId); // Cleanup on unmount
     }, []);
 
     // Automatically update selectable sensor types based on selected stations

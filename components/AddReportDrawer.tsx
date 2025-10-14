@@ -15,7 +15,7 @@ const today = new Date().toISOString().split('T')[0];
 const AddReportDrawer: React.FC<AddReportDrawerProps> = ({ isOpen, onClose, onSave, stations, sensorTypes }) => {
     const [reportName, setReportName] = useState('');
     const [reportType, setReportType] = useState('Günlük');
-    const [fileFormat, setFileFormat] = useState('PDF');
+    const [fileFormat, setFileFormat] = useState('XLSX');
     const [dateRangePreset, setDateRangePreset] = useState('last24h');
     const [customDateRange, setCustomDateRange] = useState({ start: today, end: today });
     const [selectedStations, setSelectedStations] = useState<string[]>([]);
@@ -42,7 +42,7 @@ const AddReportDrawer: React.FC<AddReportDrawerProps> = ({ isOpen, onClose, onSa
     const resetState = () => {
         setReportName('');
         setReportType('Günlük');
-        setFileFormat('PDF');
+        setFileFormat('XLSX');
         setDateRangePreset('last24h');
         setCustomDateRange({ start: today, end: today });
         setSelectedStations([]);
@@ -100,7 +100,7 @@ const AddReportDrawer: React.FC<AddReportDrawerProps> = ({ isOpen, onClose, onSa
                              <div>
                                 <label htmlFor="file-format" className="block text-sm font-medium text-gray-700 mb-1.5">Dosya Formatı</label>
                                 <select id="file-format" value={fileFormat} onChange={e => setFileFormat(e.target.value)} className="w-full bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent">
-                                    <option>PDF</option>
+                                    <option>XLSX</option>
                                     <option>CSV</option>
                                 </select>
                             </div>

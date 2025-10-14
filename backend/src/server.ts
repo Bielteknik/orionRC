@@ -9,6 +9,7 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 8000;
+const DEVICE_AUTH_TOKEN = process.env.DEVICE_AUTH_TOKEN || 'SECRET_AGENT_TOKEN_123';
 
 // --- Middlewares ---
 
@@ -29,7 +30,7 @@ app.use((req: express.Request, res: express.Response, next: express.NextFunction
 // Simple token authentication middleware for devices
 const authenticateDevice = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const authHeader = req.headers.authorization;
-    const expectedToken = `Token ${process.env.DEVICE_AUTH_TOKEN}`;
+    const expectedToken = `Token ${DEVICE_AUTH_TOKEN}`;
 
     if (!authHeader || authHeader !== expectedToken) {
         console.warn(`Authentication failed. Invalid token provided from ${req.ip}`);
@@ -42,7 +43,7 @@ const authenticateDevice = (req: express.Request, res: express.Response, next: e
 // --- API Routes ---
 
 // [Agent Endpoint] Get device configuration
-app.get('/api/v3/device/:deviceId/config/', authenticateDevice, (req: express.Request, res: express.Response) => {
+app.get('/device/:deviceId/config/', authenticateDevice, (req: express.Request, res: express.Response) => {
     const { deviceId } = req.params;
     console.log(`Configuration requested for device: ${deviceId}`);
 
@@ -85,29 +86,68 @@ app.get('/api/v3/device/:deviceId/config/', authenticateDevice, (req: express.Re
 });
 
 // [Agent Endpoint] Submit sensor readings
-app.post('/api/v3/readings/submit/', authenticateDevice, (req: express.Request, res: express.Response) => {
+app.post('/readings/submit/', authenticateDevice, (req: express.Request, res: express.Response) => {
     const reading = req.body;
     
-    // In a real application, you would validate this data and save it to a database.
-    // For now, we just log it to the console to confirm it's working.
     console.log('✅ Received sensor reading:', JSON.stringify(reading, null, 2));
+
+    // --- DYNAMIC DATA UPDATE LOGIC ---
+    try {
+        const { sensor: sensorId, value } = reading;
+
+        // The agent sends sensor ID `1` for the SHT3x, which provides both temperature and humidity.
+        // We need to map this single reading to our two separate mock sensors.
+        if (sensorId === 1 && value && typeof value.temperature === 'number' && typeof value.humidity === 'number') {
+            let stationIdToUpdate: string | null = null;
+
+            // Find and update the temperature sensor (hardcoded ID 'S001' for this demo)
+            const tempSensor = MOCK_SENSORS_DATA.find(s => s.id === 'S001');
+            if (tempSensor) {
+                tempSensor.value = value.temperature;
+                tempSensor.lastUpdate = new Date().toISOString();
+                stationIdToUpdate = tempSensor.stationId;
+                console.log(`Updated Temperature Sensor (S001) to: ${tempSensor.value}°C`);
+            }
+
+            // Find and update the humidity sensor (hardcoded ID 'S002' for this demo)
+            const humSensor = MOCK_SENSORS_DATA.find(s => s.id === 'S002');
+            if (humSensor) {
+                humSensor.value = value.humidity;
+                humSensor.lastUpdate = new Date().toISOString();
+                if (!stationIdToUpdate) stationIdToUpdate = humSensor.stationId; // Fallback
+                console.log(`Updated Humidity Sensor (S002) to: ${humSensor.value}%`);
+            }
+            
+            // Also update the station's lastUpdate time
+            if (stationIdToUpdate) {
+                const station = MOCK_STATIONS_DATA.find(st => st.id === stationIdToUpdate);
+                if(station) {
+                    station.lastUpdate = new Date().toISOString();
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Error processing incoming reading:", e);
+    }
+    // --- END DYNAMIC DATA UPDATE ---
+
 
     res.status(204).send(); // 204 No Content is a good response for "I received it, thanks"
 });
 
 
 // [Frontend Endpoint] Get all stations
-app.get('/api/v3/stations', (req: express.Request, res: express.Response) => {
+app.get('/stations', (req: express.Request, res: express.Response) => {
     res.json(MOCK_STATIONS_DATA);
 });
 
 // [Frontend Endpoint] Get all sensors
-app.get('/api/v3/sensors', (req: express.Request, res: express.Response) => {
+app.get('/sensors', (req: express.Request, res: express.Response) => {
     res.json(MOCK_SENSORS_DATA);
 });
 
 // [Frontend Endpoint] Get all cameras
-app.get('/api/v3/cameras', (req: express.Request, res: express.Response) => {
+app.get('/cameras', (req: express.Request, res: express.Response) => {
     res.json(MOCK_CAMERAS_DATA);
 });
 
@@ -123,6 +163,6 @@ app.get('/', (req: express.Request, res: express.Response) => {
 app.listen(port, () => {
     console.log(`🚀 Server is running at http://localhost:${port}`);
     if (!process.env.DEVICE_AUTH_TOKEN || process.env.DEVICE_AUTH_TOKEN === 'REPLACE_WITH_YOUR_SECURE_TOKEN') {
-        console.warn('⚠️  SECURITY WARNING: DEVICE_AUTH_TOKEN is not set or is set to the default value. Please set a strong secret in your .env file.');
+        console.warn(`⚠️  SECURITY WARNING: Using default DEVICE_AUTH_TOKEN. For production, set a strong secret in your .env file.`);
     }
 });
