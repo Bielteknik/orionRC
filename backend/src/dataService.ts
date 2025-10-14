@@ -168,14 +168,14 @@ export async function submitReading(payload: ReadingPayload): Promise<void> {
             `UPDATE sensors SET value = ?, lastUpdate = ? WHERE type = ? AND stationId = ?`,
             value.temperature, now, 'Sıcaklık', stationId
         );
-        if (result.changes) sensorUpdated = true;
+        if (result.changes && result.changes > 0) sensorUpdated = true;
     }
     if (value.humidity !== undefined) {
          const result = await db.run(
             `UPDATE sensors SET value = ?, lastUpdate = ? WHERE type = ? AND stationId = ?`,
             value.humidity, now, 'Nem', stationId
         );
-        if (result.changes) sensorUpdated = true;
+        if (result.changes && result.changes > 0) sensorUpdated = true;
     }
     
     if (sensorUpdated) {
