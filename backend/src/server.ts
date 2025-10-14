@@ -1,5 +1,6 @@
 // backend/src/server.ts
-import express, { Request as ExpressRequest, Response as ExpressResponse, NextFunction, Router } from 'express';
+// Fix: Use standard Request and Response types from express to avoid type conflicts.
+import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import 'dotenv/config';
 import { GoogleGenAI } from '@google/genai';
@@ -21,123 +22,123 @@ if (!process.env.API_KEY) {
 // --- Middleware ---
 app.use(express.json());
 
+// Projenin ana dizinini doğru bir şekilde bul
 const projectRoot = path.resolve(__dirname, '..', '..');
 
-// --- API Routes ---
-const apiRouter = Router();
+// --- API Yönlendiricisi ---
+const apiRouter = express.Router();
 
-apiRouter.get('/stations', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/stations', async (req: Request, res: Response) => {
     try {
         const stations = await dataService.getStations();
         res.json(stations);
     } catch (error) {
         console.error("Failed to fetch stations:", error);
-        res.status(500).json({ message: "Failed to fetch stations" });
+        res.status(500).json({ message: "İstasyonlar alınamadı." });
     }
 });
 
-apiRouter.post('/stations', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.post('/stations', async (req: Request, res: Response) => {
     try {
         const newStation = await dataService.createStation(req.body);
         res.status(201).json(newStation);
     } catch (error) {
         console.error("Failed to create station:", error);
-        res.status(500).json({ message: 'Failed to create station' });
+        res.status(500).json({ message: 'İstasyon oluşturulamadı.' });
     }
 });
 
-apiRouter.delete('/stations/:id', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.delete('/stations/:id', async (req: Request, res: Response) => {
     try {
         await dataService.deleteStation(req.params.id);
         res.status(204).send();
     } catch (error) {
         console.error("Failed to delete station:", error);
-        res.status(500).json({ message: 'Failed to delete station' });
+        res.status(500).json({ message: 'İstasyon silinemedi.' });
     }
 });
 
-apiRouter.get('/sensors', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/sensors', async (req: Request, res: Response) => {
     try {
         const sensors = await dataService.getSensors();
         res.json(sensors);
     } catch (error) {
         console.error("Failed to fetch sensors:", error);
-        res.status(500).json({ message: "Failed to fetch sensors" });
+        res.status(500).json({ message: "Sensörler alınamadı." });
     }
 });
 
-apiRouter.post('/sensors', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.post('/sensors', async (req: Request, res: Response) => {
     try {
         const newSensor = await dataService.createSensor(req.body);
         res.status(201).json(newSensor);
     } catch (error) {
         console.error("Failed to create sensor:", error);
-        res.status(500).json({ message: 'Failed to create sensor' });
+        res.status(500).json({ message: 'Sensör oluşturulamadı.' });
     }
 });
 
-apiRouter.delete('/sensors/:id', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.delete('/sensors/:id', async (req: Request, res: Response) => {
     try {
         await dataService.deleteSensor(req.params.id);
         res.status(204).send();
     } catch (error) {
         console.error("Failed to delete sensor:", error);
-        res.status(500).json({ message: 'Failed to delete sensor' });
+        res.status(500).json({ message: 'Sensör silinemedi.' });
     }
 });
 
-apiRouter.get('/cameras', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/cameras', async (req: Request, res: Response) => {
     try {
         const cameras = await dataService.getCameras();
         res.json(cameras);
     } catch (error) {
         console.error("Failed to fetch cameras:", error);
-        res.status(500).json({ message: "Failed to fetch cameras" });
+        res.status(500).json({ message: "Kameralar alınamadı." });
     }
 });
 
-apiRouter.post('/cameras', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.post('/cameras', async (req: Request, res: Response) => {
     try {
         const newCamera = await dataService.createCamera(req.body);
         res.status(201).json(newCamera);
     } catch (error) {
         console.error("Failed to create camera:", error);
-        res.status(500).json({ message: 'Failed to create camera' });
+        res.status(500).json({ message: 'Kamera oluşturulamadı.' });
     }
 });
 
-apiRouter.delete('/cameras/:id', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.delete('/cameras/:id', async (req: Request, res: Response) => {
     try {
         await dataService.deleteCamera(req.params.id);
         res.status(204).send();
     } catch (error) {
         console.error("Failed to delete camera:", error);
-        res.status(500).json({ message: 'Failed to delete camera' });
+        res.status(500).json({ message: 'Kamera silinemedi.' });
     }
 });
 
-apiRouter.get('/notifications', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/notifications', async (req: Request, res: Response) => {
     try {
         const notifications = await dataService.getNotifications();
         res.json(notifications);
     } catch (error) {
         console.error("Failed to fetch notifications:", error);
-        res.status(500).json({ message: "Failed to fetch notifications" });
+        res.status(500).json({ message: "Bildirimler alınamadı." });
     }
 });
 
-
-apiRouter.post('/gemini-chat-stream', async (req: ExpressRequest, res: ExpressResponse) => {
-    if (!ai) return res.status(500).json({ error: 'API_KEY not configured.' });
+apiRouter.post('/gemini-chat-stream', async (req: Request, res: Response) => {
+    if (!ai) return res.status(500).json({ error: 'API_KEY ayarlanmamış.' });
     const { message } = req.body;
-    if (!message) return res.status(400).json({ error: 'Message is required' });
+    if (!message) return res.status(400).json({ error: 'Mesaj gerekli.' });
 
     try {
         const result = await ai.models.generateContentStream({
             model: 'gemini-2.5-flash',
             contents: message,
             config: {
-                systemInstruction: 'You are a helpful assistant for the ORION meteorological platform.',
+                systemInstruction: 'Sen ORION meteoroloji platformu için yardımcı bir asistansın.',
             }
         });
 
@@ -147,83 +148,66 @@ apiRouter.post('/gemini-chat-stream', async (req: ExpressRequest, res: ExpressRe
         }
         res.end();
     } catch (error) {
-        console.error('Error streaming from Gemini:', error);
-        if (!res.headersSent) res.status(500).json({ error: 'AI assistant error.' });
-        else res.end();
+        console.error('Gemini akış hatası:', error);
+        res.status(500).end();
     }
 });
 
-apiRouter.get('/config/:deviceId', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/config/:deviceId', async (req: Request, res: Response) => {
     try {
         const config = await dataService.getDeviceConfig(req.params.deviceId);
         res.json(config);
     } catch (error) {
-        console.error("Failed to get device config:", error);
-        res.status(500).json({ message: "Failed to get device config" });
+        console.error("Cihaz yapılandırması alınamadı:", error);
+        res.status(500).json({ message: "Cihaz yapılandırması alınamadı" });
     }
 });
 
-apiRouter.post('/submit-reading', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.post('/submit-reading', async (req: Request, res: Response) => {
     try {
         await dataService.submitReading(req.body);
-        res.status(200).json({ message: 'Data received' });
+        res.status(200).json({ message: 'Veri alındı' });
     } catch (error) {
-        console.error("Failed to process reading:", error);
-        res.status(500).json({ message: 'Failed to process reading' });
+        console.error("Okuma işlenemedi:", error);
+        res.status(500).json({ message: 'Okuma işlenemedi' });
     }
 });
 
-// --- Static File Serving & SPA Fallback ---
-// The order is important: API first, then specific file handlers, then general static, then fallback.
+// --- Sunucu Yapılandırması ve Başlatma ---
 
-// 1. API Router: Handle all API calls before any file serving.
+// 1. ADIM: Tüm API isteklerini `/api` altında topla
 app.use('/api', apiRouter);
 
-// 2. Handle .ts and .tsx file requests with on-the-fly Babel transpilation.
-app.get(/\.(ts|tsx)$/, async (req: ExpressRequest, res: ExpressResponse, next: NextFunction) => {
+// 2. ADIM: `.tsx` dosyalarını anlık olarak derle
+app.get('*.tsx', async (req: Request, res: Response, next: NextFunction) => {
     const filePath = path.join(projectRoot, req.path);
     try {
-        await fs.access(filePath); // Check if file exists
-        
-        const source = await fs.readFile(filePath, 'utf8');
+        const source = await fs.readFile(filePath, 'utf-8');
         const result = await babel.transformAsync(source, {
-            presets: [['@babel/preset-react', {runtime: 'automatic'}], '@babel/preset-typescript'],
-            filename: filePath
+            presets: [['@babel/preset-react', { runtime: 'automatic' }], '@babel/preset-typescript'],
+            filename: filePath,
         });
-
-        if (result && result.code) {
-            res.setHeader('Content-Type', 'application/javascript');
-            res.send(result.code);
+        if (result?.code) {
+            res.type('application/javascript').send(result.code);
         } else {
             next();
         }
-    } catch (error: unknown) {
-        const isNodeError = (e: any): e is NodeJS.ErrnoException => 'code' in e;
-
-        if (isNodeError(error) && error.code === 'ENOENT') {
-            // File not found, let the next handler (static or SPA fallback) deal with it.
-        } else {
-            console.error(`Error processing ${filePath}:`, error);
-        }
+    } catch (error) {
         next();
     }
 });
 
-// 3. Serve other static assets from the project root.
-// This will handle .js, .css, images, and also serve index.html for the '/' route by default.
+// 3. ADIM: Geriye kalan tüm statik dosyaları (`.html`, `.css`, resimler vb.) sun
 app.use(express.static(projectRoot));
 
-// 4. SPA Fallback: For any GET request that hasn't been handled yet, serve index.html.
-// This is crucial for client-side routing (e.g., refreshing on /stations).
-app.get('*', (req: ExpressRequest, res: ExpressResponse) => {
+// 4. ADIM: Hiçbir kurala uymayan istekleri SPA'nın çalışması için `index.html`'e yönlendir
+app.get('*', (req: Request, res: Response) => {
     res.sendFile(path.join(projectRoot, 'index.html'));
 });
 
-
-// --- Server Initialization ---
 async function startServer() {
     try {
-        console.log('[Server] Initializing...');
+        console.log('[Server] Veritabanı başlatılıyor...');
         const db = await initializeDatabase();
         await seedDatabase(db);
         

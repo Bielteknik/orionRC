@@ -8,12 +8,13 @@ export async function getStations(): Promise<Station[]> {
     const db = getDb();
     const stations = await db.all<any[]>(`
         SELECT 
-            s.id, s.name, s.location, s.lat, s.lng, s.status, s.lastUpdate,
+            s.id, s.name, s.location, s.lat as lat, s.lng as lng, s.status, s.lastUpdate,
             (SELECT COUNT(*) FROM sensors WHERE stationId = s.id) as sensorCount,
             (SELECT COUNT(*) FROM cameras WHERE stationId = s.id) as cameraCount
         FROM stations s
     `);
     
+    // Veritabanından gelen lat/lng'yi doğru şekilde locationCoords altına yerleştir
     return stations.map((s: any) => ({
         id: s.id,
         name: s.name,
@@ -23,24 +24,24 @@ export async function getStations(): Promise<Station[]> {
         lastUpdate: s.lastUpdate,
         sensorCount: s.sensorCount,
         cameraCount: s.cameraCount,
-        activeAlerts: 0,
-        systemHealth: 100,
-        avgBattery: 100,
-        dataFlow: 0,
-        activeSensorCount: 0,
-        onlineCameraCount: 0,
+        activeAlerts: 0, // Mocked for now
+        systemHealth: 98,
+        avgBattery: 95,
+        dataFlow: 12,
+        activeSensorCount: s.sensorCount,
+        onlineCameraCount: s.cameraCount,
     }));
 }
 
 export async function getSensors(): Promise<Sensor[]> {
     const db = getDb();
-    return await db.all<Sensor[]>('SELECT * FROM sensors');
+    return await db.all<Sensor[]>('SELECT * FROM sensors ORDER BY lastUpdate DESC');
 }
 
 export async function getCameras(): Promise<Camera[]> {
     const db = getDb();
     const cameras = await db.all<Omit<Camera, 'photos'>[]>('SELECT * FROM cameras');
-    return cameras.map(c => ({...c, photos: []}));
+    return cameras.map(c => ({...c, photos: []})); // photos'u boş dizi olarak ekle
 }
 
 export async function getNotifications(): Promise<Notification[]> {
@@ -52,139 +53,156 @@ export async function getNotifications(): Promise<Notification[]> {
     }));
 }
 
-
-export async function createStation(stationData: any): Promise<void> {
+export async function createStation(stationData: any): Promise<Station> {
     const db = getDb();
+    const newStation: Station = {
+        id: stationData.id || `STATION${Date.now()}`,
+        name: stationData.name,
+        location: stationData.location,
+        locationCoords: stationData.locationCoords,
+        status: 'active',
+        lastUpdate: new Date().toISOString(),
+        sensorCount: stationData.selectedSensorIds?.length || 0,
+        cameraCount: stationData.selectedCameraIds?.length || 0,
+        activeAlerts: 0,
+    };
+
     await db.run(
         'INSERT INTO stations (id, name, location, lat, lng, status, lastUpdate) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        stationData.id,
-        stationData.name,
-        stationData.location,
-        stationData.locationCoords.lat,
-        stationData.locationCoords.lng,
-        'active',
-        new Date().toISOString()
+        newStation.id, newStation.name, newStation.location,
+        newStation.locationCoords.lat, newStation.locationCoords.lng,
+        newStation.status, newStation.lastUpdate
     );
 
-    if (stationData.selectedSensorIds && stationData.selectedSensorIds.length > 0) {
+    if (stationData.selectedSensorIds?.length > 0) {
         const placeholders = stationData.selectedSensorIds.map(() => '?').join(',');
-        await db.run(`UPDATE sensors SET stationId = ? WHERE id IN (${placeholders})`, stationData.id, ...stationData.selectedSensorIds);
+        await db.run(`UPDATE sensors SET stationId = ? WHERE id IN (${placeholders})`, newStation.id, ...stationData.selectedSensorIds);
     }
-    if (stationData.selectedCameraIds && stationData.selectedCameraIds.length > 0) {
+    if (stationData.selectedCameraIds?.length > 0) {
         const placeholders = stationData.selectedCameraIds.map(() => '?').join(',');
-        await db.run(`UPDATE cameras SET stationId = ? WHERE id IN (${placeholders})`, stationData.id, ...stationData.selectedCameraIds);
+        await db.run(`UPDATE cameras SET stationId = ? WHERE id IN (${placeholders})`, newStation.id, ...stationData.selectedCameraIds);
     }
+    return newStation;
 }
 
+
 export async function deleteStation(id: string): Promise<void> {
-    console.log(`[DataService] Deleting station with ID: ${id}`);
     const db = getDb();
+    // Foreign key constraint (ON DELETE SET NULL) will handle un-assigning devices.
     await db.run('DELETE FROM stations WHERE id = ?', id);
 }
 
-export async function createSensor(sensorData: any): Promise<void> {
+export async function createSensor(sensorData: Partial<Sensor>): Promise<Sensor> {
     const db = getDb();
+    const newSensor: Sensor = {
+        id: sensorData.id || `SENSOR${Date.now()}`,
+        name: sensorData.name || 'İsimsiz Sensör',
+        type: sensorData.type || 'Bilinmeyen',
+        stationId: sensorData.stationId || '',
+        status: sensorData.status || SensorStatus.Active,
+        value: 0,
+        unit: '',
+        battery: 100,
+        lastUpdate: new Date().toISOString(),
+    };
+
     await db.run(
         'INSERT INTO sensors (id, name, type, stationId, status, value, unit, battery, lastUpdate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        sensorData.id,
-        sensorData.name,
-        sensorData.type,
-        sensorData.stationId || null,
-        sensorData.status || SensorStatus.Active,
-        0, '', 100, new Date().toISOString()
+        newSensor.id, newSensor.name, newSensor.type, newSensor.stationId || null,
+        newSensor.status, newSensor.value, newSensor.unit, newSensor.battery, newSensor.lastUpdate
     );
+    return newSensor;
 }
 
+
 export async function deleteSensor(id: string): Promise<void> {
-    console.log(`[DataService] Deleting sensor with ID: ${id}`);
     const db = getDb();
     await db.run('DELETE FROM sensors WHERE id = ?', id);
 }
 
-export async function createCamera(cameraData: any): Promise<void> {
+export async function createCamera(cameraData: Partial<Camera>): Promise<Camera> {
     const db = getDb();
+    const newCamera: Camera = {
+        id: cameraData.id || `CAM${Date.now()}`,
+        name: cameraData.name || 'İsimsiz Kamera',
+        stationId: cameraData.stationId || '',
+        status: cameraData.status || CameraStatus.Offline,
+        streamUrl: '',
+        rtspUrl: cameraData.rtspUrl || '',
+        cameraType: cameraData.cameraType || 'Bilinmeyen',
+        viewDirection: cameraData.viewDirection || '',
+        fps: 30,
+        photos: [],
+    };
     await db.run(
         'INSERT INTO cameras (id, name, stationId, status, streamUrl, rtspUrl, cameraType, viewDirection, fps) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        cameraData.id,
-        cameraData.name,
-        cameraData.stationId || null,
-        cameraData.status || CameraStatus.Offline,
-        '', cameraData.rtspUrl, cameraData.cameraType, cameraData.viewDirection, 30
+        newCamera.id, newCamera.name, newCamera.stationId || null, newCamera.status,
+        newCamera.streamUrl, newCamera.rtspUrl, newCamera.cameraType, newCamera.viewDirection, newCamera.fps
     );
+    return newCamera;
 }
 
 export async function deleteCamera(id: string): Promise<void> {
-    console.log(`[DataService] Deleting camera with ID: ${id}`);
     const db = getDb();
     await db.run('DELETE FROM cameras WHERE id = ?', id);
 }
-
 
 // --- Agent API Functions ---
 
 export async function getDeviceConfig(deviceId: string): Promise<DeviceConfig> {
     console.log(`[DataService] Cihaz yapılandırması isteniyor: ${deviceId}`);
-    // In a real system, you would query the database for sensors linked to this deviceId.
-    // For now, returning a static config but based on real DB sensors.
-    const allSensors = await getSensors();
-    const activeSensors = allSensors.filter(s => s.status === SensorStatus.Active);
-    
-    // This mapping is now conceptual. We'd need a way to link DB sensors to agent numeric IDs.
-    // For now, let's just return a default config if the DB is empty.
-    if (activeSensors.length === 0) {
-        return { sensors: [] };
+    // This is still a simplified logic. A real system would have a devices table
+    // and link sensors to devices, not just stations.
+    // For now, we return a hardcoded config for the known device ID.
+    if (deviceId === 'ejder3200-01') {
+        return {
+            sensors: [
+                {
+                    id: 1, // Agent'ın anlayacağı numerik ID
+                    name: "SHT3x Sıcaklık/Nem",
+                    is_active: true,
+                    interface: "i2c",
+                    parser_config: { driver: "sht3x" },
+                    config: { address: "0x44", bus: 1 }
+                },
+                {
+                    id: 2,
+                    name: "HX711 Yük Hücresi",
+                    is_active: true,
+                    interface: 'serial',
+                    parser_config: { driver: 'hx711_load_cell' },
+                    config: { port: '/dev/ttyS0', baudrate: 9600 }
+                },
+            ]
+        };
     }
-
-    const config: DeviceConfig = {
-        sensors: [
-            // Example of how a sensor from DB could be mapped to an agent config
-            // This part needs a more robust mapping in a real scenario.
-            {
-                id: 1, // This ID would come from a mapping table or similar
-                name: "SHT3x Sıcaklık/Nem",
-                is_active: true,
-                interface: "i2c",
-                parser_config: { driver: "sht3x" },
-                config: { address: "0x44", bus: 1 }
-            }
-        ]
-    };
-    return config;
+    return { sensors: [] }; // Bilinmeyen cihaz için boş config
 }
 
 export async function submitReading(payload: ReadingPayload): Promise<void> {
     const db = getDb();
     const { sensor: sensorNumericId, value } = payload;
-    console.log(`[DataService] Veri alındı - Sensör ID: ${sensorNumericId}, Değer: ${JSON.stringify(value)}`);
+    console.log(`[DataService] Veri alındı - Agent Sensör ID: ${sensorNumericId}, Değer: ${JSON.stringify(value)}`);
 
-    // Gerçek bir sistemde bu, sensorNumericId'yi bir istasyonla eşleştirir.
-    // Bu demo için, varsayılan olarak ilk istasyondaki ('STATION001') sensörleri güncelleyeceğiz.
-    const stationId = 'STATION001'; 
+    // Bu demo için Agent ID'lerini veritabanındaki sensör tipleriyle eşleştiriyoruz.
+    // Bu, gerçek bir sistemde daha dinamik bir eşleştirme tablosuyla yapılmalıdır.
     const now = new Date().toISOString();
-
     let sensorUpdated = false;
-    if (value.temperature !== undefined) {
-        const result = await db.run(
-            `UPDATE sensors SET value = ?, lastUpdate = ? WHERE type = ? AND stationId = ?`,
-            value.temperature, now, 'Sıcaklık', stationId
-        );
-        if (result.changes && result.changes > 0) sensorUpdated = true;
+
+    // Agent ID 1 -> SHT3x, 'Merkez İstasyon' daki sıcaklık ve nem sensörlerini günceller
+    if (sensorNumericId === 1 && value.temperature !== undefined && value.humidity !== undefined) {
+        const tempRes = await db.run(`UPDATE sensors SET value = ?, lastUpdate = ? WHERE stationId = 'STATION001' AND type = 'Sıcaklık'`, value.temperature, now);
+        const humRes = await db.run(`UPDATE sensors SET value = ?, lastUpdate = ? WHERE stationId = 'STATION001' AND type = 'Nem'`, value.humidity, now);
+        if ((tempRes.changes ?? 0) > 0 || (humRes.changes ?? 0) > 0) {
+            sensorUpdated = true;
+        }
     }
-    if (value.humidity !== undefined) {
-         const result = await db.run(
-            `UPDATE sensors SET value = ?, lastUpdate = ? WHERE type = ? AND stationId = ?`,
-            value.humidity, now, 'Nem', stationId
-        );
-        if (result.changes && result.changes > 0) sensorUpdated = true;
-    }
-    
+    // Diğer agent sensör ID'leri için eşleştirmeler buraya eklenebilir.
+
     if (sensorUpdated) {
-        // İstasyonun son güncelleme zamanını da güncelle
-        await db.run(
-            `UPDATE stations SET lastUpdate = ? WHERE id = ?`,
-            now, stationId
-        );
+        await db.run(`UPDATE stations SET lastUpdate = ? WHERE id = 'STATION001'`, now);
+        console.log(`[DataService] İstasyon 'STATION001' güncellendi.`);
     } else {
-        console.warn(`[DataService] Güncellenecek sensör bulunamadı. Gelen veri: ${JSON.stringify(value)}`);
+        console.warn(`[DataService] Eşleşen sensör bulunamadı. Gelen veri: ${JSON.stringify(payload)}`);
     }
 }

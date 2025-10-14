@@ -1,35 +1,30 @@
-// This file defines the shape of the configuration object
-// that the backend sends to the IoT agent.
+// backend/src/types.ts
 
-// A single sensor's configuration
+// A single sensor's configuration for the agent
 export interface SensorConfig {
-    id: number; // Unique ID for this sensor in the database
-    name: string; // Human-readable name, e.g., "Sıcaklık Sensörü 1"
+    id: number;
+    name: string;
     is_active: boolean;
-    interface: 'i2c' | 'serial' | 'virtual'; // The hardware interface type
-    
-    // Defines which driver to use on the agent
+    interface: 'i2c' | 'serial' | 'virtual';
     parser_config: {
-        driver: string; // e.g., "sht3x"
+        driver: string;
     };
-
-    // Driver-specific settings, like I2C address or serial port path
-    config: {
-        address?: string; // e.g., "0x44" for I2C
-        bus?: number;     // e.g., 1 for I2C bus 1
-        port?: string;    // e.g., "/dev/ttyUSB0" for serial
-        baudrate?: number;
-    };
+    config: any;
 }
 
-// The complete configuration for a single IoT device (Raspberry Pi)
+// The complete configuration for a single IoT device
 export interface DeviceConfig {
     sensors: SensorConfig[];
-    // Future device-wide settings can be added here,
-    // e.g., check_in_interval_seconds: 300
 }
 
-// Data structure for a station, sent to the frontend
+// Data payload sent from the agent to the server
+export interface ReadingPayload {
+    sensor: number;
+    value: Record<string, any>;
+}
+
+// --- Common types for Frontend and Backend ---
+
 export interface Station {
   id: string;
   name: string;
@@ -71,6 +66,7 @@ export enum CameraStatus {
     Offline = 'Çevrimdışı',
     Recording = 'Kaydediyor',
 }
+
 export interface Camera {
   id: string;
   name: string;
@@ -82,12 +78,6 @@ export interface Camera {
   viewDirection: string;
   fps: number;
   photos: string[];
-}
-
-// Data payload sent from the agent to the server
-export interface ReadingPayload {
-    sensor: number; // The numeric ID of the sensor from DeviceConfig
-    value: Record<string, any>; // The parsed data, e.g., { "temperature": 22.5, "humidity": 45.1 }
 }
 
 export type Severity = 'Kritik' | 'Uyarı' | 'Bilgi';

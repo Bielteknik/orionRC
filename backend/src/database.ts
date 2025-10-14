@@ -6,25 +6,27 @@ let db: Database | null = null;
 const DB_FILE = path.join(__dirname, '..', 'orion.db');
 
 export async function initializeDatabase(): Promise<Database> {
+    if (db) return db;
+
     try {
-        console.log(`[Database] Kalıcı veritabanı başlatılıyor: ${DB_FILE}`);
+        console.log(`[Database] Veritabanı başlatılıyor: ${DB_FILE}`);
         
         const newDb = await open({
             filename: DB_FILE,
             driver: sqlite3.Database,
         });
 
-        console.log('[Database] Veritabanı şeması oluşturuluyor...');
+        console.log('[Database] Şema kontrol ediliyor/oluşturuluyor...');
         await newDb.exec(`
             PRAGMA foreign_keys = ON;
 
             CREATE TABLE IF NOT EXISTS stations (
                 id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
+                name TEXT NOT NULL UNIQUE,
                 location TEXT,
                 lat REAL NOT NULL,
                 lng REAL NOT NULL,
-                status TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('active', 'inactive', 'maintenance')),
                 lastUpdate TEXT NOT NULL
             );
 
@@ -34,9 +36,9 @@ export async function initializeDatabase(): Promise<Database> {
                 type TEXT NOT NULL,
                 stationId TEXT,
                 status TEXT NOT NULL,
-                value REAL,
+                value REAL DEFAULT 0,
                 unit TEXT,
-                battery INTEGER,
+                battery INTEGER DEFAULT 100,
                 lastUpdate TEXT NOT NULL,
                 FOREIGN KEY(stationId) REFERENCES stations(id) ON DELETE SET NULL
             );
@@ -72,7 +74,7 @@ export async function initializeDatabase(): Promise<Database> {
         return db;
 
     } catch (error) {
-        console.error('[Database] Veritabanı açılamadı veya şema oluşturulamadı:', error);
+        console.error('[Database] Veritabanı başlatılamadı:', error);
         throw error;
     }
 }
@@ -96,8 +98,6 @@ export async function seedDatabase(db: Database): Promise<void> {
         await db.exec('BEGIN TRANSACTION');
         
         const now = new Date().toISOString();
-        const yesterday = new Date(Date.now() - 86400000).toISOString();
-        const twoDaysAgo = new Date(Date.now() - 172800000).toISOString();
 
         // Stations
         await db.run(`INSERT INTO stations (id, name, location, lat, lng, status, lastUpdate) VALUES
@@ -144,6 +144,6 @@ export async function seedDatabase(db: Database): Promise<void> {
     } catch (e) {
         await db.exec('ROLLBACK');
         console.error('[Database] Başlangıç verileri eklenirken hata oluştu, geri alınıyor:', e);
-        throw e; // Propagate error
+        throw e;
     }
 }
