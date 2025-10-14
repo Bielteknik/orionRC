@@ -14,19 +14,7 @@ import { ThemeProvider } from './components/ThemeContext.tsx';
 import Notifications from './pages/Notifications.tsx';
 import GeminiAssistant from './components/GeminiAssistant.tsx';
 
-const MOCK_NOTIFICATIONS_INITIAL: Notification[] = [
-    {
-        id: 'N1',
-        ruleId: 'RULE002',
-        message: 'İstasyon 2 batarya seviyesi kritik!',
-        stationName: 'İstasyon 2 - Kayak Merkezi',
-        sensorName: 'Nem Sensörü 1',
-        triggeredValue: '5%',
-        timestamp: '2 saat önce',
-        severity: 'Uyarı',
-        isRead: true,
-    }
-];
+const MOCK_NOTIFICATIONS_INITIAL: Notification[] = [];
 
 
 const App: React.FC = () => {
@@ -34,26 +22,6 @@ const App: React.FC = () => {
   const [viewingStationId, setViewingStationId] = useState<string | null>(null);
   const [viewingCameraId, setViewingCameraId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS_INITIAL);
-
-  // Simulate new notifications
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const newNotification: Notification = {
-        id: `N${Date.now()}`,
-        ruleId: 'RULE001',
-        message: 'Sıcaklık eşik değeri aşıldı!',
-        stationName: 'İstasyon 1 - Merkez',
-        sensorName: 'Sıcaklık Sensörü 1',
-        triggeredValue: `${(35 + Math.random() * 5).toFixed(1)}°C`,
-        timestamp: new Date().toLocaleTimeString('tr-TR'),
-        severity: 'Kritik',
-        isRead: false,
-      };
-      setNotifications(prev => [newNotification, ...prev].slice(0, 20)); // Keep max 20 notifications
-    }, 20000); // 20 seconds
-
-    return () => clearInterval(interval);
-  }, []);
 
   const handleMarkAllAsRead = () => {
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));

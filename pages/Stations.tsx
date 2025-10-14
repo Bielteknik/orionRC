@@ -6,21 +6,8 @@ import AddStationDrawer from '../components/AddStationModal.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
 import { getStations } from '../services/apiService.ts';
 
-const MOCK_UNASSIGNED_SENSORS_DATA = [
-  { id: 'S101', name: 'Sıcaklık Sensörü A', type: 'Sıcaklık' },
-  { id: 'S102', name: 'Nem Sensörü B', type: 'Nem' },
-  { id: 'S103', name: 'Basınç Sensörü C', type: 'Basınç' },
-  { id: 'S104', name: 'Rüzgar Hızı Sensörü D', type: 'Rüzgar Hızı' },
-  { id: 'S105', name: 'Yağmur Dedektörü E', type: 'Yağış' },
-  { id: 'S106', name: 'UV Sensörü F', type: 'UV İndeksi' },
-];
-
-const MOCK_UNASSIGNED_CAMERAS_DATA = [
-  { id: 'C201', name: 'Kamera X', cameraType: 'PTZ Kamera' },
-  { id: 'C202', name: 'Kamera Y', cameraType: 'Sabit Dome Kamera' },
-  { id: 'C203', name: 'Kamera Z', cameraType: 'Termal Kamera' },
-  { id: 'C204', name: 'Kamera W', cameraType: 'Geniş Açılı Kamera' },
-];
+const MOCK_UNASSIGNED_SENSORS_DATA: any[] = [];
+const MOCK_UNASSIGNED_CAMERAS_DATA: any[] = [];
 
 const formatTimeAgo = (isoString: string | undefined): string => {
     if (!isoString) return 'bilinmiyor';
@@ -221,7 +208,7 @@ const Stations: React.FC<StationsProps> = ({ onViewDetails }) => {
        {filteredStations.length === 0 && !isLoading && !error && (
             <Card>
                 <div className="text-center py-8 text-muted">
-                    <p>Arama kriterlerinize uygun istasyon bulunamadı.</p>
+                    <p>Henüz istasyon eklenmemiş. Başlamak için 'Yeni İstasyon Ekle' butonunu kullanın.</p>
                 </div>
             </Card>
         )}

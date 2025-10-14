@@ -13,32 +13,12 @@ interface DefinitionItem {
 }
 
 const MOCK_DEFINITIONS: Record<DefinitionType, DefinitionItem[]> = {
-    stationTypes: [
-        { id: 1, name: 'Kentsel İstasyon' },
-        { id: 2, name: 'Kırsal İstasyon' },
-        { id: 3, name: 'Kıyı İstasyonu' },
-        { id: 4, name: 'Dağ İstasyonu' },
-    ],
-    sensorTypes: [
-        { id: 1, name: 'Termometre' },
-        { id: 2, name: 'Higrometre' },
-        { id: 3, name: 'Anemometre' },
-        { id: 4, name: 'Barometre' },
-        { id: 5, name: 'Pluviyometre' },
-    ],
-    cameraTypes: [
-        { id: 1, name: 'Sabit Dome Kamera' },
-        { id: 2, name: 'PTZ Kamera' },
-        { id: 3, name: 'Termal Kamera' },
-        { id: 4, name: 'Geniş Açılı Kamera' },
-    ],
+    stationTypes: [],
+    sensorTypes: [],
+    cameraTypes: [],
 };
 
-const MOCK_ALERT_RULES: AlertRule[] = [
-    { id: 'RULE001', name: 'Yüksek Sıcaklık Uyarısı', sensorType: 'Sıcaklık', stationIds: [], condition: 'Büyüktür', threshold: 35, severity: 'Kritik', isEnabled: true },
-    { id: 'RULE002', name: 'Düşük Nem Uyarısı', sensorType: 'Nem', stationIds: ['STN02'], condition: 'Küçüktür', threshold: 20, severity: 'Uyarı', isEnabled: true },
-    { id: 'RULE003', name: 'Yüksek Rüzgar Hızı', sensorType: 'Rüzgar Hızı', stationIds: [], condition: 'Büyüktür', threshold: 50, severity: 'Uyarı', isEnabled: false },
-];
+const MOCK_ALERT_RULES: AlertRule[] = [];
 
 const severityStyles: Record<Severity, string> = {
     'Kritik': 'border-danger/80 bg-danger/10 text-danger',
@@ -64,7 +44,7 @@ const DefinitionSection: React.FC<{
                 </button>
             </div>
             <ul className="space-y-2">
-                {items.map(item => (
+                {items.length > 0 ? items.map(item => (
                     <li key={item.id} className="flex justify-between items-center bg-secondary p-3 rounded-md border border-gray-200">
                         <span className="text-gray-700">{item.name}</span>
                         <div className="flex items-center gap-3">
@@ -72,7 +52,9 @@ const DefinitionSection: React.FC<{
                             <button onClick={() => onDelete(item.id)} className="text-muted hover:text-danger"><DeleteIcon /></button>
                         </div>
                     </li>
-                ))}
+                )) : (
+                    <p className="text-center text-sm text-muted py-4">Henüz tanım eklenmemiş.</p>
+                )}
             </ul>
         </Card>
     );
@@ -257,7 +239,7 @@ const Definitions: React.FC = () => {
                         </button>
                     </div>
                     <div className="space-y-3">
-                        {alertRules.map(rule => (
+                        {alertRules.length > 0 ? alertRules.map(rule => (
                             <div key={rule.id} className={`p-4 rounded-lg border ${rule.isEnabled ? 'opacity-100' : 'opacity-60 bg-gray-50'}`}>
                                 <div className="flex justify-between items-start">
                                     <div>
@@ -283,7 +265,9 @@ const Definitions: React.FC = () => {
                                     </div>
                                 )}
                             </div>
-                        ))}
+                        )) : (
+                            <p className="text-center text-sm text-muted py-4">Henüz alarm kuralı eklenmemiş.</p>
+                        )}
                     </div>
                 </Card>
             </div>

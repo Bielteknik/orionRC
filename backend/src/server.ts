@@ -1,4 +1,4 @@
-// Correctly import Express and its types to resolve type conflicts.
+// Corrected Express import to properly resolve types and avoid conflicts.
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';

@@ -9,18 +9,8 @@ import { getStations, getSensors } from '../services/apiService.ts';
 // Add XLSX type declaration for the library loaded from CDN
 declare const XLSX: any;
 
-const MOCK_REPORTS: Report[] = [
-  { id: 'RPT001', title: 'Günlük Özet Raporu - 20.07.2024', createdAt: '2024-07-20T09:00:00Z', type: 'daily', config: { fileFormat: 'XLSX' } as ReportConfig },
-  { id: 'RPT002', title: 'Haftalık Sensör Veri Analizi', createdAt: '2024-07-19T18:00:00Z', type: 'weekly', config: { fileFormat: 'CSV' } as ReportConfig },
-  { id: 'RPT003', title: 'Aylık İstasyon Durum Raporu - Haziran', createdAt: '2024-07-01T10:00:00Z', type: 'monthly', config: { fileFormat: 'XLSX' } as ReportConfig },
-  { id: 'RPT004', title: 'Günlük Özet Raporu - 19.07.2024', createdAt: '2024-07-19T09:00:00Z', type: 'daily', config: { fileFormat: 'XLSX' } as ReportConfig },
-];
-
-const MOCK_SCHEDULES: ReportSchedule[] = [
-    { id: 'SCH001', name: 'Günlük Yönetim Özeti', frequency: 'daily', time: '09:00', recipient: 'yonetim@meteo.com', reportConfig: { reportName: 'Günlük Yönetim Özeti' } as ReportConfig, isEnabled: true, lastRun: 'Bugün 09:00' },
-    { id: 'SCH002', name: 'Haftalık Teknik Rapor', frequency: 'weekly', time: '17:00', recipient: 'teknik@meteo.com', reportConfig: { reportName: 'Haftalık Teknik Rapor' } as ReportConfig, isEnabled: true, lastRun: 'Geçen Cuma 17:00' },
-    { id: 'SCH003', name: 'Aylık Veri Arşivi', frequency: 'monthly', time: '01:00', recipient: 'arsiv@meteo.com', reportConfig: { reportName: 'Aylık Veri Arşivi' } as ReportConfig, isEnabled: false, lastRun: 'Hiç çalışmadı' },
-];
+const MOCK_REPORTS: Report[] = [];
+const MOCK_SCHEDULES: ReportSchedule[] = [];
 
 interface SensorReading {
     id: string; sensorId: string; stationId: string; sensorName: string; stationName: string; sensorType: string; value: number; unit: string; timestamp: string;
@@ -185,13 +175,13 @@ const Reports: React.FC = () => {
             {activeTab === 'generated' && (
                 <Card className="p-0"><div className="overflow-x-auto"><table className="w-full text-sm text-left text-gray-600"><thead className="text-xs text-gray-700 uppercase bg-gray-100"><tr><th scope="col" className="px-6 py-3">Rapor Başlığı</th><th scope="col" className="px-6 py-3">Rapor Tipi</th><th scope="col" className="px-6 py-3">Oluşturulma Tarihi</th><th scope="col" className="px-6 py-3 text-right">İşlemler</th></tr></thead><tbody>
                 {filteredReports.map(report => (<tr key={report.id} className="border-b border-gray-200 hover:bg-gray-50"><td className="px-6 py-4 font-medium text-gray-900">{report.title}</td><td className="px-6 py-4"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${report.type === 'daily' ? 'bg-blue-100 text-blue-800' : report.type === 'weekly' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'}`}>{report.type}</span></td><td className="px-6 py-4 font-mono text-gray-800">{new Date(report.createdAt).toLocaleString('tr-TR')}</td><td className="px-6 py-4 text-right"><button onClick={() => handleDownloadReport(report)} className="flex items-center gap-2 text-accent font-semibold py-1 px-3 rounded-lg hover:bg-accent/10 transition-colors text-sm"><DownloadIcon className="w-4 h-4" /><span>İndir</span></button></td></tr>))}
-                </tbody></table></div>{filteredReports.length === 0 && (<div className="text-center py-8 text-muted"><p>Rapor bulunamadı.</p></div>)}</Card>
+                </tbody></table></div>{filteredReports.length === 0 && (<div className="text-center py-8 text-muted"><p>Henüz oluşturulmuş rapor bulunmuyor.</p></div>)}</Card>
             )}
 
              {activeTab === 'scheduled' && (
                 <Card className="p-0"><div className="overflow-x-auto"><table className="w-full text-sm text-left text-gray-600"><thead className="text-xs text-gray-700 uppercase bg-gray-100"><tr><th scope="col" className="px-6 py-3">Plan Adı</th><th scope="col" className="px-6 py-3">Sıklık</th><th scope="col" className="px-6 py-3">Alıcı</th><th scope="col" className="px-6 py-3">Durum</th><th scope="col" className="px-6 py-3">Son Çalışma</th><th scope="col" className="px-6 py-3 text-right">İşlemler</th></tr></thead><tbody>
                 {filteredSchedules.map(schedule => (<tr key={schedule.id} className="border-b border-gray-200 hover:bg-gray-50"><td className="px-6 py-4 font-medium text-gray-900">{schedule.name}</td><td className="px-6 py-4 capitalize">{schedule.frequency} @ {schedule.time}</td><td className="px-6 py-4">{schedule.recipient}</td><td className="px-6 py-4"><span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${schedule.isEnabled ? 'bg-success/10 text-success' : 'bg-gray-200 text-muted'}`}>{schedule.isEnabled ? 'Aktif' : 'Pasif'}</span></td><td className="px-6 py-4 font-mono text-gray-800 text-xs">{schedule.lastRun}</td><td className="px-6 py-4 text-right flex justify-end gap-2"><button className="text-muted hover:text-accent p-1"><EditIcon className="w-4 h-4"/></button><button className="text-muted hover:text-danger p-1"><DeleteIcon className="w-4 h-4"/></button></td></tr>))}
-                </tbody></table></div>{filteredSchedules.length === 0 && (<div className="text-center py-8 text-muted"><p>Zamanlanmış rapor bulunamadı.</p></div>)}</Card>
+                </tbody></table></div>{filteredSchedules.length === 0 && (<div className="text-center py-8 text-muted"><p>Henüz zamanlanmış rapor bulunmuyor.</p></div>)}</Card>
             )}
             
             <AddReportDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} onSave={handleSaveReport} stations={stations} sensorTypes={sensorTypes}/>
