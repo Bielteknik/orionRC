@@ -20,14 +20,14 @@ app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
 app.use(express.json());
 
 // Simple logging middleware
-// FIX: Explicitly added types to the middleware function parameters to resolve overload ambiguity.
-// FIX: Changed to use express.Request, express.Response, express.NextFunction to avoid type conflicts with global types.
+// FIX: Explicitly added types to the middleware function parameters to resolve overload ambiguity and allow access to properties like `method` and `path`.
 app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
     next();
 });
 
 // Simple token authentication middleware for devices
+// FIX: Added explicit types to middleware parameters to resolve type errors on `req.headers`, `req.ip`, `res.status`, and `res.json`.
 const authenticateDevice = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const authHeader = req.headers.authorization;
     const expectedToken = `Token ${DEVICE_AUTH_TOKEN}`;
@@ -43,6 +43,7 @@ const authenticateDevice = (req: express.Request, res: express.Response, next: e
 // --- API Routes ---
 
 // [Agent Endpoint] Get device configuration
+// FIX: Added explicit types to route handler parameters to resolve type errors on `req.params` and `res.json`.
 app.get('/device/:deviceId/config/', authenticateDevice, (req: express.Request, res: express.Response) => {
     const { deviceId } = req.params;
     console.log(`Configuration requested for device: ${deviceId}`);
@@ -86,6 +87,7 @@ app.get('/device/:deviceId/config/', authenticateDevice, (req: express.Request, 
 });
 
 // [Agent Endpoint] Submit sensor readings
+// FIX: Added explicit types to route handler parameters to resolve type errors on `req.body` and `res.status`.
 app.post('/readings/submit/', authenticateDevice, (req: express.Request, res: express.Response) => {
     const reading = req.body;
     
@@ -137,23 +139,26 @@ app.post('/readings/submit/', authenticateDevice, (req: express.Request, res: ex
 
 
 // [Frontend Endpoint] Get all stations
+// FIX: Added explicit types to route handler parameters to resolve type error on `res.json`.
 app.get('/stations', (req: express.Request, res: express.Response) => {
     res.json(MOCK_STATIONS_DATA);
 });
 
 // [Frontend Endpoint] Get all sensors
+// FIX: Added explicit types to route handler parameters to resolve type error on `res.json`.
 app.get('/sensors', (req: express.Request, res: express.Response) => {
     res.json(MOCK_SENSORS_DATA);
 });
 
 // [Frontend Endpoint] Get all cameras
+// FIX: Added explicit types to route handler parameters to resolve type error on `res.json`.
 app.get('/cameras', (req: express.Request, res: express.Response) => {
     res.json(MOCK_CAMERAS_DATA);
 });
 
 
 // --- Root Route for Health Check ---
-// FIX: Explicitly added types to the route handler parameters for type safety and consistency.
+// FIX: Added explicit types to the route handler parameters to resolve type error on `res.send`.
 app.get('/', (req: express.Request, res: express.Response) => {
     res.send('<h1>Meteoroloji Platformu Backend</h1><p>API is running.</p>');
 });

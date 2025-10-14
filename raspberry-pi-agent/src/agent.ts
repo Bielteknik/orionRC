@@ -3,12 +3,10 @@ import fs from 'fs/promises';
 import path from 'path';
 import sqlite3 from 'sqlite3';
 import { open, Database } from 'sqlite';
-import { fileURLToPath } from 'url';
 import { DeviceConfig, ReadingPayload, SensorConfig, ISensorDriver, AgentState } from './types';
 
-// Fix: Add __dirname definition for ES modules.
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// In a CommonJS module (as defined in tsconfig.json), `__dirname` is a global variable.
+// The previous ES-Module-style definition using `import.meta.url` is not needed and caused a compile error.
 
 // --- Yardımcı Fonksiyonlar ---
 const logger = {
