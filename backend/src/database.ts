@@ -7,14 +7,14 @@ const DB_FILE = path.join(__dirname, '..', 'orion.db');
 
 export async function initializeDatabase(): Promise<Database> {
     try {
-        console.log(`[Database] Initializing persistent database at: ${DB_FILE}`);
+        console.log(`[Database] Kalıcı veritabanı başlatılıyor: ${DB_FILE}`);
         
         const newDb = await open({
             filename: DB_FILE,
             driver: sqlite3.Database,
         });
 
-        console.log('[Database] Running migrations to create schema...');
+        console.log('[Database] Veritabanı şeması oluşturuluyor...');
         await newDb.exec(`
             CREATE TABLE IF NOT EXISTS stations (
                 id TEXT PRIMARY KEY,
@@ -36,7 +36,7 @@ export async function initializeDatabase(): Promise<Database> {
                 unit TEXT,
                 battery INTEGER,
                 lastUpdate TEXT NOT NULL,
-                FOREIGN KEY(stationId) REFERENCES stations(id)
+                FOREIGN KEY(stationId) REFERENCES stations(id) ON DELETE SET NULL
             );
 
             CREATE TABLE IF NOT EXISTS cameras (
@@ -49,23 +49,23 @@ export async function initializeDatabase(): Promise<Database> {
                 cameraType TEXT,
                 viewDirection TEXT,
                 fps INTEGER,
-                FOREIGN KEY(stationId) REFERENCES stations(id)
+                FOREIGN KEY(stationId) REFERENCES stations(id) ON DELETE SET NULL
             );
         `);
-        console.log('[Database] Schema is up to date.');
+        console.log('[Database] Şema hazır.');
 
         db = newDb;
         return db;
 
     } catch (error) {
-        console.error('[Database] FAILED to open or migrate database:', error);
-        throw error; // Propagate the error to stop the server from starting
+        console.error('[Database] Veritabanı açılamadı veya şema oluşturulamadı:', error);
+        throw error; // Sunucunun başlamasını engellemek için hatayı tekrar fırlat
     }
 }
 
 export function getDb(): Database {
     if (!db) {
-        throw new Error('Database not initialized. Call initializeDatabase first.');
+        throw new Error('Veritabanı başlatılmadı. Önce initializeDatabase fonksiyonunu çağırın.');
     }
     return db;
 }

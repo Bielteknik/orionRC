@@ -1,198 +1,158 @@
-import { getDb } from './database';
-import { Station, Sensor, Camera } from './types';
+import { getDb } from './database.ts';
+// FIX: Added CameraStatus to the import list.
+import { Station, Sensor, Camera, SensorStatus, CameraStatus, ReadingPayload } from './types.ts';
 
-/**
- * Fetches all stations from the database and calculates sensor/camera counts.
- */
-export async function getAllStations(): Promise<Station[]> {
-    const db = await getDb();
-    // In a real application, these counts would be more efficient, maybe with triggers or a view.
-    const stations = await db.all('SELECT * FROM stations');
-    
-    const stationsWithCounts = await Promise.all(stations.map(async (station) => {
-        const sensorCountResult = await db.get('SELECT COUNT(*) as count FROM sensors WHERE stationId = ?', station.id);
-        const cameraCountResult = await db.get('SELECT COUNT(*) as count FROM cameras WHERE stationId = ?', station.id);
-        
-        // This makes the returned object match the frontend's expected `Station` type
-        return {
-            ...station,
-            locationCoords: { lat: station.lat, lng: station.lng },
-            sensorCount: sensorCountResult.count,
-            cameraCount: cameraCountResult.count,
-            // Mocking dynamic fields that aren't in the DB
-            systemHealth: 98,
-            avgBattery: 95,
-            dataFlow: 12.5,
-            activeSensorCount: sensorCountResult.count,
-            onlineCameraCount: cameraCountResult.count,
-        };
-    }));
+// --- CREATE Operations ---
 
-    return stationsWithCounts as unknown as Station[];
-}
-
-/**
- * Fetches all sensors from the database.
- */
-export async function getAllSensors(): Promise<Sensor[]> {
-    const db = await getDb();
-    const sensors = await db.all('SELECT * FROM sensors');
-    return sensors as Sensor[];
-}
-
-/**
- * Fetches all cameras from the database.
- */
-export async function getAllCameras(): Promise<Camera[]> {
-    const db = await getDb();
-    const cameras = await db.all('SELECT * FROM cameras');
-    // The `photos` array is not in the database schema, so we add it here.
-    return cameras.map(cam => ({ ...cam, photos: [] })) as Camera[];
-}
-
-/**
- * Updates a sensor's value in the database based on a reading from the agent.
- */
-export async function updateSensorReading(sensorId: number, valueData: Record<string, any>): Promise<void> {
-    const db = await getDb();
-    
-    // Extract the primary numeric value from the complex value object.
-    const mainValue = valueData.temperature ?? valueData.humidity ?? valueData.weight_kg ?? valueData.distance_cm ?? 0;
-    
-    // The agent uses numeric IDs from its config, but the DB uses string IDs (e.g., 'SEN01').
-    // We need to find the correct string ID based on the numeric part.
-    const sensors: { id: string }[] = await db.all('SELECT id FROM sensors');
-    const targetSensor = sensors.find(s => {
-        const numericPart = s.id.replace(/\D/g, ''); // Remove all non-digit characters
-        return parseInt(numericPart, 10) === sensorId;
-    });
-
-    if (targetSensor) {
-        await db.run(
-            'UPDATE sensors SET value = ?, lastUpdate = ? WHERE id = ?',
-            typeof mainValue === 'number' ? mainValue.toFixed(2) : mainValue,
-            new Date().toISOString(),
-            targetSensor.id
-        );
-        console.log(`[DataService] Updated sensor ${targetSensor.id} with value ${mainValue}`);
-    } else {
-        console.warn(`[DataService] Could not find sensor with numeric ID ${sensorId} to update.`);
-    }
-}
-
-// FIX: Implement missing createStation function
-/**
- * Creates a new station and assigns devices to it.
- */
-export async function createStation(stationData: { name: string; location: string; locationCoords: { lat: number; lng: number; }; selectedSensorIds: string[]; selectedCameraIds:string[] }): Promise<Station> {
+export async function createStation(stationData: Omit<Station, 'id' | 'sensorCount' | 'cameraCount' | 'activeAlerts' | 'lastUpdate'> & { selectedSensorIds: string[], selectedCameraIds: string[] }): Promise<string> {
     const db = getDb();
-    const newId = `STATION${Date.now()}`;
-    const newStationData = {
-        id: newId,
-        name: stationData.name,
-        location: stationData.location,
-        lat: stationData.locationCoords.lat,
-        lng: stationData.locationCoords.lng,
-        status: 'active',
-        lastUpdate: new Date().toISOString()
-    };
-
+    const newId = `STN${Date.now()}`;
+    const now = new Date().toISOString();
+    
     await db.run(
         'INSERT INTO stations (id, name, location, lat, lng, status, lastUpdate) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        newStationData.id,
-        newStationData.name,
-        newStationData.location,
-        newStationData.lat,
-        newStationData.lng,
-        newStationData.status,
-        newStationData.lastUpdate
+        newId,
+        stationData.name,
+        stationData.location,
+        stationData.locationCoords.lat,
+        stationData.locationCoords.lng,
+        'inactive', // New stations start as inactive until a device updates
+        now
     );
-    
-    if (stationData.selectedSensorIds && stationData.selectedSensorIds.length > 0) {
+
+    // Assign selected sensors and cameras to this new station
+    if (stationData.selectedSensorIds.length > 0) {
         const placeholders = stationData.selectedSensorIds.map(() => '?').join(',');
         await db.run(`UPDATE sensors SET stationId = ? WHERE id IN (${placeholders})`, newId, ...stationData.selectedSensorIds);
     }
-    if (stationData.selectedCameraIds && stationData.selectedCameraIds.length > 0) {
+    if (stationData.selectedCameraIds.length > 0) {
         const placeholders = stationData.selectedCameraIds.map(() => '?').join(',');
         await db.run(`UPDATE cameras SET stationId = ? WHERE id IN (${placeholders})`, newId, ...stationData.selectedCameraIds);
     }
 
-    const stations = await getAllStations();
-    const createdStation = stations.find(s => s.id === newId);
-    if (!createdStation) {
-        throw new Error('Failed to retrieve created station');
-    }
-    return createdStation;
+    return newId;
 }
 
-// FIX: Implement missing createSensor function
-/**
- * Creates a new sensor.
- */
-export async function createSensor(sensorData: Partial<Sensor> & { isActive?: boolean }): Promise<Sensor> {
+export async function createSensor(sensorData: Omit<Sensor, 'id' | 'value' | 'lastUpdate' | 'status'>): Promise<string> {
     const db = getDb();
-    const newId = `SENSOR${Date.now()}`;
-    
-    const unitMap: {[key: string]: string} = { 'Sıcaklık': '°C', 'Nem': '%', 'Rüzgar Hızı': 'km/h', 'Basınç': 'hPa', 'Yağış': 'mm', 'UV İndeksi': '', 'Rüzgar Yönü': '°' };
-
-    const newSensor: Sensor = {
-        id: newId,
-        name: sensorData.name || 'Yeni Sensör',
-        type: sensorData.type || 'Sıcaklık',
-        stationId: sensorData.stationId || '',
-        status: sensorData.isActive ? 'Aktif' : 'Pasif',
-        value: 0,
-        unit: unitMap[sensorData.type || 'Sıcaklık'] || 'N/A',
-        battery: 100,
-        lastUpdate: new Date().toISOString(),
-    };
+    const newId = `SEN${Date.now()}`;
+    const now = new Date().toISOString();
 
     await db.run(
-        'INSERT INTO sensors (id, name, type, stationId, status, value, unit, battery, lastUpdate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        newSensor.id,
-        newSensor.name,
-        newSensor.type,
-        newSensor.stationId,
-        newSensor.status,
-        newSensor.value,
-        newSensor.unit,
-        newSensor.battery,
-        newSensor.lastUpdate
+        'INSERT INTO sensors (id, name, type, stationId, status, unit, battery, lastUpdate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        newId,
+        sensorData.name,
+        sensorData.type,
+        sensorData.stationId || null,
+        SensorStatus.Inactive, // New sensors start as inactive
+        sensorData.unit,
+        sensorData.battery,
+        now
     );
-    return newSensor;
+    return newId;
 }
 
-// FIX: Implement missing createCamera function
-/**
- * Creates a new camera.
- */
-export async function createCamera(cameraData: Omit<Camera, 'id' | 'photos' | 'fps' | 'streamUrl'>): Promise<Camera> {
+export async function createCamera(cameraData: Omit<Camera, 'id' | 'photos'>): Promise<string> {
     const db = getDb();
     const newId = `CAM${Date.now()}`;
-    const newCamera: Camera = {
-        id: newId,
-        name: cameraData.name,
-        stationId: cameraData.stationId,
-        status: cameraData.status,
-        streamUrl: '',
-        rtspUrl: cameraData.rtspUrl,
-        cameraType: cameraData.cameraType,
-        viewDirection: cameraData.viewDirection,
-        fps: 30,
-        photos: [],
-    };
 
     await db.run(
         'INSERT INTO cameras (id, name, stationId, status, streamUrl, rtspUrl, cameraType, viewDirection, fps) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        newCamera.id,
-        newCamera.name,
-        newCamera.stationId,
-        newCamera.status,
-        newCamera.streamUrl,
-        newCamera.rtspUrl,
-        newCamera.cameraType,
-        newCamera.viewDirection,
-        newCamera.fps
+        newId,
+        cameraData.name,
+        cameraData.stationId || null,
+        cameraData.status,
+        cameraData.streamUrl,
+        cameraData.rtspUrl,
+        cameraData.cameraType,
+        cameraData.viewDirection,
+        cameraData.fps
     );
-    return newCamera;
+    return newId;
+}
+
+
+// --- READ Operations ---
+
+export async function getAllStations(): Promise<Station[]> {
+    const db = getDb();
+    const stations = await db.all<any[]>('SELECT * FROM stations ORDER BY name');
+    
+    const results: Station[] = [];
+    for (const station of stations) {
+        const sensors = await db.all('SELECT status, battery FROM sensors WHERE stationId = ?', station.id);
+        const cameras = await db.all('SELECT status FROM cameras WHERE stationId = ?', station.id);
+        
+        const activeSensors = sensors.filter(s => s.status === SensorStatus.Active);
+        
+        results.push({
+            ...station,
+            status: station.status,
+            sensorCount: sensors.length,
+            cameraCount: cameras.length,
+            activeAlerts: 0, // Placeholder
+            locationCoords: { lat: station.lat, lng: station.lng },
+            systemHealth: 100, // Placeholder
+            avgBattery: activeSensors.length > 0 ? Math.round(activeSensors.reduce((acc, s) => acc + s.battery, 0) / activeSensors.length) : 0,
+            dataFlow: 0, // Placeholder
+            activeSensorCount: activeSensors.length,
+            onlineCameraCount: cameras.filter(c => c.status === CameraStatus.Online || c.status === CameraStatus.Recording).length,
+        });
+    }
+    return results;
+}
+
+export async function getAllSensors(): Promise<Sensor[]> {
+    const db = getDb();
+    return db.all<Sensor[]>('SELECT * FROM sensors ORDER BY name');
+}
+
+export async function getAllCameras(): Promise<Camera[]> {
+    const db = getDb();
+    const cameras = await db.all<Camera[]>('SELECT * FROM cameras ORDER BY name');
+    return cameras.map(cam => ({ ...cam, photos: [] })); // Photos are not stored in DB
+}
+
+
+// --- UPDATE Operations ---
+
+export async function updateSensorReading(agentSensorId: number, value: Record<string, any>) {
+    const db = getDb();
+    
+    // In a real system, this mapping would come from the database
+    // For now, it's hardcoded based on the agent's config in server.ts
+    const sensorMapping: { [key: number]: { dbIds: string[], values: { [key: string]: string } } } = {
+        1: { dbIds: ['SENSOR01', 'SENSOR02'], values: { 'Sıcaklık': 'temperature', 'Nem': 'humidity' } },
+        // ... other mappings
+    };
+    
+    const mapping = sensorMapping[agentSensorId];
+    if (!mapping) return;
+
+    for (const dbSensorId of mapping.dbIds) {
+        const sensor = await db.get<Sensor>('SELECT id, name, type from sensors WHERE id = ?', dbSensorId);
+        if (!sensor) continue;
+
+        const valueKey = mapping.values[sensor.type];
+        if (valueKey && typeof value[valueKey] === 'number') {
+            const newValue = value[valueKey];
+            await db.run(
+                'UPDATE sensors SET value = ?, lastUpdate = ?, status = ? WHERE id = ?',
+                newValue,
+                new Date().toISOString(),
+                SensorStatus.Active, // If we get a reading, it's active
+                sensor.id
+            );
+             // Update the station's lastUpdate and status
+            const sensorStation = await db.get<{ stationId: string }>('SELECT stationId FROM sensors WHERE id = ?', sensor.id);
+            if (sensorStation?.stationId) {
+                 await db.run(
+                    'UPDATE stations SET lastUpdate = ?, status = ? WHERE id = ?',
+                    new Date().toISOString(),
+                    'active',
+                    sensorStation.stationId
+                );
+            }
+        }
+    }
 }
