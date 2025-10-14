@@ -21,7 +21,7 @@ if (!process.env.API_KEY) {
 // --- Middleware ---
 app.use(express.json());
 
-const projectRoot = path.join(__dirname, '..', '..');
+const projectRoot = path.resolve(__dirname, '..', '..');
 
 // --- API Routes ---
 const apiRouter = express.Router();
@@ -171,54 +171,43 @@ app.use('/api', apiRouter);
 
 
 // --- Smart Static File + Transpilation Middleware ---
-app.use(async (req, res, next) => {
-    const requestedPath = req.path === '/' ? '/index.html' : req.path;
-    let filePath = path.join(projectRoot, requestedPath);
+// 1. Serve static files like .js, .css from the root using express.static
+// 2. A custom middleware handles on-the-fly .ts/.tsx transpilation.
+// 3. A fallback route serves index.html for any other GET request (SPA behavior).
 
+// Serve all static assets from the project root, but defer index.html to the SPA fallback
+app.use(express.static(projectRoot, { index: false }));
+
+// Handle .ts and .tsx file requests with Babel transpilation
+app.get(/\.(ts|tsx)$/, async (req, res, next) => {
+    const filePath = path.join(projectRoot, req.path);
     try {
-        await fs.access(filePath);
-    } catch (error) {
-        const possibleExtensions = ['.ts', '.tsx'];
-        let found = false;
-        for (const ext of possibleExtensions) {
-            try {
-                const newPath = filePath + ext;
-                await fs.access(newPath);
-                filePath = newPath;
-                found = true;
-                break;
-            } catch (e) {
-                // continue trying
-            }
-        }
-        if (!found) {
-            return next();
-        }
-    }
-    
-    if (filePath.endsWith('.tsx') || filePath.endsWith('.ts')) {
-        try {
-            const source = await fs.readFile(filePath, 'utf8');
-            const result = await babel.transformAsync(source, {
-                presets: [['@babel/preset-react', {runtime: 'automatic'}], '@babel/preset-typescript'],
-                filename: filePath
-            });
+        await fs.access(filePath); // Check if file exists
+        
+        const source = await fs.readFile(filePath, 'utf8');
+        const result = await babel.transformAsync(source, {
+            presets: [['@babel/preset-react', {runtime: 'automatic'}], '@babel/preset-typescript'],
+            filename: filePath
+        });
 
-            if (result && result.code) {
-                res.setHeader('Content-Type', 'application/javascript');
-                return res.send(result.code);
-            }
-        } catch (err) {
-            console.error(`Babel transpilation error for ${filePath}:`, err);
-            return next(err);
+        if (result && result.code) {
+            res.setHeader('Content-Type', 'application/javascript');
+            res.send(result.code);
+        } else {
+            next();
         }
+    } catch (error) {
+        // Log transpilation errors, but for file not found, just pass to next handler
+        if (error.code !== 'ENOENT') {
+             console.error(`Error processing ${filePath}:`, error);
+        }
+        next();
     }
-    
-    return res.sendFile(filePath);
 });
 
 
 // --- SPA Fallback ---
+// For any GET request that hasn't been handled yet, serve the main index.html file.
 app.get('*', (req, res) => {
     res.sendFile(path.join(projectRoot, 'index.html'));
 });
