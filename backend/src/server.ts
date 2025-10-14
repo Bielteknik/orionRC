@@ -1,4 +1,4 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { DeviceConfig } from './types';
@@ -9,7 +9,7 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 8000;
-const DEVICE_AUTH_TOKEN = process.env.DEVICE_AUTH_TOKEN || 'SECRET_AGENT_TOKEN_123';
+const DEVICE_AUTH_TOKEN = process.env.DEVICE_AUTH_TOKEN || 'EjderMeteo_Rpi_SecretKey_2025!';
 
 // --- Middlewares ---
 
@@ -20,15 +20,15 @@ app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
 app.use(express.json());
 
 // Simple logging middleware
-// FIX: Use imported Request, Response, and NextFunction types for middleware parameters to resolve type errors.
-app.use((req: Request, res: Response, next: NextFunction) => {
+// FIX: Using fully qualified types to avoid resolution issues.
+app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
     next();
 });
 
 // Simple token authentication middleware for devices
-// FIX: Use imported Request, Response, and NextFunction types for middleware parameters to resolve type errors.
-const authenticateDevice = (req: Request, res: Response, next: NextFunction) => {
+// FIX: Using fully qualified types to avoid resolution issues.
+const authenticateDevice = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const authHeader = req.headers.authorization;
     const expectedToken = `Token ${DEVICE_AUTH_TOKEN}`;
 
@@ -40,17 +40,27 @@ const authenticateDevice = (req: Request, res: Response, next: NextFunction) => 
 };
 
 
+// --- API Router Setup ---
+// FIX: Using express.Router() to create a router instance.
+const apiRouter = express.Router();
+app.use('/api', apiRouter);
+
+
 // --- API Routes ---
 
+// API Health Check
+// FIX: Using fully qualified types to avoid resolution issues.
+apiRouter.get('/', (req: express.Request, res: express.Response) => {
+    res.json({ status: 'API is running' });
+});
+
+
 // [Agent Endpoint] Get device configuration
-// FIX: Use imported Request and Response types for route handler parameters to resolve type errors.
-app.get('/config/:deviceId', authenticateDevice, (req: Request, res: Response) => {
+// FIX: Using fully qualified types to avoid resolution issues.
+apiRouter.get('/config/:deviceId', authenticateDevice, (req: express.Request, res: express.Response) => {
     const { deviceId } = req.params;
     console.log(`Configuration requested for device: ${deviceId}`);
 
-    // --- MOCK CONFIGURATION ---
-    // This is the configuration your Raspberry Pi will receive.
-    // It tells the agent which sensors to read and how to read them.
     const mockConfig: DeviceConfig = {
         sensors: [
             {
@@ -59,27 +69,13 @@ app.get('/config/:deviceId', authenticateDevice, (req: Request, res: Response) =
                 is_active: true,
                 interface: 'i2c',
                 parser_config: {
-                    driver: "sht3x" // This must match the driver filename on the Pi (sht3x.driver.ts)
+                    driver: "sht3x"
                 },
                 config: {
-                    address: "0x44", // Default address for SHT3x
-                    bus: 1           // Default I2C bus on Raspberry Pi
+                    address: "0x44",
+                    bus: 1
                 }
             },
-            // You can add more sensor configurations here later
-            // {
-            //     id: 2,
-            //     name: "DFRobot Lidar Sensör",
-            //     is_active: false, // Disabled for now
-            //     interface: 'serial',
-            //     parser_config: {
-            //         driver: "dfrobot_ult"
-            //     },
-            //     config: {
-            //         port: "/dev/ttyUSB0",
-            //         baudrate: 115200
-            //     }
-            // }
         ]
     };
 
@@ -87,22 +83,17 @@ app.get('/config/:deviceId', authenticateDevice, (req: Request, res: Response) =
 });
 
 // [Agent Endpoint] Submit sensor readings
-// FIX: Use imported Request and Response types for route handler parameters to resolve type errors.
-app.post('/submit-reading', authenticateDevice, (req: Request, res: Response) => {
+// FIX: Using fully qualified types to avoid resolution issues.
+apiRouter.post('/submit-reading', authenticateDevice, (req: express.Request, res: express.Response) => {
     const reading = req.body;
     
     console.log('✅ Received sensor reading:', JSON.stringify(reading, null, 2));
 
-    // --- DYNAMIC DATA UPDATE LOGIC ---
     try {
         const { sensor: sensorId, value } = reading;
-
-        // The agent sends sensor ID `1` for the SHT3x, which provides both temperature and humidity.
-        // We need to map this single reading to our two separate mock sensors.
         if (sensorId === 1 && value && typeof value.temperature === 'number' && typeof value.humidity === 'number') {
             let stationIdToUpdate: string | null = null;
 
-            // Find and update the temperature sensor (hardcoded ID 'S001' for this demo)
             const tempSensor = MOCK_SENSORS_DATA.find(s => s.id === 'S001');
             if (tempSensor) {
                 tempSensor.value = value.temperature;
@@ -111,16 +102,14 @@ app.post('/submit-reading', authenticateDevice, (req: Request, res: Response) =>
                 console.log(`Updated Temperature Sensor (S001) to: ${tempSensor.value}°C`);
             }
 
-            // Find and update the humidity sensor (hardcoded ID 'S002' for this demo)
             const humSensor = MOCK_SENSORS_DATA.find(s => s.id === 'S002');
             if (humSensor) {
                 humSensor.value = value.humidity;
                 humSensor.lastUpdate = new Date().toISOString();
-                if (!stationIdToUpdate) stationIdToUpdate = humSensor.stationId; // Fallback
+                if (!stationIdToUpdate) stationIdToUpdate = humSensor.stationId;
                 console.log(`Updated Humidity Sensor (S002) to: ${humSensor.value}%`);
             }
             
-            // Also update the station's lastUpdate time
             if (stationIdToUpdate) {
                 const station = MOCK_STATIONS_DATA.find(st => st.id === stationIdToUpdate);
                 if(station) {
@@ -131,36 +120,27 @@ app.post('/submit-reading', authenticateDevice, (req: Request, res: Response) =>
     } catch (e) {
         console.error("Error processing incoming reading:", e);
     }
-    // --- END DYNAMIC DATA UPDATE ---
 
-
-    res.status(204).send(); // 204 No Content is a good response for "I received it, thanks"
+    res.status(204).send();
 });
 
 
 // [Frontend Endpoint] Get all stations
-// FIX: Use imported Request and Response types for route handler parameters to resolve type errors.
-app.get('/stations', (req: Request, res: Response) => {
+// FIX: Using fully qualified types to avoid resolution issues.
+apiRouter.get('/stations', (req: express.Request, res: express.Response) => {
     res.json(MOCK_STATIONS_DATA);
 });
 
 // [Frontend Endpoint] Get all sensors
-// FIX: Use imported Request and Response types for route handler parameters to resolve type errors.
-app.get('/sensors', (req: Request, res: Response) => {
+// FIX: Using fully qualified types to avoid resolution issues.
+apiRouter.get('/sensors', (req: express.Request, res: express.Response) => {
     res.json(MOCK_SENSORS_DATA);
 });
 
 // [Frontend Endpoint] Get all cameras
-// FIX: Use imported Request and Response types for route handler parameters to resolve type errors.
-app.get('/cameras', (req: Request, res: Response) => {
+// FIX: Using fully qualified types to avoid resolution issues.
+apiRouter.get('/cameras', (req: express.Request, res: express.Response) => {
     res.json(MOCK_CAMERAS_DATA);
-});
-
-
-// --- Root Route for Health Check ---
-// FIX: Use imported Request and Response types for route handler parameters to resolve type errors.
-app.get('/', (req: Request, res: Response) => {
-    res.send('<h1>Meteoroloji Platformu Backend</h1><p>API is running.</p>');
 });
 
 

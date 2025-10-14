@@ -2,7 +2,7 @@ import axios from 'axios';
 import { Station, Sensor, Camera } from '../types';
 
 // IMPORTANT: This is now pointing to the production backend.
-const API_BASE_URL = 'https://meteoroloji.ejderapi.com.tr';
+const API_BASE_URL = 'https://meteoroloji.ejderapi.com.tr/api';
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
