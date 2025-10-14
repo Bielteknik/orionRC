@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Camera, CameraStatus, Station } from '../types';
-import Card from '../components/common/Card';
-import { AddIcon, FilterIcon, SearchIcon, PlayIcon, ListIcon, GridIcon, ExclamationIcon } from '../components/icons/Icons';
-import AddCameraDrawer from '../components/AddCameraDrawer';
-import Skeleton from '../components/common/Skeleton';
-import { getCameras, getStations } from '../services/apiService';
+import { Camera, CameraStatus, Station } from '../types.ts';
+import Card from '../components/common/Card.tsx';
+import { AddIcon, FilterIcon, SearchIcon, PlayIcon, ListIcon, GridIcon, ExclamationIcon } from '../components/icons/Icons.tsx';
+import AddCameraDrawer from '../components/AddCameraDrawer.tsx';
+import Skeleton from '../components/common/Skeleton.tsx';
+import { getCameras, getStations } from '../services/apiService.ts';
 
 const MosaicView: React.FC<{ cameras: Camera[], onViewDetails: (id: string) => void }> = ({ cameras, onViewDetails }) => {
     const onlineCameras = cameras.filter(c => c.status !== CameraStatus.Offline);

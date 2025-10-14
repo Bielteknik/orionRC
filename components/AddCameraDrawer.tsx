@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Station, Camera, CameraStatus } from '../types';
+import { Station, Camera, CameraStatus } from '../types.ts';
 
 interface AddCameraDrawerProps {
   isOpen: boolean;

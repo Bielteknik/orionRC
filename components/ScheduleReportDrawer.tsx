@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Station, ReportConfig, ReportSchedule } from '../types';
+import { Station, ReportConfig, ReportSchedule } from '../types.ts';
 
 interface ScheduleReportDrawerProps {
   isOpen: boolean;

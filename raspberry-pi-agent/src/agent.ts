@@ -134,7 +134,8 @@ class OrionAgent {
                 logger.warn(`'${sensorConfig.name}' için 'driver' belirtilmemiş. Atlanıyor.`);
                 continue;
             }
-
+            
+            logger.log(`'${sensorConfig.name}' okunuyor (Sürücü: ${driverName})...`);
             const driver = await this.driverManager.getDriver(driverName);
             if (!driver) {
                 logger.error(`'${sensorConfig.name}' için sürücü '${driverName}' yüklenemedi.`);
@@ -244,14 +245,14 @@ class OrionAgent {
             logger.log("\n--- Kapatma sinyali (Ctrl+C) alındı. ---");
             logger.log("Kalan veriler gönderilmeye çalışılıyor...");
             await this._processOfflineQueue();
-            logger.log("--- Orion Agent kapatıldı. ---");
+            logger.log("--- ORION Agent kapatıldı. ---");
             // Fix: Cast process to any to bypass incorrect type definitions for 'exit'.
             (process as any).exit(0);
         });
     }
 
     async run(): Promise<void> {
-        logger.log("--- Orion Agent (TypeScript) Başlatılıyor ---");
+        logger.log("--- ORION Agent (TypeScript) Başlatılıyor ---");
         this.setState(AgentState.INITIALIZING);
 
         if (!await this._loadLocalConfig() || !await this._initLocalDb()) {

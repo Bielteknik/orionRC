@@ -1,8 +1,9 @@
 
 
+
 import React, { useState, useEffect } from 'react';
-import LocationPickerMap from './common/LocationPickerMap';
-import { SensorIcon, CameraIcon } from './icons/Icons';
+import LocationPickerMap from './common/LocationPickerMap.tsx';
+import { SensorIcon, CameraIcon } from './icons/Icons.tsx';
 
 interface UnassignedDevice {
     id: string;

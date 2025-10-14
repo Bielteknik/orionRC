@@ -1,13 +1,11 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Station, Sensor, Camera, SensorStatus, CameraStatus } from '../types';
-import { getStations } from '../services/apiService';
-import { getSensors } from '../services/apiService';
-import { getCameras } from '../services/apiService';
-import Card from '../components/common/Card';
-import InteractiveMap from '../components/common/InteractiveMap';
-import Pagination from '../components/common/Pagination';
-import Skeleton from '../components/common/Skeleton';
-import { ArrowLeftIcon, SensorIcon, CameraIcon, SettingsIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, OnlineIcon, OfflineIcon, PlayIcon, PhotographIcon, SearchIcon, ExclamationIcon } from '../components/icons/Icons';
+import { Station, Sensor, Camera, SensorStatus, CameraStatus } from '../types.ts';
+import { getStations, getSensors, getCameras } from '../services/apiService.ts';
+import Card from '../components/common/Card.tsx';
+import InteractiveMap from '../components/common/InteractiveMap.tsx';
+import Pagination from '../components/common/Pagination.tsx';
+import Skeleton from '../components/common/Skeleton.tsx';
+import { ArrowLeftIcon, SensorIcon, CameraIcon, SettingsIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, OnlineIcon, OfflineIcon, PlayIcon, PhotographIcon, SearchIcon, ExclamationIcon } from '../components/icons/Icons.tsx';
 
 interface StationDetailProps {
   stationId: string;

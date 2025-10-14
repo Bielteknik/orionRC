@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Station } from '../types';
-import Card from '../components/common/Card';
-import { AddIcon, SearchIcon, LocationPinIcon, SensorIcon, CameraIcon, SettingsIcon, ExclamationIcon } from '../components/icons/Icons';
-import AddStationDrawer from '../components/AddStationModal';
-import Skeleton from '../components/common/Skeleton';
-import { getStations } from '../services/apiService';
+import { Station } from '../types.ts';
+import Card from '../components/common/Card.tsx';
+import { AddIcon, SearchIcon, LocationPinIcon, SensorIcon, CameraIcon, SettingsIcon, ExclamationIcon } from '../components/icons/Icons.tsx';
+import AddStationDrawer from '../components/AddStationModal.tsx';
+import Skeleton from '../components/common/Skeleton.tsx';
+import { getStations } from '../services/apiService.ts';
 
 const MOCK_UNASSIGNED_SENSORS_DATA = [
   { id: 'S101', name: 'Sıcaklık Sensörü A', type: 'Sıcaklık' },

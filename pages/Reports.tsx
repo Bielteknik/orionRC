@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Report, ReportConfig, ReportSchedule, Station, Sensor } from '../types';
-import Card from '../components/common/Card';
-import AddReportDrawer from '../components/AddReportDrawer';
-import ScheduleReportDrawer from '../components/ScheduleReportDrawer';
-import { AddIcon, SearchIcon, DownloadIcon, EditIcon, DeleteIcon, CalendarIcon } from '../components/icons/Icons';
-import { getStations, getSensors } from '../services/apiService';
+import { Report, ReportConfig, ReportSchedule, Station, Sensor } from '../types.ts';
+import Card from '../components/common/Card.tsx';
+import AddReportDrawer from '../components/AddReportDrawer.tsx';
+import ScheduleReportDrawer from '../components/ScheduleReportDrawer.tsx';
+import { AddIcon, SearchIcon, DownloadIcon, EditIcon, DeleteIcon, CalendarIcon } from '../components/icons/Icons.tsx';
+import { getStations, getSensors } from '../services/apiService.ts';
 
 // Add XLSX type declaration for the library loaded from CDN
 declare const XLSX: any;

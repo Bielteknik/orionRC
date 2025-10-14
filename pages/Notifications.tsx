@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Notification, Severity } from '../types';
-import Card from '../components/common/Card';
-import { SearchIcon, BellIcon, ExclamationIcon, CheckIcon, DeleteIcon } from '../components/icons/Icons';
+import { Notification, Severity } from '../types.ts';
+import Card from '../components/common/Card.tsx';
+import { SearchIcon, BellIcon, ExclamationIcon, CheckIcon, DeleteIcon } from '../components/icons/Icons.tsx';
 
 interface NotificationsProps {
     notifications: Notification[];

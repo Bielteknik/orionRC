@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PaletteIcon } from './icons/Icons';
+import { PaletteIcon } from './icons/Icons.tsx';
 
 const lineTypes = ['monotone', 'linear', 'step'] as const;
 type LineType = typeof lineTypes[number];

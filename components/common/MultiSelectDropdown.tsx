@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDownIcon } from '../icons/Icons';
+import { ChevronDownIcon } from '../icons/Icons.tsx';
 
 interface Option {
     value: string;
@@ -69,7 +69,6 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ options, sele
                                 className="h-4 w-4 rounded border-gray-300 text-accent focus:ring-accent"
                                 checked={selected.length === options.length}
                                 onChange={handleSelectAll}
-                                // Fix: The ref callback was returning a boolean value, which is not a valid return type for a ref. Wrapped in a block to return void.
                                 ref={el => {
                                     if (el) {
                                         el.indeterminate = selected.length > 0 && selected.length < options.length;

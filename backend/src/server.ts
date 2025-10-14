@@ -1,14 +1,13 @@
-// FIX: Changed express import to use the default export. This, combined with
-// using explicit types like `express.Request`, helps prevent type conflicts with
-// global types or other libraries.
-import express from 'express';
+// Correctly import Express and its types to resolve type conflicts.
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
-// FIX: Import ServerResponse to explicitly type the `res` object in `express.static`'s `setHeaders` option.
-import { ServerResponse } from 'http';
+import fs from 'fs/promises';
 import { DeviceConfig } from './types';
 import { MOCK_STATIONS_DATA, MOCK_SENSORS_DATA, MOCK_CAMERAS_DATA } from './mockData';
+import { transformFileAsync } from '@babel/core';
+import { GoogleGenAI, Chat } from "@google/genai";
 
 // Load environment variables from .env file
 dotenv.config();
@@ -16,6 +15,7 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 8000;
 const DEVICE_AUTH_TOKEN = process.env.DEVICE_AUTH_TOKEN || 'EjderMeteo_Rpi_SecretKey_2025!';
+const GEMINI_API_KEY = process.env.API_KEY;
 
 // --- Middlewares ---
 
@@ -23,19 +23,16 @@ const DEVICE_AUTH_TOKEN = process.env.DEVICE_AUTH_TOKEN || 'EjderMeteo_Rpi_Secre
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
 
 // Parse incoming JSON requests
-// FIX: This call previously failed due to type conflicts. The fixes in this file resolve it.
 app.use(express.json());
 
 // Simple logging middleware
-// FIX: Use `express.Request`, `express.Response`, and `express.NextFunction` to ensure correct types are used.
-app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
     next();
 });
 
 // Simple token authentication middleware for devices
-// FIX: Use `express.Request`, `express.Response`, and `express.NextFunction` to ensure correct types are used.
-const authenticateDevice = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+const authenticateDevice = (req: Request, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization;
     const expectedToken = `Token ${DEVICE_AUTH_TOKEN}`;
 
@@ -55,15 +52,13 @@ app.use('/api', apiRouter);
 // --- API Routes ---
 
 // API Health Check
-// FIX: Use `express.Request` and `express.Response` to ensure correct types are used.
-apiRouter.get('/', (req: express.Request, res: express.Response) => {
+apiRouter.get('/', (req: Request, res: Response) => {
     res.json({ status: 'API is running' });
 });
 
 
 // [Agent Endpoint] Get device configuration
-// FIX: Use `express.Request` and `express.Response` to ensure correct types are used.
-apiRouter.get('/config/:deviceId', authenticateDevice, (req: express.Request, res: express.Response) => {
+apiRouter.get('/config/:deviceId', authenticateDevice, (req: Request, res: Response) => {
     const { deviceId } = req.params;
     console.log(`Configuration requested for device: ${deviceId}`);
 
@@ -89,8 +84,7 @@ apiRouter.get('/config/:deviceId', authenticateDevice, (req: express.Request, re
 });
 
 // [Agent Endpoint] Submit sensor readings
-// FIX: Use `express.Request` and `express.Response` to ensure correct types are used.
-apiRouter.post('/submit-reading', authenticateDevice, (req: express.Request, res: express.Response) => {
+apiRouter.post('/submit-reading', authenticateDevice, (req: Request, res: Response) => {
     const reading = req.body;
     
     console.log('✅ Received sensor reading:', JSON.stringify(reading, null, 2));
@@ -132,46 +126,124 @@ apiRouter.post('/submit-reading', authenticateDevice, (req: express.Request, res
 
 
 // [Frontend Endpoint] Get all stations
-// FIX: Use `express.Request` and `express.Response` to ensure correct types are used.
-apiRouter.get('/stations', (req: express.Request, res: express.Response) => {
+apiRouter.get('/stations', (req: Request, res: Response) => {
     res.json(MOCK_STATIONS_DATA);
 });
 
 // [Frontend Endpoint] Get all sensors
-// FIX: Use `express.Request` and `express.Response` to ensure correct types are used.
-apiRouter.get('/sensors', (req: express.Request, res: express.Response) => {
+apiRouter.get('/sensors', (req: Request, res: Response) => {
     res.json(MOCK_SENSORS_DATA);
 });
 
 // [Frontend Endpoint] Get all cameras
-// FIX: Use `express.Request` and `express.Response` to ensure correct types are used.
-apiRouter.get('/cameras', (req: express.Request, res: express.Response) => {
+apiRouter.get('/cameras', (req: Request, res: Response) => {
     res.json(MOCK_CAMERAS_DATA);
 });
 
-// --- Frontend Serving ---
-// Serve static files from the httpdocs directory, which is two levels above the dist folder
-const httpdocsPath = path.join(__dirname, '..', '..', 'httpdocs');
-// FIX: This call previously failed due to type conflicts. The fixes in this file resolve it.
-app.use(express.static(httpdocsPath, {
-  // Allow Express to search for .tsx, .ts files for extensionless URLs
-  extensions: ['tsx', 'ts', 'js', 'html'],
-  // FIX: Explicitly type `res` as `ServerResponse` to fix `setHeader` property not found error.
-  setHeaders: (res: ServerResponse, filePath: string) => {
-    // For module scripts, the browser requires a valid JS MIME type.
-    // We serve them as application/javascript to satisfy this requirement,
-    // and Babel (with type="text/babel") will transpile them before execution.
-    if (filePath.endsWith('.tsx') || filePath.endsWith('.ts')) {
-      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+// [Frontend Endpoint] Gemini Chat Proxy
+let ai: GoogleGenAI | null = null;
+let chat: Chat | null = null;
+if (GEMINI_API_KEY) {
+    ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+    const SYSTEM_INSTRUCTION = "Sen ORION platformu için geliştirilmiş, dünya standartlarında bir meteoroloji asistanısın. Kullanıcı sorularını açık ve öz bir şekilde yanıtla. Hava olaylarını açıklayabilir, sensör okumalarını yorumlayabilir ve trendlere göre tahminlerde bulunabilirsin. Cevaplarını her zaman Türkçe ver.";
+    chat = ai.chats.create({
+        model: 'gemini-2.5-flash',
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+        },
+    });
+} else {
+    console.warn('⚠️ GEMINI_API_KEY not set. Gemini Assistant will be disabled.');
+}
+
+apiRouter.post('/gemini-chat-stream', async (req: Request, res: Response) => {
+    if (!chat) {
+        return res.status(503).json({ error: 'Gemini assistant is not configured on the server.' });
     }
+
+    const { message } = req.body;
+    if (!message) {
+        return res.status(400).json({ error: 'Message is required.' });
+    }
+
+    try {
+        const stream = await chat.sendMessageStream({ message });
+        
+        // Set headers for streaming
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Transfer-Encoding', 'chunked');
+
+        for await (const chunk of stream) {
+            res.write(chunk.text);
+        }
+        res.end();
+
+    } catch (error) {
+        console.error('Error streaming from Gemini:', error);
+        res.status(500).json({ error: 'Failed to get response from assistant.' });
+    }
+});
+
+
+// --- Frontend Serving ---
+const httpdocsPath = path.join(__dirname, '..', '..', 'httpdocs');
+
+// Middleware to transpile TS/TSX files on the fly
+app.use(async (req: Request, res: Response, next: NextFunction) => {
+  const filePath = path.join(httpdocsPath, req.path);
+
+  // Try to resolve extensionless paths
+  const possiblePaths = [
+      filePath,
+      `${filePath}.ts`,
+      `${filePath}.tsx`,
+  ];
+  
+  let actualPath: string | null = null;
+
+  for (const p of possiblePaths) {
+      try {
+          await fs.access(p, fs.constants.F_OK);
+          actualPath = p;
+          break;
+      } catch (e) {
+          // File doesn't exist, try next
+      }
   }
-}));
+
+  if (actualPath && (actualPath.endsWith('.tsx') || actualPath.endsWith('.ts'))) {
+    try {
+      const result = await transformFileAsync(actualPath, {
+        presets: [
+          '@babel/preset-react', 
+          ['@babel/preset-typescript', { allowDeclareFields: true, allExtensions: true, isTSX: true }]
+        ],
+        filename: actualPath, // Important for babel to know how to parse
+        sourceMaps: 'inline'
+      });
+
+      if (result?.code) {
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        res.send(result.code);
+      } else {
+        res.sendStatus(500);
+      }
+    } catch (err: any) {
+      console.error(`Babel transformation error for ${req.path}:\n`, err);
+      res.status(500).send(`<pre>Error transforming ${req.path}:\n${err.message}</pre>`);
+    }
+  } else {
+    next();
+  }
+});
+
+// Serve other static files (images, css, etc.) from the httpdocs directory
+app.use(express.static(httpdocsPath));
 
 // For any other request that doesn't match an API route or a static file,
 // serve the index.html file to support client-side routing.
-// FIX: Use `express.Request` and `express.Response` to ensure correct types are used.
-app.get('*', (req: express.Request, res: express.Response) => {
-  res.sendFile(path.join(httpdocsPath, 'index.html'));
+app.get('*', (req: Request, res: Response) => {
+    res.sendFile(path.join(httpdocsPath, 'index.html'));
 });
 
 

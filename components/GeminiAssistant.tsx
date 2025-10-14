@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { sendMessageToGemini } from '../services/geminiService';
-import { ChatIcon, PaperAirplaneIcon } from './icons/Icons';
+import { sendMessageToGemini } from '../services/geminiService.ts';
+import { ChatIcon, PaperAirplaneIcon } from './icons/Icons.tsx';
 
 interface Message {
   sender: 'user' | 'bot';
@@ -61,7 +61,7 @@ const GeminiAssistant: React.FC = () => {
       {isOpen && (
         <div className="fixed bottom-24 right-6 w-96 h-[32rem] bg-primary dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl flex flex-col z-50">
           <header className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100">Meteoroloji Asistanı</h3>
+            <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100">ORION Asistanı</h3>
             <button onClick={() => setIsOpen(false)} className="text-muted dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200">&times;</button>
           </header>
 

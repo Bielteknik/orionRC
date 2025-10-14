@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Station } from '../types';
-import { CalendarIcon, SensorIcon, StationIcon } from './icons/Icons';
+import { Station } from '../types.ts';
+import { CalendarIcon, SensorIcon, StationIcon } from './icons/Icons.tsx';
 
 interface AddReportDrawerProps {
   isOpen: boolean;

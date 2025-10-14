@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Station, Sensor, SensorStatus } from '../types';
-import { SerialPortIcon, CpuChipIcon, HttpIcon, RegexIcon, JsonIcon, CsvIcon } from './icons/Icons';
+import { Station, Sensor, SensorStatus } from '../types.ts';
+import { SerialPortIcon, CpuChipIcon, HttpIcon, RegexIcon, JsonIcon, CsvIcon } from './icons/Icons.tsx';
 
 interface AddSensorDrawerProps {
   isOpen: boolean;

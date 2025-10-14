@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Trend, Station, WidgetConfig, Sensor } from '../types';
-import Card from '../components/common/Card';
-import FullMap from '../components/common/FullMap';
-import AddWidgetModal from '../components/AddWidgetModal';
-import WindRoseChart from '../components/WindRoseChart';
-import Skeleton from '../components/common/Skeleton';
-import ChartSettingsModal, { ChartStyle } from '../components/ChartSettingsModal';
-import { useTheme } from '../components/ThemeContext';
-import { TemperatureIcon, HumidityIcon, WindSockIcon, GaugeIcon, TrendUpIcon, TrendDownIcon, TrendStableIcon, PaletteIcon, ChartBarIcon, MapIcon, AddIcon, DeleteIcon, CalendarIcon, ExclamationIcon } from '../components/icons/Icons';
-import { getStations, getSensors } from '../services/apiService';
-import MultiSelectDropdown from '../components/common/MultiSelectDropdown';
+import { Trend, Station, WidgetConfig, Sensor } from '../types.ts';
+import Card from '../components/common/Card.tsx';
+import FullMap from '../components/common/FullMap.tsx';
+import AddWidgetModal from '../components/AddWidgetModal.tsx';
+import WindRoseChart from '../components/WindRoseChart.tsx';
+import Skeleton from '../components/common/Skeleton.tsx';
+import ChartSettingsModal, { ChartStyle } from '../components/ChartSettingsModal.tsx';
+import { useTheme } from '../components/ThemeContext.tsx';
+import { TemperatureIcon, HumidityIcon, WindSockIcon, GaugeIcon, TrendUpIcon, TrendDownIcon, TrendStableIcon, PaletteIcon, ChartBarIcon, MapIcon, AddIcon, DeleteIcon, CalendarIcon, ExclamationIcon } from '../components/icons/Icons.tsx';
+import { getStations, getSensors } from '../services/apiService.ts';
+import MultiSelectDropdown from '../components/common/MultiSelectDropdown.tsx';
 
 
 // Constants & Defaults

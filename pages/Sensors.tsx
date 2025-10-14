@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Sensor, SensorStatus, Station } from '../types';
-import Card from '../components/common/Card';
-import { AddIcon, SearchIcon, SettingsIcon, StationIcon, SensorIcon as GenericSensorIcon, ExclamationIcon } from '../components/icons/Icons';
-import AddSensorDrawer from '../components/AddSensorDrawer';
-import Skeleton from '../components/common/Skeleton';
-import { getSensors, getStations } from '../services/apiService';
+import { Sensor, SensorStatus, Station } from '../types.ts';
+import Card from '../components/common/Card.tsx';
+import { AddIcon, SearchIcon, SettingsIcon, StationIcon, SensorIcon as GenericSensorIcon, ExclamationIcon } from '../components/icons/Icons.tsx';
+import AddSensorDrawer from '../components/AddSensorDrawer.tsx';
+import Skeleton from '../components/common/Skeleton.tsx';
+import { getSensors, getStations } from '../services/apiService.ts';
 
 const SENSOR_UNITS: { [key: string]: string } = {
     'Sıcaklık': '°C',

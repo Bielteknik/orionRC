@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Station, Sensor, Camera } from '../types';
+import { Station, Sensor, Camera } from '../types.ts';
 
 // IMPORTANT: This is now pointing to the production backend.
 const API_BASE_URL = 'https://meteoroloji.ejderapi.com.tr/api';

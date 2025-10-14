@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Meteoroloji Gözlem Platformu</title>
+    <title>ORION Gözlem Platformu</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Leaflet CSS for interactive map -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -47,28 +47,25 @@
         }
       }
     </script>
-    <!-- Babel Standalone for in-browser TSX transpilation -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script type="importmap">
+<script type="importmap">
 {
   "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "recharts": "https://aistudiocdn.com/recharts@^3.2.1",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.23.0",
-    "path": "https://aistudiocdn.com/path@^0.12.7",
     "fs/": "https://aistudiocdn.com/fs@^0.0.1-security/",
-    "axios": "https://aistudiocdn.com/axios@^1.12.2",
-    "url": "https://aistudiocdn.com/url@^0.11.4",
+    "path": "https://aistudiocdn.com/path@^0.12.7",
     "sqlite3": "https://aistudiocdn.com/sqlite3@^5.1.7",
     "sqlite": "https://aistudiocdn.com/sqlite@^5.1.1",
     "i2c-bus": "https://aistudiocdn.com/i2c-bus@^5.2.3",
+    "buffer": "https://aistudiocdn.com/buffer@^6.0.3",
+    "express": "https://aistudiocdn.com/express@^5.1.0",
     "cors": "https://aistudiocdn.com/cors@^2.8.5",
     "dotenv": "https://aistudiocdn.com/dotenv@^17.2.3",
-    "express": "https://aistudiocdn.com/express@^5.1.0",
-    "buffer": "https://aistudiocdn.com/buffer@^6.0.3",
-    "http": "https://aistudiocdn.com/http@^0.0.1-security"
+    "@babel/core": "https://aistudiocdn.com/@babel/core@^7.28.4",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.24.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "axios": "https://aistudiocdn.com/axios@^1.12.2",
+    "recharts": "https://aistudiocdn.com/recharts@^3.2.1",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0"
   }
 }
 </script>
@@ -81,7 +78,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
      crossorigin=""></script>
-    <!-- Main application entry point, transpiled by Babel -->
-    <script type="text/babel" data-presets="react,typescript" data-type="module" src="/index.tsx"></script>
+    <!-- Main application entry point -->
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>

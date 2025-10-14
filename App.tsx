@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Page, Notification } from './types';
-import Sidebar from './components/layout/Sidebar';
-import Header from './components/layout/Header';
-import Dashboard from './pages/Dashboard';
-import Stations from './pages/Stations';
-import Sensors from './pages/Sensors';
-import Cameras from './pages/Cameras';
-import Definitions from './pages/Definitions';
-import Reports from './pages/Reports';
-import StationDetail from './pages/StationDetail';
-import CameraDetail from './pages/CameraDetail';
-import { ThemeProvider } from './components/ThemeContext';
-import Notifications from './pages/Notifications';
-import GeminiAssistant from './components/GeminiAssistant';
+import { Page, Notification } from './types.ts';
+import Sidebar from './components/layout/Sidebar.tsx';
+import Header from './components/layout/Header.tsx';
+import Dashboard from './pages/Dashboard.tsx';
+import Stations from './pages/Stations.tsx';
+import Sensors from './pages/Sensors.tsx';
+import Cameras from './pages/Cameras.tsx';
+import Definitions from './pages/Definitions.tsx';
+import Reports from './pages/Reports.tsx';
+import StationDetail from './pages/StationDetail.tsx';
+import CameraDetail from './pages/CameraDetail.tsx';
+import { ThemeProvider } from './components/ThemeContext.tsx';
+import Notifications from './pages/Notifications.tsx';
+import GeminiAssistant from './components/GeminiAssistant.tsx';
 
 const MOCK_NOTIFICATIONS_INITIAL: Notification[] = [
     {

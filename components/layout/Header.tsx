@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Page, Notification, Severity } from '../../types';
-import { BellIcon, ExclamationIcon } from '../icons/Icons';
+import { Page, Notification, Severity } from '../../types.ts';
+import { BellIcon, ExclamationIcon } from '../icons/Icons.tsx';
 
 
 interface NotificationPopoverProps {

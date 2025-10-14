@@ -1,6 +1,6 @@
-# Meteoroloji Gözlem Platformu - Backend
+# ORION Gözlem Platformu - Backend
 
-This is the backend API for the Meteorology Observation Platform, built with Node.js, Express, and TypeScript.
+This is the backend API for the ORION Observation Platform, built with Node.js, Express, and TypeScript.
 
 ## Features
 

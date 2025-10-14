@@ -1,10 +1,9 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Camera, CameraStatus, Station } from '../types';
-import { getCameras } from '../services/apiService';
-import { getStations } from '../services/apiService';
-import Card from '../components/common/Card';
-import Skeleton from '../components/common/Skeleton';
-import { ArrowLeftIcon, CameraIcon as VideoIcon, PlayIcon, FullscreenIcon, PhotographIcon, ExclamationIcon } from '../components/icons/Icons';
+import { Camera, CameraStatus, Station } from '../types.ts';
+import { getCameras, getStations } from '../services/apiService.ts';
+import Card from '../components/common/Card.tsx';
+import Skeleton from '../components/common/Skeleton.tsx';
+import { ArrowLeftIcon, CameraIcon as VideoIcon, PlayIcon, FullscreenIcon, PhotographIcon, ExclamationIcon } from '../components/icons/Icons.tsx';
 
 interface CameraDetailProps {
   cameraId: string;

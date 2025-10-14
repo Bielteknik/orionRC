@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import Card from '../components/common/Card';
-import { AddIcon, EditIcon, DeleteIcon, StationIcon } from '../components/icons/Icons';
-import { AlertRule, Severity, AlertCondition, Station, Sensor } from '../types';
-import { getStations, getSensors } from '../services/apiService';
-import DefinitionModal from '../components/DefinitionModal';
+import Card from '../components/common/Card.tsx';
+import { AddIcon, EditIcon, DeleteIcon, StationIcon } from '../components/icons/Icons.tsx';
+import { AlertRule, Severity, AlertCondition, Station, Sensor } from '../types.ts';
+import { getStations, getSensors } from '../services/apiService.ts';
+import DefinitionModal from '../components/DefinitionModal.tsx';
 
 type DefinitionType = 'stationTypes' | 'sensorTypes' | 'cameraTypes';
 

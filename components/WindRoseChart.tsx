@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend, Tooltip } from 'recharts';
-import { useTheme } from './ThemeContext';
-import { Station, Sensor } from '../types';
+import { useTheme } from './ThemeContext.tsx';
+import { Station, Sensor } from '../types.ts';
 
 const DIRECTIONS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 const SPEED_BINS = [
@@ -105,7 +105,6 @@ const WindRoseChart: React.FC<WindRoseChartProps> = ({ stations, sensors }) => {
                             stroke={bin.color} 
                             fill={bin.color} 
                             fillOpacity={0.7} 
-                            // Fix: Removed invalid 'stackId' prop from Radar component.
                         />
                     ))}
                 </RadarChart>

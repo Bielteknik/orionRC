@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { WidgetType } from '../types';
-import { AddIcon, ChartBarIcon, WindSockIcon, TemperatureIcon } from './icons/Icons';
+import { WidgetType } from '../types.ts';
+import { AddIcon, ChartBarIcon, WindSockIcon, TemperatureIcon } from './icons/Icons.tsx';
 
 interface AddWidgetModalProps {
     isOpen: boolean;

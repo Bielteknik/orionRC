@@ -1,6 +1,6 @@
-# Meteoroloji Gözlem Platformu
+# ORION Gözlem Platformu
 
-This repository contains the source code for the Meteorology Observation Platform.
+This repository contains the source code for the ORION Observation Platform.
 
 ## Project Structure
 

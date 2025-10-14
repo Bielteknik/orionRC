@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Station } from '../../types';
+import { Station } from '../../types.ts';
 
 declare const L: any;
 
