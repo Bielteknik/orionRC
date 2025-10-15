@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Station, Sensor, Camera, SensorStatus, CameraStatus } from '../types.ts';
-import { getStations, getSensors, getCameras } from '../services/apiService.ts';
+import { getStations, getSensors, getCameras, getReadings } from '../services/apiService.ts';
 import Card from '../components/common/Card.tsx';
 import InteractiveMap from '../components/common/InteractiveMap.tsx';
 import Pagination from '../components/common/Pagination.tsx';
@@ -142,6 +142,7 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
   const [station, setStation] = useState<Station | null>(null);
   const [sensors, setSensors] = useState<Sensor[]>([]);
   const [cameras, setCameras] = useState<Camera[]>([]);
+  const [readings, setReadings] = useState<SensorReading[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -156,15 +157,17 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
         try {
             setIsLoading(true);
             setError(null);
-            const [stationsData, sensorsData, camerasData] = await Promise.all([
-                getStations(), getSensors(), getCameras()
+            const [stationsData, sensorsData, camerasData, readingsData] = await Promise.all([
+                getStations(), getSensors(), getCameras(), getReadings()
             ]);
             
             const currentStation = stationsData.find(s => s.id === stationId);
             if (currentStation) {
                 setStation(currentStation);
-                setSensors(sensorsData.filter(s => s.stationId === stationId));
+                const stationSensors = sensorsData.filter(s => s.stationId === stationId);
+                setSensors(stationSensors);
                 setCameras(camerasData.filter(c => c.stationId === stationId));
+                setReadings(readingsData.filter(r => r.stationId === stationId));
             } else {
                 throw new Error("İstasyon bulunamadı");
             }
@@ -178,33 +181,12 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
     };
     fetchData();
   }, [stationId]);
-
-  // Generate mock sensor readings for the station's sensors
-  const MOCK_SENSOR_READINGS: SensorReading[] = useMemo(() => {
-      if (sensors.length === 0) return [];
-      return sensors.flatMap(sensor =>
-          Array.from({ length: 50 }, (_, i) => {
-              const date = new Date();
-              date.setHours(date.getHours() - i * 3);
-              const valueFluctuation = (Math.random() - 0.5) * (sensor.value * 0.1);
-              return {
-                  id: `${sensor.id}-reading-${i}`,
-                  sensorId: sensor.id,
-                  sensorName: sensor.name,
-                  sensorType: sensor.type,
-                  value: parseFloat((sensor.value + valueFluctuation).toFixed(1)),
-                  unit: sensor.unit,
-                  timestamp: date.toLocaleString('tr-TR'),
-              };
-          })
-      );
-  }, [sensors]);
   
   const filteredSensorReadings = useMemo(() =>
-    MOCK_SENSOR_READINGS.filter(reading =>
+    readings.filter(reading =>
       reading.sensorName.toLowerCase().includes(dataSearchTerm.toLowerCase()) ||
       reading.sensorType.toLowerCase().includes(dataSearchTerm.toLowerCase())
-    ), [MOCK_SENSOR_READINGS, dataSearchTerm]);
+    ), [readings, dataSearchTerm]);
 
   const paginatedSensorReadings = useMemo(() => {
     const startIndex = (dataPage - 1) * ITEMS_PER_PAGE_DATA;

@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend, Tooltip } from 'recharts';
 import { useTheme } from './ThemeContext.tsx';
 import { Station, Sensor } from '../types.ts';
+import { getReadingsHistory } from '../services/apiService.ts';
 
 const DIRECTIONS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 const SPEED_BINS = [
@@ -12,34 +13,23 @@ const SPEED_BINS = [
   { range: [30, Infinity], label: '>30 km/h', color: '#059669' },
 ];
 
-// Generate mock data for the wind rose chart based on selected stations
-const generateMockWindData = (stations: Station[], sensors: Sensor[]) => {
-    const stationIds = stations.map(s => s.id);
-    const windSpeedSensors = sensors.filter(s => s.type === 'Rüzgar Hızı' && stationIds.includes(s.stationId));
-    const windDirSensors = sensors.filter(s => s.type === 'Rüzgar Yönü' && stationIds.includes(s.stationId));
-    
-    if (windSpeedSensors.length === 0 || windDirSensors.length === 0) {
-        return [];
-    }
+const processWindData = (speedData: any[], directionData: any[]) => {
+    if (speedData.length === 0 || directionData.length === 0) return [];
 
-    // Use average values as a base for more representative mock data
-    const avgSpeed = windSpeedSensors.reduce((acc, s) => acc + s.value, 0) / windSpeedSensors.length;
-    const avgDir = windDirSensors.reduce((acc, s) => acc + s.value, 0) / windDirSensors.length;
+    // Create a map of timestamps to speed for quick lookup
+    const speedMap = new Map(speedData.map(d => [new Date(d.timestamp).getTime(), d.value]));
 
-    return Array.from({ length: 200 }, () => ({
-        speed: Math.max(0, avgSpeed + (Math.random() - 0.5) * 30),
-        direction: (avgDir + (Math.random() - 0.5) * 90 + 360) % 360,
-    }));
-};
-
-const processWindData = (data: { speed: number, direction: number }[]) => {
-    if (data.length === 0) return [];
-    
     const directionBins = Array.from({ length: 16 }, () => 
         Array.from({ length: SPEED_BINS.length }, () => 0)
     );
 
-    data.forEach(({ speed, direction }) => {
+    directionData.forEach(dirReading => {
+        const timestamp = new Date(dirReading.timestamp).getTime();
+        const speed = speedMap.get(timestamp);
+        const direction = dirReading.value;
+
+        if (speed === undefined) return;
+
         const dirIndex = Math.floor(((direction + 11.25) % 360) / 22.5);
         const speedIndex = SPEED_BINS.findIndex(bin => speed >= bin.range[0] && speed < bin.range[1]);
         if (dirIndex >= 0 && dirIndex < 16 && speedIndex !== -1) {
@@ -58,17 +48,46 @@ const processWindData = (data: { speed: number, direction: number }[]) => {
 
 interface WindRoseChartProps {
     stations: Station[];
-    sensors: Sensor[];
+    sensors: Sensor[]; // Keep for checking if wind sensors exist
 }
 
 const WindRoseChart: React.FC<WindRoseChartProps> = ({ stations, sensors }) => {
   const { theme } = useTheme();
   const tickColor = theme === 'dark' ? '#9CA3AF' : '#6B7281';
+  const [chartData, setChartData] = useState<any[]>([]);
 
-  const chartData = useMemo(() => {
-    const mockData = generateMockWindData(stations, sensors);
-    return processWindData(mockData);
+  useEffect(() => {
+    const fetchAndProcessData = async () => {
+        if (stations.length === 0) {
+            setChartData([]);
+            return;
+        }
+
+        const stationIds = stations.map(s => s.id);
+        
+        try {
+            const [speedHistory, directionHistory] = await Promise.all([
+                getReadingsHistory({ stationIds, sensorTypes: ['Rüzgar Hızı'] }),
+                getReadingsHistory({ stationIds, sensorTypes: ['Rüzgar Yönü'] })
+            ]);
+
+            const processed = processWindData(speedHistory, directionHistory);
+            setChartData(processed);
+        } catch (error) {
+            console.error("Error fetching wind history for rose chart:", error);
+            setChartData([]);
+        }
+    };
+    fetchAndProcessData();
+  }, [stations]);
+
+  const hasWindSensors = useMemo(() => {
+      const stationIds = stations.map(s => s.id);
+      const hasSpeed = sensors.some(s => s.type === 'Rüzgar Hızı' && stationIds.includes(s.stationId));
+      const hasDirection = sensors.some(s => s.type === 'Rüzgar Yönü' && stationIds.includes(s.stationId));
+      return hasSpeed && hasDirection;
   }, [stations, sensors]);
+
 
   if (stations.length === 0) {
       return (
@@ -77,10 +96,17 @@ const WindRoseChart: React.FC<WindRoseChartProps> = ({ stations, sensors }) => {
           </div>
       );
   }
-   if (!chartData || chartData.length === 0) {
+   if (!hasWindSensors) {
       return (
           <div className="h-full w-full p-4 flex flex-col items-center justify-center text-muted dark:text-gray-400">
               <p>Seçili istasyon(lar) için Rüzgar Yönü/Hızı sensörü bulunamadı.</p>
+          </div>
+      );
+  }
+  if (chartData.length === 0) {
+      return (
+          <div className="h-full w-full p-4 flex flex-col items-center justify-center text-muted dark:text-gray-400">
+              <p>Rüzgar verileri yükleniyor veya mevcut değil...</p>
           </div>
       );
   }

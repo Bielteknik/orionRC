@@ -1,192 +1,327 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Station, Sensor, Camera, SensorStatus, CameraStatus } from '../types';
-import { getStations, getSensors, getCameras, deleteStation as apiDeleteStation } from '../services/apiService';
-import Card from '../components/common/Card';
-import { AddIcon, SearchIcon, StationIcon, SensorIcon, CameraIcon, DeleteIcon } from '../components/icons/Icons';
-import AddStationDrawer from '../components/AddStationModal'; // Corrected component name based on file
-import Skeleton from '../components/common/Skeleton';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { Station, Sensor, Camera } from '../types.ts';
+import Card from '../components/common/Card.tsx';
+import { AddIcon, SearchIcon, LocationPinIcon, SensorIcon, CameraIcon, SettingsIcon, ExclamationIcon, DeleteIcon } from '../components/icons/Icons.tsx';
+import AddStationDrawer from '../components/AddStationModal.tsx';
+import Skeleton from '../components/common/Skeleton.tsx';
+import { getStations, getUnassignedSensors, getUnassignedCameras, addStation, deleteStation, updateStation } from '../services/apiService.ts';
+import LocationPickerMap from '../components/common/LocationPickerMap.tsx';
 
-const statusStyles: Record<string, { bg: string; text: string; }> = {
-    active: { bg: 'bg-success/10', text: 'text-success' },
-    maintenance: { bg: 'bg-warning/10', text: 'text-warning' },
-    inactive: { bg: 'bg-gray-200', text: 'text-muted' },
-};
-
-const StationCard: React.FC<{ station: Station; onViewDetails: (id: string) => void; onDelete: (id: string) => void; }> = ({ station, onViewDetails, onDelete }) => {
-    const status = statusStyles[station.status] || statusStyles.inactive;
-    return (
-        <Card className="p-0 flex flex-col hover:shadow-md transition-shadow">
-            <div className="p-4">
-                <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-3">
-                        <div className="p-3 bg-accent/10 rounded-lg"><StationIcon className="w-6 h-6 text-accent" /></div>
-                        <div>
-                            <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100">{station.name}</h3>
-                            <p className="text-sm text-muted dark:text-gray-400">{station.location}</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className={`px-3 py-1 text-xs font-semibold rounded-full ${status.bg} ${status.text}`}>{station.status}</span>
-                         <button 
-                            onClick={(e) => { e.stopPropagation(); onDelete(station.id); }} 
-                            className="p-1.5 text-muted dark:text-gray-400 hover:text-danger hover:bg-danger/10 rounded-full"
-                            title="İstasyonu Sil"
-                        >
-                            <DeleteIcon className="w-4 h-4" />
-                        </button>
-                    </div>
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
-                    <div className="flex items-center gap-2">
-                        <SensorIcon className="w-5 h-5 text-muted dark:text-gray-400" />
-                        <span><span className="font-semibold">{station.sensorCount}</span> Sensör</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <CameraIcon className="w-5 h-5 text-muted dark:text-gray-400" />
-                        <span><span className="font-semibold">{station.cameraCount}</span> Kamera</span>
-                    </div>
-                </div>
-            </div>
-            <div className="border-t border-gray-200 dark:border-gray-700 mt-auto p-3 bg-gray-50 dark:bg-gray-700/50 flex justify-between items-center">
-                 <p className="text-xs text-muted dark:text-gray-400">Son Güncelleme: {new Date(station.lastUpdate).toLocaleTimeString('tr-TR')}</p>
-                <button onClick={() => onViewDetails(station.id)} className="font-semibold text-accent text-sm hover:underline">
-                    Detayları Gör →
-                </button>
-            </div>
-        </Card>
-    );
-};
-
-
-const Stations: React.FC<{ onViewDetails: (stationId: string) => void }> = ({ onViewDetails }) => {
-    const [stations, setStations] = useState<Station[]>([]);
-    const [sensors, setSensors] = useState<Sensor[]>([]);
-    const [cameras, setCameras] = useState<Camera[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+// Re-using AddStationDrawer for editing by creating a new component wrapper
+const EditStationDrawer: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (stationData: Station) => void;
+    station: Station | null;
+}> = ({ isOpen, onClose, onSave, station }) => {
+    const [name, setName] = useState('');
+    const [location, setLocation] = useState('');
+    const [coords, setCoords] = useState<{ lat: number; lng: number }>({ lat: 0, lng: 0 });
+    const [status, setStatus] = useState<'active' | 'inactive' | 'maintenance'>('active');
+    const [error, setError] = useState('');
 
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                setIsLoading(true);
-                const [stationsData, sensorsData, camerasData] = await Promise.all([getStations(), getSensors(), getCameras()]);
-                setStations(stationsData);
-                setSensors(sensorsData);
-                setCameras(camerasData);
-            } catch (err) {
-                setError('İstasyon verileri yüklenemedi.');
-                console.error(err);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        fetchData();
-    }, []);
-    
-    const unassignedSensors = useMemo(() => sensors.filter(s => !stations.some(st => st.id === s.stationId)), [sensors, stations]);
-    const unassignedCameras = useMemo(() => cameras.filter(c => !stations.some(st => st.id === c.stationId)), [cameras, stations]);
-
-    const filteredStations = useMemo(() => {
-        return stations.filter(station =>
-            station.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            station.location.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-    }, [stations, searchTerm]);
-    
-    const handleSaveStation = (newStationData: { name: string; location: string; locationCoords: { lat: number; lng: number; }; selectedSensorIds: string[]; selectedCameraIds: string[] }) => {
-        const newStation: Station = {
-            id: `STATION${Date.now()}`,
-            name: newStationData.name,
-            location: newStationData.location,
-            locationCoords: newStationData.locationCoords,
-            status: 'active',
-            sensorCount: newStationData.selectedSensorIds.length,
-            cameraCount: newStationData.selectedCameraIds.length,
-            activeAlerts: 0,
-            lastUpdate: new Date().toISOString(),
-            systemHealth: 100,
-            avgBattery: 95,
-            dataFlow: 12.5,
-            activeSensorCount: newStationData.selectedSensorIds.length,
-            onlineCameraCount: newStationData.selectedCameraIds.length,
-        };
-        setStations(prev => [...prev, newStation]);
-        // Update assigned sensors/cameras
-        setSensors(prev => prev.map(s => newStationData.selectedSensorIds.includes(s.id) ? {...s, stationId: newStation.id} : s));
-        setCameras(prev => prev.map(c => newStationData.selectedCameraIds.includes(c.id) ? {...c, stationId: newStation.id} : c));
-    };
-
-    const handleDeleteStation = async (id: string) => {
-        if (window.confirm('Bu istasyonu silmek istediğinizden emin misiniz? Bu istasyona bağlı tüm sensörler ve kameralar "atanmamış" duruma gelecektir.')) {
-            try {
-                await apiDeleteStation(id);
-                setStations(prev => prev.filter(s => s.id !== id));
-                // Refetch sensors and cameras to update their "unassigned" status
-                const [sensorsData, camerasData] = await Promise.all([getSensors(), getCameras()]);
-                setSensors(sensorsData);
-                setCameras(camerasData);
-            } catch (error) {
-                console.error("İstasyon silinemedi:", error);
-                alert("İstasyon silinirken bir hata oluştu.");
-            }
+        if (station && isOpen) {
+            setName(station.name);
+            setLocation(station.location);
+            setCoords(station.locationCoords);
+            setStatus(station.status);
+            setError('');
         }
-    };
+    }, [station, isOpen]);
+    
+    if (!isOpen || !station) return null;
 
+    const handleSave = () => {
+        if (!name.trim() || !location.trim()) {
+            setError('İstasyon Adı ve Konum Açıklaması alanları zorunludur.');
+            return;
+        }
+        onSave({ ...station, name, location, locationCoords: coords, status });
+        onClose();
+    };
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                <div className="relative w-full md:w-1/3">
-                    <SearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted dark:text-gray-400" />
-                    <input
-                        type="text"
-                        placeholder="İstasyon ara..."
-                        className="w-full bg-primary dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg pl-11 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-accent"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
+     <div className={`fixed inset-0 z-50 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+      <div className="absolute inset-0 bg-black/60" onClick={onClose}></div>
+      <div className={`absolute inset-y-0 right-0 bg-secondary w-full max-w-2xl transform transition-transform duration-300 ease-in-out flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+        <header className="flex items-center justify-between p-4 border-b border-gray-200 bg-primary"><h2 className="text-xl font-bold text-gray-900">İstasyon Düzenle</h2><button onClick={onClose} className="p-2 text-muted hover:bg-gray-100 rounded-full"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button></header>
+        <main className="flex-1 overflow-y-auto p-6 space-y-6">
+          {error && <div className="bg-danger/10 text-danger text-sm font-medium p-3 rounded-md">{error}</div>}
+          <div className="space-y-4 bg-primary p-4 rounded-lg border">
+            <input value={name} onChange={e => setName(e.target.value)} className="w-full input-base" />
+            <input value={location} onChange={e => setLocation(e.target.value)} className="w-full input-base" />
+            <select value={status} onChange={e => setStatus(e.target.value as any)} className="w-full input-base">
+                <option value="active">Aktif</option>
+                <option value="maintenance">Bakımda</option>
+                <option value="inactive">Pasif</option>
+            </select>
+          </div>
+          <div className="space-y-3 bg-primary p-4 rounded-lg border">
+            <h3 className="text-base font-semibold text-gray-800">Konumu Güncelle</h3>
+            <LocationPickerMap onLocationChange={setCoords} initialCenter={station.locationCoords} />
+          </div>
+        </main>
+        <footer className="px-6 py-4 bg-primary border-t flex justify-end gap-3"><button onClick={onClose} className="btn-secondary">İptal</button><button onClick={handleSave} className="btn-primary">Kaydet</button></footer>
+        <style>{`
+            .input-base { background-color: #F9FAFB; border: 1px solid #D1D5DB; border-radius: 0.5rem; padding: 0.625rem 1rem; }
+            .btn-primary { padding: 0.5rem 1rem; background-color: #E95420; color: white; border-radius: 0.5rem; font-weight: 600; }
+            .btn-secondary { padding: 0.5rem 1rem; background-color: #4B5563; color: white; border-radius: 0.5rem; font-weight: 600; }
+        `}</style>
+      </div>
+    </div>
+    );
+};
+
+
+const formatTimeAgo = (isoString: string | undefined): string => {
+    if (!isoString) return 'bilinmiyor';
+    const date = new Date(isoString);
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (seconds < 10) return "az önce";
+    if (seconds < 60) return `${seconds} saniye önce`;
+    
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} dakika önce`;
+
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} saat önce`;
+
+    const days = Math.floor(hours / 24);
+    return `${days} gün önce`;
+};
+
+
+const statusInfo: Record<string, { text: string, className: string }> = {
+    active: { text: 'Aktif', className: 'bg-white/90 text-gray-900' },
+    inactive: { text: 'Pasif', className: 'bg-white/20 backdrop-blur-sm text-white/80' },
+    maintenance: { text: 'Bakımda', className: 'bg-warning/80 text-white' },
+};
+
+const StationCard: React.FC<{ station: Station, onViewDetails: (id: string) => void, onEdit: (station: Station) => void, onDelete: (id: string) => void }> = ({ station, onViewDetails, onEdit, onDelete }) => {
+    const status = statusInfo[station.status];
+
+    const handleDelete = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onDelete(station.id);
+    };
+
+    return (
+        <div className="bg-gradient-to-br from-ubuntu-purple to-ubuntu-orange text-white rounded-xl shadow-lg p-5 flex flex-col space-y-4 h-full">
+            <div className="flex justify-between items-start">
+                <div className="flex items-center space-x-4">
+                    <div className="bg-white/20 backdrop-blur-sm p-3 rounded-lg flex-shrink-0">
+                        <LocationPinIcon className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                        <h3 className="font-bold text-lg text-white shadow-black/50 [text-shadow:0_1px_2px_var(--tw-shadow-color)]">{station.name}</h3>
+                        <p className="text-sm text-white/80 shadow-black/50 [text-shadow:0_1px_2px_var(--tw-shadow-color)]">{station.locationCoords ? `${station.locationCoords.lat.toFixed(2)}° K, ${station.locationCoords.lng.toFixed(2)}° D` : station.location}</p>
+                    </div>
                 </div>
-                <button
-                    onClick={() => setIsDrawerOpen(true)}
-                    className="w-full md:w-auto flex items-center justify-center gap-2 bg-accent text-white px-4 py-2.5 rounded-lg hover:bg-orange-600 transition-colors"
-                >
-                    <AddIcon className="w-5 h-5" />
-                    <span className="font-semibold">Yeni İstasyon Ekle</span>
-                </button>
+                <span className={`px-3 py-1 text-xs font-semibold rounded-full flex-shrink-0 ${status.className}`}>
+                    {status.text}
+                </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white/20 backdrop-blur-sm p-3 rounded-lg flex items-center space-x-3">
+                    <SensorIcon className="w-6 h-6 text-white" />
+                    <div>
+                        <p className="text-xs text-white/80">Sensörler</p>
+                        <p className="font-bold text-white text-lg">{station.sensorCount}</p>
+                    </div>
+                </div>
+                <div className="bg-white/20 backdrop-blur-sm p-3 rounded-lg flex items-center space-x-3">
+                    <CameraIcon className="w-6 h-6 text-white" />
+                    <div>
+                        <p className="text-xs text-white/80">Kameralar</p>
+                        <p className="font-bold text-white text-lg">{station.cameraCount}</p>
+                    </div>
+                </div>
             </div>
             
-            {isLoading ? (
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-48" />)}
-                 </div>
-            ) : error ? (
-                <Card><p className="text-center text-danger">{error}</p></Card>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredStations.map(station => (
-                        <StationCard key={station.id} station={station} onViewDetails={onViewDetails} onDelete={handleDeleteStation} />
-                    ))}
+            {station.activeAlerts > 0 && (
+                <div className="bg-red-500/50 border border-red-400/50 p-3 rounded-lg flex items-center space-x-2">
+                    <ExclamationIcon className="w-5 h-5 text-white" />
+                    <span className="text-sm font-medium text-white">{`${station.activeAlerts} aktif uyarı`}</span>
                 </div>
             )}
-             { !isLoading && filteredStations.length === 0 && (
-                <Card>
-                    <p className="text-center text-muted dark:text-gray-400 py-8">
-                        {stations.length > 0 ? 'Aramanızla eşleşen istasyon bulunamadı.' : 'Henüz istasyon eklenmemiş.'}
-                    </p>
-                </Card>
-            )}
 
-            <AddStationDrawer 
-                isOpen={isDrawerOpen}
-                onClose={() => setIsDrawerOpen(false)}
-                onSave={handleSaveStation}
-                unassignedSensors={unassignedSensors}
-                unassignedCameras={unassignedCameras}
-            />
+            <div className="flex-grow"></div>
+
+            <div className="flex justify-between items-center text-xs text-white/80 pt-2">
+                <span>Son güncelleme</span>
+                <span>{formatTimeAgo(station.lastUpdate)}</span>
+            </div>
+
+            <hr className="border-white/20" />
+
+            <div className="flex justify-between items-center space-x-2">
+                <button onClick={() => onViewDetails(station.id)} className="w-full text-center bg-white/20 backdrop-blur-sm hover:bg-white/30 text-white font-semibold py-2.5 px-4 rounded-lg transition-colors">
+                    Detaylar
+                </button>
+                 <button onClick={() => onEdit(station)} className="p-2.5 bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-lg">
+                    <SettingsIcon className="w-5 h-5 text-white" />
+                </button>
+                <button onClick={handleDelete} className="p-2.5 bg-white/20 backdrop-blur-sm hover:bg-red-500/50 rounded-lg">
+                    <DeleteIcon className="w-5 h-5 text-white" />
+                </button>
+            </div>
         </div>
     );
+};
+
+
+interface StationsProps {
+  onViewDetails: (stationId: string) => void;
+}
+
+const Stations: React.FC<StationsProps> = ({ onViewDetails }) => {
+  const [stations, setStations] = useState<Station[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isAddDrawerOpen, setIsAddDrawerOpen] = useState(false);
+  const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
+  const [editingStation, setEditingStation] = useState<Station | null>(null);
+  const [unassignedSensors, setUnassignedSensors] = useState<Sensor[]>([]);
+  const [unassignedCameras, setUnassignedCameras] = useState<Camera[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    try {
+        setIsLoading(true);
+        setError(null);
+        const [stationsData, uSensors, uCameras] = await Promise.all([
+            getStations(),
+            getUnassignedSensors(),
+            getUnassignedCameras()
+        ]);
+        setStations(stationsData);
+        setUnassignedSensors(uSensors);
+        setUnassignedCameras(uCameras);
+    } catch (err) {
+        setError('İstasyon verileri yüklenirken bir hata oluştu.');
+        console.error(err);
+    } finally {
+        setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const filteredStations = useMemo(() => {
+    return stations.filter(station => 
+      station.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      station.location.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [stations, searchTerm]);
+  
+  const handleSaveStation = async (newStationData: { name: string; location: string; locationCoords: { lat: number; lng: number; }; selectedSensorIds: string[]; selectedCameraIds: string[] }) => {
+    try {
+        await addStation(newStationData);
+        fetchData(); // Refresh all data
+    } catch(error) {
+        console.error("Failed to save station:", error);
+        alert("İstasyon kaydedilirken bir hata oluştu.");
+    }
+  };
+
+  const handleUpdateStation = async (stationData: Station) => {
+    try {
+        await updateStation(stationData.id, stationData);
+        fetchData();
+    } catch (error) {
+        console.error("Failed to update station:", error);
+        alert("İstasyon güncellenirken bir hata oluştu.");
+    }
+  };
+
+  const handleDeleteStation = async (id: string) => {
+    if (window.confirm('Bu istasyonu silmek istediğinizden emin misiniz? Bağlı sensör ve kameralar boşa çıkacaktır.')) {
+        try {
+            await deleteStation(id);
+            fetchData();
+        } catch (error) {
+            console.error("Failed to delete station:", error);
+            alert("İstasyon silinirken bir hata oluştu.");
+        }
+    }
+  };
+  
+  const handleOpenEdit = (station: Station) => {
+    setEditingStation(station);
+    setIsEditDrawerOpen(true);
+  };
+
+
+  return (
+    <div className="space-y-6">
+       <Card>
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="relative w-full md:w-1/3">
+            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted" />
+            <input 
+              type="text" 
+              placeholder="İstasyon ara..." 
+              className="w-full bg-secondary border border-gray-300 rounded-md pl-10 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <button 
+            onClick={() => setIsAddDrawerOpen(true)}
+            className="flex items-center justify-center gap-2 bg-accent text-white px-4 py-2.5 rounded-lg hover:bg-orange-600 transition-colors w-full md:w-auto">
+            <AddIcon className="w-5 h-5"/>
+            <span className="font-semibold">Yeni İstasyon Ekle</span>
+          </button>
+        </div>
+      </Card>
+      
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[312px] rounded-xl" />)}
+        </div>
+      ) : error ? (
+        <Card>
+            <div className="text-center py-8 text-danger">
+                <ExclamationIcon className="w-12 h-12 mx-auto mb-2"/>
+                <p className="font-semibold">{error}</p>
+            </div>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {filteredStations.map(station => (
+                <StationCard key={station.id} station={station} onViewDetails={onViewDetails} onEdit={handleOpenEdit} onDelete={handleDeleteStation}/>
+            ))}
+        </div>
+      )}
+
+       {filteredStations.length === 0 && !isLoading && !error && (
+            <Card>
+                <div className="text-center py-8 text-muted">
+                    <p>Arama kriterlerinize uygun istasyon bulunamadı.</p>
+                </div>
+            </Card>
+        )}
+        <AddStationDrawer 
+            isOpen={isAddDrawerOpen} 
+            onClose={() => setIsAddDrawerOpen(false)} 
+            onSave={handleSaveStation} 
+            unassignedSensors={unassignedSensors}
+            unassignedCameras={unassignedCameras}
+        />
+        <EditStationDrawer
+            isOpen={isEditDrawerOpen}
+            onClose={() => setIsEditDrawerOpen(false)}
+            onSave={handleUpdateStation}
+            station={editingStation}
+        />
+    </div>
+  );
 };
 
 export default Stations;

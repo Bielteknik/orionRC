@@ -1,6 +1,2 @@
-// This file is intentionally left empty.
-// All data is now managed through the SQLite database via dataService.ts.
-
-export const MOCK_STATIONS: any[] = [];
-export const MOCK_SENSORS: any[] = [];
-export const MOCK_CAMERAS: any[] = [];
+// This file is deprecated and no longer in use.
+// The application now starts with a completely empty database.

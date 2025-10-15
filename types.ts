@@ -75,6 +75,11 @@ export interface Sensor {
   unit: string;
   battery: number;
   lastUpdate: string;
+  // Advanced config
+  interface: string;
+  config: any; // JSON object for interface config
+  parser_config: any; // JSON object for parser config
+  read_frequency: number;
 }
 
 export enum CameraStatus {

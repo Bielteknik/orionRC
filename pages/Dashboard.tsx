@@ -9,7 +9,7 @@ import Skeleton from '../components/common/Skeleton.tsx';
 import ChartSettingsModal, { ChartStyle } from '../components/ChartSettingsModal.tsx';
 import { useTheme } from '../components/ThemeContext.tsx';
 import { TemperatureIcon, HumidityIcon, WindSockIcon, GaugeIcon, TrendUpIcon, TrendDownIcon, TrendStableIcon, PaletteIcon, ChartBarIcon, MapIcon, AddIcon, DeleteIcon, CalendarIcon, ExclamationIcon } from '../components/icons/Icons.tsx';
-import { getStations, getSensors } from '../services/apiService.ts';
+import { getStations, getSensors, getReadingsHistory } from '../services/apiService.ts';
 import MultiSelectDropdown from '../components/common/MultiSelectDropdown.tsx';
 
 
@@ -121,63 +121,48 @@ const SensorChartWidget: React.FC<{
   styles: Record<string, ChartStyle>;
 }> = ({ sensorType, stations, dateRange, styles }) => {
     const [chartData, setChartData] = useState<any[]>([]);
+    const [isChartLoading, setIsChartLoading] = useState(true);
     const { theme } = useTheme();
     const tickColor = theme === 'dark' ? '#9CA3AF' : '#6B7281';
     const gridColor = theme === 'dark' ? '#374151' : '#E5E7EB';
 
     useEffect(() => {
-        const startDate = new Date(dateRange.start);
-        const endDate = new Date(dateRange.end);
-        
-        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime()) || endDate < startDate) {
-            setChartData([]);
-            return;
-        }
-
-        const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        let numPoints;
-        let timeLabel: (i: number) => string;
-
-        if (diffDays <= 2) {
-             numPoints = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60))) + 1; // number of hours
-             timeLabel = (i: number) => {
-                const d = new Date(startDate);
-                d.setHours(d.getHours() + i);
-                if (i % 2 === 0) return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-                return '';
-            };
-        } else {
-            numPoints = diffDays + 1;
-            timeLabel = (i: number) => {
-                const d = new Date(startDate);
-                d.setDate(d.getDate() + i);
-                const step = Math.ceil(numPoints / 10);
-                if (i % step === 0 || i === numPoints - 1) {
-                     return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
-                }
-                return '';
-            };
-        }
-        
-        numPoints = Math.min(numPoints, 100); // Cap points for performance
-
-        const baseValues: Record<string, number> = { 'Sıcaklık': 22, 'Nem': 65, 'Rüzgar Hızı': 15, 'Basınç': 1012, 'Yağış': 2, 'UV İndeksi': 5 };
-        const base = baseValues[sensorType] || 10;
-        
-        const generatedData = Array.from({ length: numPoints }, (_, i) => {
-            const dataPoint: { [key: string]: any } = { time: timeLabel(i) };
-            if (stations.length > 0) {
-                 stations.forEach((station) => {
-                    const stationOffset = (station.id.charCodeAt(station.id.length - 1) % 5) * (base * 0.05);
-                    dataPoint[station.name] = parseFloat((base + stationOffset + (Math.random() - 0.5) * base * 0.2).toFixed(1));
-                });
+        const fetchChartData = async () => {
+            if (stations.length === 0) {
+                setChartData([]);
+                return;
             }
-            return dataPoint;
-        });
+            setIsChartLoading(true);
+            try {
+                const history = await getReadingsHistory({
+                    stationIds: stations.map(s => s.id),
+                    sensorTypes: [sensorType],
+                    start: new Date(dateRange.start).toISOString(),
+                    end: new Date(dateRange.end).toISOString()
+                });
 
-        setChartData(generatedData);
+                // Group by timestamp
+                const groupedByTime: { [key: string]: any } = {};
+                history.forEach(reading => {
+                    const time = new Date(reading.timestamp).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
+                    if (!groupedByTime[time]) {
+                        groupedByTime[time] = { time };
+                    }
+                    groupedByTime[time][reading.stationName] = reading.value;
+                });
+                
+                const finalData = Object.values(groupedByTime).sort((a,b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+
+                setChartData(finalData);
+            } catch (error) {
+                console.error(`Error fetching history for ${sensorType}:`, error);
+                setChartData([]);
+            } finally {
+                setIsChartLoading(false);
+            }
+        };
+
+        fetchChartData();
     }, [sensorType, stations, dateRange]);
 
     return (
@@ -185,18 +170,19 @@ const SensorChartWidget: React.FC<{
             <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">{sensorType} Trendi</h3>
              {stations.length > 0 ? (
                 <div className="flex-grow h-64">
+                    {isChartLoading ? <Skeleton className="w-full h-full"/> : 
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                            <XAxis dataKey="time" stroke={tickColor} fontSize={12} tick={{ dy: 5 }}/>
-                            <YAxis stroke={tickColor} fontSize={12} unit={unitMap[sensorType]} />
+                            <XAxis dataKey="time" stroke={tickColor} fontSize={10} tick={{ dy: 5 }} interval="preserveStartEnd" />
+                            <YAxis stroke={tickColor} fontSize={12} unit={unitMap[sensorType]} domain={['dataMin - 1', 'dataMax + 1']}/>
                             <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF', border: `1px solid ${gridColor}` }} />
                             <Legend wrapperStyle={{fontSize: "12px"}}/>
                             {stations.map((station, index) => (
                                 <Line key={station.id} type={styles[sensorType]?.type || 'monotone'} dataKey={station.name} name={station.name} stroke={DEFAULT_COLORS[index % DEFAULT_COLORS.length]} strokeWidth={2} dot={false} />
                             ))}
                         </LineChart>
-                    </ResponsiveContainer>
+                    </ResponsiveContainer>}
                 </div>
              ) : (
                 <div className="flex-grow flex items-center justify-center h-64 text-muted dark:text-gray-400">
@@ -280,33 +266,23 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
                 const [stationsData, sensorsData] = await Promise.all([getStations(), getSensors()]);
                 setStations(stationsData);
                 setSensors(sensorsData);
-                // Select all stations by default on first load
                 setSelectedStationIds(stationsData.map(s => s.id));
             } catch (err) {
                 setError('Pano verileri yüklenirken bir hata oluştu.');
                 console.error(err);
             } finally {
-                // Load widgets after data fetching
                 try {
                     const savedWidgets = localStorage.getItem('dashboardWidgets');
-                    if (savedWidgets) {
-                        setWidgets(JSON.parse(savedWidgets));
-                    } else {
-                        setWidgets(DEFAULT_WIDGETS);
-                    }
-                } catch (error) {
-                    setWidgets(DEFAULT_WIDGETS);
-                }
+                    setWidgets(savedWidgets ? JSON.parse(savedWidgets) : DEFAULT_WIDGETS);
+                } catch { setWidgets(DEFAULT_WIDGETS); }
                 setIsLoading(false);
             }
         };
 
         const fetchSensorData = async () => {
             try {
-                const sensorsData = await getSensors();
+                const [sensorsData, stationsData] = await Promise.all([getSensors(), getStations()]);
                 setSensors(sensorsData);
-                 // Also refetch stations to get updated lastUpdate times
-                const stationsData = await getStations();
                 setStations(stationsData);
             } catch (err) {
                 console.warn("Sensör verileri güncellenemedi:", err);
@@ -314,42 +290,21 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
         }
 
         fetchInitialData();
-
-        const intervalId = setInterval(fetchSensorData, 5000); // Poll every 5 seconds
-
-        return () => clearInterval(intervalId); // Cleanup on unmount
+        const intervalId = setInterval(fetchSensorData, 5000);
+        return () => clearInterval(intervalId);
     }, []);
 
-    // Automatically update selectable sensor types based on selected stations
     useEffect(() => {
-        if (selectedStationIds.length === 0) {
-            setSelectedSensorTypes([]);
-            return;
-        }
-
+        if (selectedStationIds.length === 0) { setSelectedSensorTypes([]); return; }
         if (selectedStationIds.length === 1) {
-            const stationId = selectedStationIds[0];
-            const stationSensors = sensors.filter(s => s.stationId === stationId);
-            const availableTypes = [...new Set(stationSensors.map(s => s.type))];
-            setSelectedSensorTypes(availableTypes);
+            const stationSensors = sensors.filter(s => s.stationId === selectedStationIds[0]);
+            setSelectedSensorTypes([...new Set(stationSensors.map(s => s.type))]);
             return;
         }
-
-        const sensorTypesByStation = selectedStationIds.map(id => 
-            new Set(sensors.filter(s => s.stationId === id).map(s => s.type))
-        );
-        
-        if(sensorTypesByStation.length === 0) {
-            setSelectedSensorTypes([]);
-            return;
-        }
-
-        const commonTypes = sensorTypesByStation.reduce((common, currentSet) => {
-            return new Set([...common].filter(type => currentSet.has(type)));
-        });
-
+        const sensorTypesByStation = selectedStationIds.map(id => new Set(sensors.filter(s => s.stationId === id).map(s => s.type)));
+        if(sensorTypesByStation.length === 0) { setSelectedSensorTypes([]); return; }
+        const commonTypes = sensorTypesByStation.reduce((common, currentSet) => new Set([...common].filter(type => currentSet.has(type))));
         setSelectedSensorTypes(Array.from(commonTypes));
-
     }, [selectedStationIds, sensors]);
 
     const filteredWidgets = useMemo(() => {
@@ -364,19 +319,12 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
         });
     }, [widgets, selectedSensorTypes]);
 
-    // Save layout to localStorage
     useEffect(() => {
-        if (!isLoading) {
-             localStorage.setItem('dashboardWidgets', JSON.stringify(widgets));
-        }
+        if (!isLoading) { localStorage.setItem('dashboardWidgets', JSON.stringify(widgets)); }
     }, [widgets, isLoading]);
 
     const handleAddWidget = (widget: Omit<WidgetConfig, 'id' | 'gridArea'>) => {
-        const newWidget: WidgetConfig = {
-            ...widget,
-            id: `${widget.type}-${Date.now()}`,
-            gridArea: 'auto / span 2', // Default size
-        };
+        const newWidget: WidgetConfig = { ...widget, id: `${widget.type}-${Date.now()}`, gridArea: 'auto / span 2' };
         setWidgets(prev => [...prev, newWidget]);
     };
 
@@ -393,12 +341,10 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
         e.preventDefault();
         const sourceId = draggedWidgetId.current;
         if (!sourceId || sourceId === targetId) return;
-
         setWidgets(prev => {
             const sourceIndex = prev.findIndex(w => w.id === sourceId);
             const targetIndex = prev.findIndex(w => w.id === targetId);
             if (sourceIndex === -1 || targetIndex === -1) return prev;
-            
             const reordered = [...prev];
             const [removed] = reordered.splice(sourceIndex, 1);
             reordered.splice(targetIndex, 0, removed);

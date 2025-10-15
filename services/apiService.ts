@@ -1,81 +1,67 @@
-import { Station, Sensor, Camera, Notification } from '../types';
+import axios from 'axios';
+import { Station, Sensor, Camera, AlertRule, Report, ReportSchedule, Notification } from '../types.ts';
 
-// Use a relative path for API calls, assuming the backend is served on the same host
-// or a proxy is set up in development.
 const API_BASE_URL = '/api';
 
-/**
- * A generic fetcher function to handle API requests and errors.
- * @param url The API endpoint to fetch.
- * @param options Optional fetch options.
- * @returns A promise that resolves to the JSON response.
- */
-async function fetcher<T>(endpoint: string, options?: RequestInit): Promise<T> {
-    try {
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
-        if (!response.ok) {
-            const errorInfo = await response.json().catch(() => ({ message: 'Bilinmeyen bir sunucu hatası oluştu.' }));
-            throw new Error(errorInfo.message || `HTTP error! status: ${response.status}`);
-        }
-        // Handle 204 No Content for DELETE requests
-        if (response.status === 204) {
-            return null as T;
-        }
-        return response.json();
-    } catch (error) {
-        console.error(`API service error fetching ${endpoint}:`, error);
-        // Re-throw the error to be handled by the calling component
-        throw error;
+const apiClient = axios.create({
+    baseURL: API_BASE_URL,
+    headers: {
+        'Content-Type': 'application/json',
     }
+});
+
+// Generic error handler
+const handleError = (error: any, context: string): Promise<never> => {
+    console.error(`Error ${context}:`, error);
+    const message = error.response?.data?.error || `Veri alınamadı: ${context}`;
+    throw new Error(message);
+};
+
+// Stations
+export const getStations = (): Promise<Station[]> => apiClient.get('/stations').then(res => res.data).catch(e => handleError(e, 'fetching stations'));
+export const addStation = (data: any): Promise<Station> => apiClient.post('/stations', data).then(res => res.data).catch(e => handleError(e, 'adding station'));
+export const updateStation = (id: string, data: any): Promise<Station> => apiClient.put(`/stations/${id}`, data).then(res => res.data).catch(e => handleError(e, 'updating station'));
+export const deleteStation = (id: string): Promise<void> => apiClient.delete(`/stations/${id}`).then(res => res.data).catch(e => handleError(e, 'deleting station'));
+
+// Sensors
+export const getSensors = (): Promise<Sensor[]> => apiClient.get('/sensors').then(res => res.data).catch(e => handleError(e, 'fetching sensors'));
+export const getUnassignedSensors = (): Promise<Sensor[]> => apiClient.get('/sensors?unassigned=true').then(res => res.data).catch(e => handleError(e, 'fetching unassigned sensors'));
+export const addSensor = (data: any): Promise<Sensor> => apiClient.post('/sensors', data).then(res => res.data).catch(e => handleError(e, 'adding sensor'));
+export const updateSensor = (id: string, data: any): Promise<Sensor> => apiClient.put(`/sensors/${id}`, data).then(res => res.data).catch(e => handleError(e, 'updating sensor'));
+export const deleteSensor = (id: string): Promise<void> => apiClient.delete(`/sensors/${id}`).then(res => res.data).catch(e => handleError(e, 'deleting sensor'));
+
+// Cameras
+export const getCameras = (): Promise<Camera[]> => apiClient.get('/cameras').then(res => res.data).catch(e => handleError(e, 'fetching cameras'));
+export const getUnassignedCameras = (): Promise<Camera[]> => apiClient.get('/cameras?unassigned=true').then(res => res.data).catch(e => handleError(e, 'fetching unassigned cameras'));
+export const addCamera = (data: any): Promise<Camera> => apiClient.post('/cameras', data).then(res => res.data).catch(e => handleError(e, 'adding camera'));
+export const deleteCamera = (id: string): Promise<void> => apiClient.delete(`/cameras/${id}`).then(res => res.data).catch(e => handleError(e, 'deleting camera'));
+
+
+// Readings
+export const getReadings = (): Promise<any[]> => apiClient.get('/readings').then(res => res.data).catch(e => handleError(e, 'fetching readings'));
+export const getReadingsHistory = (params: { stationIds: string[], sensorTypes: string[], start?: string, end?: string }): Promise<any[]> => {
+    return apiClient.get('/readings/history', {
+        params: {
+            stationIds: params.stationIds.join(','),
+            sensorTypes: params.sensorTypes.join(','),
+            start: params.start,
+            end: params.end,
+        }
+    }).then(res => res.data).catch(e => handleError(e, 'fetching readings history'));
 }
 
-/**
- * Fetches all stations from the backend.
- */
-export const getStations = (): Promise<Station[]> => {
-    return fetcher<Station[]>('/stations');
-};
+// Definitions
+export const getDefinitions = (): Promise<{ stationTypes: any[], sensorTypes: any[], cameraTypes: any[] }> => apiClient.get('/definitions').then(res => res.data).catch(e => handleError(e, 'fetching definitions'));
+export const addDefinition = (type: string, data: { name: string }): Promise<any> => apiClient.post(`/definitions/${type}`, data).then(res => res.data).catch(e => handleError(e, `adding ${type}`));
+export const updateDefinition = (type: string, id: number, data: { name: string }): Promise<any> => apiClient.put(`/definitions/${type}/${id}`, data).then(res => res.data).catch(e => handleError(e, `updating ${type}`));
+export const deleteDefinition = (type: string, id: number): Promise<void> => apiClient.delete(`/definitions/${type}/${id}`).then(res => res.data).catch(e => handleError(e, `deleting ${type}`));
+export const getAlertRules = (): Promise<AlertRule[]> => apiClient.get('/alert-rules').then(res => res.data).catch(e => handleError(e, 'fetching alert rules'));
 
-/**
- * Deletes a station by its ID.
- */
-export const deleteStation = (id: string): Promise<void> => {
-    return fetcher<void>(`/stations/${id}`, { method: 'DELETE' });
-};
+// Reports
+export const getReports = (): Promise<Report[]> => apiClient.get('/reports').then(res => res.data).catch(e => handleError(e, 'fetching reports'));
+export const getReportSchedules = (): Promise<ReportSchedule[]> => apiClient.get('/report-schedules').then(res => res.data).catch(e => handleError(e, 'fetching report schedules'));
 
-
-/**
- * Fetches all sensors from the backend.
- */
-export const getSensors = (): Promise<Sensor[]> => {
-    return fetcher<Sensor[]>('/sensors');
-};
-
-/**
- * Deletes a sensor by its ID.
- */
-export const deleteSensor = (id: string): Promise<void> => {
-    return fetcher<void>(`/sensors/${id}`, { method: 'DELETE' });
-};
-
-/**
- * Fetches all cameras from the backend.
- */
-export const getCameras = (): Promise<Camera[]> => {
-    return fetcher<Camera[]>('/cameras');
-};
-
-/**
- * Deletes a camera by its ID.
- */
-export const deleteCamera = (id: string): Promise<void> => {
-    return fetcher<void>(`/cameras/${id}`, { method: 'DELETE' });
-};
-
-
-/**
- * Fetches all notifications from the backend.
- */
-export const getNotifications = (): Promise<Notification[]> => {
-    return fetcher<Notification[]>('/notifications');
-};
+// Notifications
+export const getNotifications = (): Promise<Notification[]> => apiClient.get('/notifications').then(res => res.data).catch(e => handleError(e, 'fetching notifications'));
+export const markAllNotificationsAsRead = (): Promise<void> => apiClient.post('/notifications/mark-all-read').then(res => res.data).catch(e => handleError(e, 'marking all notifications as read'));
+export const clearAllNotifications = (): Promise<void> => apiClient.delete('/notifications/clear-all').then(res => res.data).catch(e => handleError(e, 'clearing all notifications'));

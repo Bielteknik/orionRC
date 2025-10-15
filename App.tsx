@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Page, Notification } from './types.ts';
 import Sidebar from './components/layout/Sidebar.tsx';
 import Header from './components/layout/Header.tsx';
@@ -13,8 +13,7 @@ import CameraDetail from './pages/CameraDetail.tsx';
 import { ThemeProvider } from './components/ThemeContext.tsx';
 import Notifications from './pages/Notifications.tsx';
 import GeminiAssistant from './components/GeminiAssistant.tsx';
-import { getNotifications } from './services/apiService.ts';
-
+import { getNotifications, markAllNotificationsAsRead } from './services/apiService.ts';
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.Dashboard);
@@ -22,25 +21,28 @@ const App: React.FC = () => {
   const [viewingCameraId, setViewingCameraId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  useEffect(() => {
-    // Backend'den başlangıç bildirimlerini çek
-    const fetchNotifications = async () => {
-      try {
-        const fetchedNotifications = await getNotifications();
-        setNotifications(fetchedNotifications);
-      } catch (error) {
-        console.error("Bildirimler çekilemedi:", error);
-        // Burada bir hata bildirimi gösterilebilir
-      }
-    };
-
-    fetchNotifications();
+  const fetchNotifications = useCallback(async () => {
+    try {
+        const freshNotifications = await getNotifications();
+        setNotifications(freshNotifications);
+    } catch (error) {
+        console.error("Failed to fetch notifications:", error);
+    }
   }, []);
 
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 20000); // Poll for new notifications every 20 seconds
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
 
-  const handleMarkAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-    // TODO: Backend'e de bu bilgiyi gönder
+  const handleMarkAllAsRead = async () => {
+    try {
+        await markAllNotificationsAsRead();
+        fetchNotifications(); // Refresh notifications after marking
+    } catch (error) {
+        console.error("Failed to mark all notifications as read:", error);
+    }
   };
 
   const handleViewAllNotifications = () => {
@@ -79,7 +81,7 @@ const App: React.FC = () => {
       case Page.Reports:
         return <Reports />;
       case Page.Notifications:
-        return <Notifications notifications={notifications} setNotifications={setNotifications} />;
+        return <Notifications notifications={notifications} setNotifications={setNotifications} onRefresh={fetchNotifications} />;
       default:
         return <Dashboard onViewStationDetails={handleViewStationDetails} />;
     }

@@ -5,16 +5,16 @@ import { SerialPortIcon, CpuChipIcon, HttpIcon, RegexIcon, JsonIcon, CsvIcon } f
 interface AddSensorDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (sensorData: Partial<Sensor> & { id?: string; isActive?: boolean }) => void;
+  onSave: (sensorData: any) => void;
   stations: Station[];
+  sensorTypes: string[];
   sensorToEdit?: Sensor | null;
 }
 
 const interfaceIcons: { [key: string]: React.ReactNode } = {
-    'Seri Port': <SerialPortIcon className="w-5 h-5 text-muted" />,
-    'I2C': <CpuChipIcon className="w-5 h-5 text-muted" />,
-    'SPI': <CpuChipIcon className="w-5 h-5 text-muted" />,
-    'HTTP': <HttpIcon className="w-5 h-5 text-muted" />,
+    'serial': <SerialPortIcon className="w-5 h-5 text-muted" />,
+    'i2c': <CpuChipIcon className="w-5 h-5 text-muted" />,
+    'http': <HttpIcon className="w-5 h-5 text-muted" />,
 };
 
 const parserIcons: { [key: string]: React.ReactNode } = {
@@ -23,17 +23,14 @@ const parserIcons: { [key: string]: React.ReactNode } = {
     'CSV': <CsvIcon className="w-5 h-5 text-muted" />,
 };
 
-const SENSOR_TYPES = ['Sıcaklık', 'Nem', 'Rüzgar Hızı', 'Basınç', 'Yağış', 'UV İndeksi', 'Rüzgar Yönü'];
-
-
-const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSave, stations, sensorToEdit }) => {
+const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSave, stations, sensorTypes, sensorToEdit }) => {
     const [name, setName] = useState('');
     const [stationId, setStationId] = useState('');
-    const [interfaceType, setInterfaceType] = useState('Seri Port');
-    const [parserType, setParserType] = useState('Regex');
-    const [interfaceConfig, setInterfaceConfig] = useState('{"address": "0x44"}');
-    const [parserConfig, setParserConfig] = useState('{"rule": "T:(\\\\d+)", "output_mapping": {"group_1": "temperature"}}');
-    const [sensorType, setSensorType] = useState(SENSOR_TYPES[0]);
+    const [interfaceType, setInterfaceType] = useState('serial');
+    const [parserType, setParserType] = useState('Basit (Değerin kendisi)');
+    const [interfaceConfig, setInterfaceConfig] = useState('{}');
+    const [parserConfig, setParserConfig] = useState('{}');
+    const [sensorType, setSensorType] = useState('');
     const [readFrequency, setReadFrequency] = useState('60');
     const [isActive, setIsActive] = useState(true);
     const [error, setError] = useState('');
@@ -50,15 +47,15 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
         window.addEventListener('keydown', handleEsc);
         return () => window.removeEventListener('keydown', handleEsc);
     }, [onClose]);
-
+    
     const resetState = () => {
         setName('');
         setStationId('');
-        setInterfaceType('Seri Port');
-        setParserType('Regex');
-        setInterfaceConfig('{"address": "0x44"}');
-        setParserConfig('{"rule": "T:(\\\\d+)", "output_mapping": {"group_1": "temperature"}}');
-        setSensorType(SENSOR_TYPES[0]);
+        setInterfaceType('serial');
+        setParserType('Basit (Değerin kendisi)');
+        setInterfaceConfig('{\n  "port": "/dev/ttyMESAFE",\n  "baudrate": 9600\n}');
+        setParserConfig('{\n  "driver": "dfrobot_ult"\n}');
+        setSensorType(sensorTypes[0] || '');
         setReadFrequency('60');
         setIsActive(true);
         setError('');
@@ -73,17 +70,15 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
                 setStationId(sensorToEdit.stationId);
                 setSensorType(sensorToEdit.type);
                 setIsActive(sensorToEdit.status === SensorStatus.Active);
-                // In a real app, these would be populated from the sensor object too
-                // setInterfaceType(sensorToEdit.interfaceType);
-                // setParserType(sensorToEdit.parserType);
-                // setInterfaceConfig(sensorToEdit.interfaceConfig);
-                // setParserConfig(sensorToEdit.parserConfig);
-                // setReadFrequency(String(sensorToEdit.readFrequency));
+                setInterfaceType(sensorToEdit.interface || 'serial');
+                setInterfaceConfig(JSON.stringify(sensorToEdit.config, null, 2) || '{}');
+                setParserConfig(JSON.stringify(sensorToEdit.parser_config, null, 2) || '{}');
+                setReadFrequency(String(sensorToEdit.read_frequency || 60));
             } else {
                 resetState();
             }
         }
-    }, [isOpen, sensorToEdit]);
+    }, [isOpen, sensorToEdit, sensorTypes]);
 
 
     useEffect(() => {
@@ -122,14 +117,13 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
             id: sensorToEdit?.id,
             name,
             stationId,
-            // interfaceType,
-            // parserType,
-            // interfaceConfig,
-            // parserConfig,
+            interfaceType,
+            parserConfig,
+            interfaceConfig,
             type: sensorType,
-            // readFrequency: parseInt(readFrequency, 10) || 60,
+            readFrequency: parseInt(readFrequency, 10) || 60,
             status: isActive ? SensorStatus.Active : SensorStatus.Inactive,
-            isActive, // Keep this for easier mapping in parent
+            isActive,
         });
         handleClose();
     };
@@ -170,20 +164,17 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
                                         {interfaceIcons[interfaceType]}
                                     </div>
                                     <select id="interface-type" value={interfaceType} onChange={e => setInterfaceType(e.target.value)} className="w-full appearance-none bg-secondary border border-gray-300 rounded-md pl-10 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent">
-                                        <option>Seri Port</option>
-                                        <option>I2C</option>
-                                        <option>SPI</option>
-                                        <option>HTTP</option>
+                                        <option value="serial">Seri Port</option>
+                                        <option value="i2c">I2C</option>
+                                        <option value="http">HTTP</option>
                                     </select>
                                 </div>
                             </div>
                             <div>
                                 <label htmlFor="parser-type" className="block text-sm font-medium text-gray-700 mb-1.5">Ayrıştırıcı Tipi</label>
                                  <div className="relative">
-                                      <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                        {parserIcons[parserType]}
-                                    </div>
-                                    <select id="parser-type" value={parserType} onChange={e => setParserType(e.target.value)} className="w-full appearance-none bg-secondary border border-gray-300 rounded-md pl-10 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent">
+                                    <select id="parser-type" value={parserType} onChange={e => setParserType(e.target.value)} className="w-full appearance-none bg-secondary border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent">
+                                        <option>Basit (Değerin kendisi)</option>
                                         <option>Regex</option>
                                         <option>JSON</option>
                                         <option>CSV</option>
@@ -194,19 +185,19 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
 
                         <div>
                             <label htmlFor="interface-config" className="block text-sm font-medium text-gray-700 mb-1.5">Arayüz Yapılandırması (JSON)</label>
-                            <textarea id="interface-config" value={interfaceConfig} onChange={e => setInterfaceConfig(e.target.value)} rows={3} className={`w-full bg-secondary border rounded-md px-3 py-2 focus:outline-none focus:ring-2 font-mono text-sm ${interfaceConfigError ? 'border-danger focus:ring-danger' : 'border-gray-300 focus:ring-accent'}`}></textarea>
+                            <textarea id="interface-config" value={interfaceConfig} onChange={e => setInterfaceConfig(e.target.value)} rows={4} className={`w-full bg-secondary border rounded-md px-3 py-2 focus:outline-none focus:ring-2 font-mono text-sm ${interfaceConfigError ? 'border-danger focus:ring-danger' : 'border-gray-300 focus:ring-accent'}`}></textarea>
                             {interfaceConfigError && <p className="text-xs text-danger mt-1.5">{interfaceConfigError}</p>}
                         </div>
                         <div>
                             <label htmlFor="parser-config" className="block text-sm font-medium text-gray-700 mb-1.5">Ayrıştırıcı Yapılandırması (JSON)</label>
-                            <textarea id="parser-config" value={parserConfig} onChange={e => setParserConfig(e.target.value)} rows={3} className={`w-full bg-secondary border rounded-md px-3 py-2 focus:outline-none focus:ring-2 font-mono text-sm ${parserConfigError ? 'border-danger focus:ring-danger' : 'border-gray-300 focus:ring-accent'}`}></textarea>
+                            <textarea id="parser-config" value={parserConfig} onChange={e => setParserConfig(e.target.value)} rows={4} className={`w-full bg-secondary border rounded-md px-3 py-2 focus:outline-none focus:ring-2 font-mono text-sm ${parserConfigError ? 'border-danger focus:ring-danger' : 'border-gray-300 focus:ring-accent'}`}></textarea>
                             {parserConfigError && <p className="text-xs text-danger mt-1.5">{parserConfigError}</p>}
                         </div>
 
                         <div>
                             <label htmlFor="sensor-type" className="block text-sm font-medium text-gray-700 mb-1.5">Sensör Tipi</label>
                             <select id="sensor-type" value={sensorType} onChange={e => setSensorType(e.target.value)} className="w-full bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent">
-                                {SENSOR_TYPES.map(type => (
+                                {sensorTypes.map(type => (
                                     <option key={type} value={type}>{type}</option>
                                 ))}
                             </select>

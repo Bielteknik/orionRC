@@ -1,24 +1,17 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Card from '../components/common/Card.tsx';
 import { AddIcon, EditIcon, DeleteIcon, StationIcon } from '../components/icons/Icons.tsx';
 import { AlertRule, Severity, AlertCondition, Station, Sensor } from '../types.ts';
-import { getStations, getSensors } from '../services/apiService.ts';
+import { getStations, getSensors, getDefinitions, getAlertRules, addDefinition, updateDefinition, deleteDefinition } from '../services/apiService.ts';
 import DefinitionModal from '../components/DefinitionModal.tsx';
+import Skeleton from '../components/common/Skeleton.tsx';
 
-type DefinitionType = 'stationTypes' | 'sensorTypes' | 'cameraTypes';
+type DefinitionType = 'station_types' | 'sensor_types' | 'camera_types';
 
 interface DefinitionItem {
     id: number;
     name: string;
 }
-
-const MOCK_DEFINITIONS: Record<DefinitionType, DefinitionItem[]> = {
-    stationTypes: [],
-    sensorTypes: [],
-    cameraTypes: [],
-};
-
-const MOCK_ALERT_RULES: AlertRule[] = [];
 
 const severityStyles: Record<Severity, string> = {
     'Kritik': 'border-danger/80 bg-danger/10 text-danger',
@@ -128,8 +121,8 @@ const AddAlertRuleDrawer: React.FC<AddAlertRuleDrawerProps> = ({ isOpen, onClose
 
 
 const Definitions: React.FC = () => {
-    const [definitions, setDefinitions] = useState(MOCK_DEFINITIONS);
-    const [alertRules, setAlertRules] = useState<AlertRule[]>(MOCK_ALERT_RULES);
+    const [definitions, setDefinitions] = useState<{ stationTypes: DefinitionItem[], sensorTypes: DefinitionItem[], cameraTypes: DefinitionItem[]}>({ stationTypes: [], sensorTypes: [], cameraTypes: []});
+    const [alertRules, setAlertRules] = useState<AlertRule[]>([]);
     const [isRuleDrawerOpen, setIsRuleDrawerOpen] = useState(false);
     const [stations, setStations] = useState<Station[]>([]);
     const [sensors, setSensors] = useState<Sensor[]>([]);
@@ -142,29 +135,39 @@ const Definitions: React.FC = () => {
         title: string;
     }>({ type: null, item: undefined, title: '' });
 
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                setIsLoading(true);
-                const [stationsData, sensorsData] = await Promise.all([getStations(), getSensors()]);
-                setStations(stationsData);
-                setSensors(sensorsData);
-            } catch (err) {
-                console.error("Error fetching data for definitions:", err);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        fetchData();
+    const fetchData = useCallback(async () => {
+        try {
+            setIsLoading(true);
+            const [stationsData, sensorsData, defsData, rulesData] = await Promise.all([
+                getStations(), 
+                getSensors(),
+                getDefinitions(),
+                getAlertRules()
+            ]);
+            setStations(stationsData);
+            setSensors(sensorsData);
+            setDefinitions({
+                stationTypes: defsData.stationTypes,
+                sensorTypes: defsData.sensorTypes,
+                cameraTypes: defsData.cameraTypes,
+            });
+            setAlertRules(rulesData);
+        } catch (err) {
+            console.error("Error fetching data for definitions:", err);
+        } finally {
+            setIsLoading(false);
+        }
     }, []);
 
-    const sensorTypes = useMemo(() => [...new Set(sensors.map(s => s.type))], [sensors]);
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    const sensorTypes = useMemo(() => definitions.sensorTypes.map(s => s.name), [definitions.sensorTypes]);
 
     const handleSaveRule = (newRule: Omit<AlertRule, 'id'>) => {
-        const ruleToAdd: AlertRule = {
-            id: `RULE${Date.now()}`,
-            ...newRule,
-        };
+        // Mocked until backend endpoint is available
+        const ruleToAdd: AlertRule = { id: `RULE${Date.now()}`, ...newRule };
         setAlertRules(prev => [ruleToAdd, ...prev]);
     };
 
@@ -178,55 +181,69 @@ const Definitions: React.FC = () => {
         setModalConfig({ type: null, item: undefined, title: '' });
     };
 
-    const handleSaveDefinition = (name: string) => {
+    const handleSaveDefinition = async (name: string) => {
         const { type, item } = modalConfig;
         if (!type) return;
-
-        setDefinitions(prev => {
-            const newDefs = { ...prev };
+        try {
             if (item) { // Editing
-                newDefs[type] = newDefs[type].map(d => d.id === item.id ? { ...d, name } : d);
+                await updateDefinition(type, item.id, { name });
             } else { // Adding
-                const newId = Math.max(0, ...newDefs[type].map(d => d.id)) + 1;
-                newDefs[type] = [...newDefs[type], { id: newId, name }];
+                await addDefinition(type, { name });
             }
-            return newDefs;
-        });
-        handleCloseModal();
-    };
-
-    const handleDeleteDefinition = (type: DefinitionType, id: number) => {
-        if (window.confirm('Bu tanımı silmek istediğinizden emin misiniz?')) {
-            setDefinitions(prev => ({
-                ...prev,
-                [type]: prev[type].filter(item => item.id !== id)
-            }));
+            fetchData();
+        } catch(error) {
+            console.error("Failed to save definition:", error);
+            alert("Tanım kaydedilemedi.");
+        } finally {
+            handleCloseModal();
         }
     };
 
+    const handleDeleteDefinition = async (type: DefinitionType, id: number) => {
+        if (window.confirm('Bu tanımı silmek istediğinizden emin misiniz?')) {
+            try {
+                await deleteDefinition(type, id);
+                fetchData();
+            } catch (error) {
+                 console.error("Failed to delete definition:", error);
+                 alert("Tanım silinemedi.");
+            }
+        }
+    };
+
+    if (isLoading) {
+        return (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <Skeleton className="h-64" />
+                <Skeleton className="h-64" />
+                <Skeleton className="h-64" />
+                <div className="lg:col-span-3"><Skeleton className="h-80" /></div>
+            </div>
+        )
+    }
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <DefinitionSection 
                 title="İstasyon Tipleri" 
                 items={definitions.stationTypes} 
-                onAdd={() => handleOpenModal('stationTypes', 'Yeni İstasyon Tipi Ekle')}
-                onEdit={(item) => handleOpenModal('stationTypes', 'İstasyon Tipini Düzenle', item)}
-                onDelete={(id) => handleDeleteDefinition('stationTypes', id)}
+                onAdd={() => handleOpenModal('station_types', 'Yeni İstasyon Tipi Ekle')}
+                onEdit={(item) => handleOpenModal('station_types', 'İstasyon Tipini Düzenle', item)}
+                onDelete={(id) => handleDeleteDefinition('station_types', id)}
             />
             <DefinitionSection 
                 title="Sensör Tipleri" 
                 items={definitions.sensorTypes} 
-                onAdd={() => handleOpenModal('sensorTypes', 'Yeni Sensör Tipi Ekle')}
-                onEdit={(item) => handleOpenModal('sensorTypes', 'Sensör Tipini Düzenle', item)}
-                onDelete={(id) => handleDeleteDefinition('sensorTypes', id)}
+                onAdd={() => handleOpenModal('sensor_types', 'Yeni Sensör Tipi Ekle')}
+                onEdit={(item) => handleOpenModal('sensor_types', 'Sensör Tipini Düzenle', item)}
+                onDelete={(id) => handleDeleteDefinition('sensor_types', id)}
             />
             <DefinitionSection 
                 title="Kamera Tipleri" 
                 items={definitions.cameraTypes} 
-                onAdd={() => handleOpenModal('cameraTypes', 'Yeni Kamera Tipi Ekle')}
-                onEdit={(item) => handleOpenModal('cameraTypes', 'Kamera Tipini Düzenle', item)}
-                onDelete={(id) => handleDeleteDefinition('cameraTypes', id)}
+                onAdd={() => handleOpenModal('camera_types', 'Yeni Kamera Tipi Ekle')}
+                onEdit={(item) => handleOpenModal('camera_types', 'Kamera Tipini Düzenle', item)}
+                onDelete={(id) => handleDeleteDefinition('camera_types', id)}
             />
 
             <div className="lg:col-span-3">
@@ -239,7 +256,7 @@ const Definitions: React.FC = () => {
                         </button>
                     </div>
                     <div className="space-y-3">
-                        {alertRules.length > 0 ? alertRules.map(rule => (
+                        {alertRules.map(rule => (
                             <div key={rule.id} className={`p-4 rounded-lg border ${rule.isEnabled ? 'opacity-100' : 'opacity-60 bg-gray-50'}`}>
                                 <div className="flex justify-between items-start">
                                     <div>
@@ -265,8 +282,9 @@ const Definitions: React.FC = () => {
                                     </div>
                                 )}
                             </div>
-                        )) : (
-                            <p className="text-center text-sm text-muted py-4">Henüz alarm kuralı eklenmemiş.</p>
+                        ))}
+                         {alertRules.length === 0 && (
+                            <p className="text-center text-sm text-muted py-8">Henüz alarm kuralı eklenmemiş.</p>
                         )}
                     </div>
                 </Card>

@@ -1,26 +1,14 @@
-
-
-
 import React, { useState, useEffect } from 'react';
 import LocationPickerMap from './common/LocationPickerMap.tsx';
 import { SensorIcon, CameraIcon } from './icons/Icons.tsx';
+import { Sensor, Camera } from '../types.ts';
 
-interface UnassignedDevice {
-    id: string;
-    name: string;
-}
-interface UnassignedSensor extends UnassignedDevice {
-    type: string;
-}
-interface UnassignedCamera extends UnassignedDevice {
-    cameraType: string;
-}
 interface AddStationDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (newStationData: { name: string; location: string; locationCoords: { lat: number; lng: number; }; selectedSensorIds: string[]; selectedCameraIds: string[] }) => void;
-  unassignedSensors: UnassignedSensor[];
-  unassignedCameras: UnassignedCamera[];
+  unassignedSensors: Sensor[];
+  unassignedCameras: Camera[];
 }
 
 const INITIAL_CENTER = { lat: 39.9086, lng: 41.2655 };
@@ -152,7 +140,7 @@ const AddStationDrawer: React.FC<AddStationDrawerProps> = ({
              <div className="bg-primary p-4 rounded-lg border border-gray-200">
                 <h3 className="font-semibold text-gray-800 mb-3">Sensörleri Ata ({selectedSensorIds.length})</h3>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                    {unassignedSensors.map(sensor => (
+                    {unassignedSensors.length > 0 ? unassignedSensors.map(sensor => (
                          <label key={sensor.id} className="flex items-center space-x-3 p-2 rounded-md hover:bg-secondary cursor-pointer border border-transparent has-[:checked]:bg-accent/10 has-[:checked]:border-accent/50">
                             <input 
                                 type="checkbox" 
@@ -166,13 +154,13 @@ const AddStationDrawer: React.FC<AddStationDrawerProps> = ({
                                 <p className="text-xs text-muted">{sensor.type}</p>
                             </div>
                         </label>
-                    ))}
+                    )) : <p className="text-sm text-muted p-2">Atanmamış sensör bulunmuyor.</p>}
                 </div>
             </div>
             <div className="bg-primary p-4 rounded-lg border border-gray-200">
                 <h3 className="font-semibold text-gray-800 mb-3">Kameraları Ata ({selectedCameraIds.length})</h3>
                  <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                    {unassignedCameras.map(camera => (
+                    {unassignedCameras.length > 0 ? unassignedCameras.map(camera => (
                         <label key={camera.id} className="flex items-center space-x-3 p-2 rounded-md hover:bg-secondary cursor-pointer border border-transparent has-[:checked]:bg-accent/10 has-[:checked]:border-accent/50">
                             <input 
                                 type="checkbox" 
@@ -186,7 +174,7 @@ const AddStationDrawer: React.FC<AddStationDrawerProps> = ({
                                 <p className="text-xs text-muted">{camera.cameraType}</p>
                             </div>
                         </label>
-                    ))}
+                    )) : <p className="text-sm text-muted p-2">Atanmamış kamera bulunmuyor.</p>}
                 </div>
             </div>
           </div>

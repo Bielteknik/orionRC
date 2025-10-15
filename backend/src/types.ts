@@ -1,30 +1,35 @@
-// backend/src/types.ts
+// This file defines the shape of the configuration object
+// that the backend sends to the IoT agent.
 
-// A single sensor's configuration for the agent
+// A single sensor's configuration
 export interface SensorConfig {
-    id: number;
-    name: string;
+    id: number; // Unique ID for this sensor in the database
+    name: string; // Human-readable name, e.g., "Sıcaklık Sensörü 1"
     is_active: boolean;
-    interface: 'i2c' | 'serial' | 'virtual';
+    interface: 'i2c' | 'serial' | 'virtual'; // The hardware interface type
+    
+    // Defines which driver to use on the agent
     parser_config: {
-        driver: string;
+        driver: string; // e.g., "sht3x"
     };
-    config: any;
+
+    // Driver-specific settings, like I2C address or serial port path
+    config: {
+        address?: string; // e.g., "0x44" for I2C
+        bus?: number;     // e.g., 1 for I2C bus 1
+        port?: string;    // e.g., "/dev/ttyUSB0" for serial
+        baudrate?: number;
+    };
 }
 
-// The complete configuration for a single IoT device
+// The complete configuration for a single IoT device (Raspberry Pi)
 export interface DeviceConfig {
     sensors: SensorConfig[];
+    // Future device-wide settings can be added here,
+    // e.g., check_in_interval_seconds: 300
 }
 
-// Data payload sent from the agent to the server
-export interface ReadingPayload {
-    sensor: number;
-    value: Record<string, any>;
-}
-
-// --- Common types for Frontend and Backend ---
-
+// Data structure for a station, sent to the frontend
 export interface Station {
   id: string;
   name: string;
@@ -66,7 +71,6 @@ export enum CameraStatus {
     Offline = 'Çevrimdışı',
     Recording = 'Kaydediyor',
 }
-
 export interface Camera {
   id: string;
   name: string;
@@ -78,18 +82,4 @@ export interface Camera {
   viewDirection: string;
   fps: number;
   photos: string[];
-}
-
-export type Severity = 'Kritik' | 'Uyarı' | 'Bilgi';
-
-export interface Notification {
-    id: string;
-    ruleId: string;
-    message: string;
-    stationName: string;
-    sensorName: string;
-    triggeredValue: string;
-    timestamp: string;
-    severity: Severity;
-    isRead: boolean;
 }

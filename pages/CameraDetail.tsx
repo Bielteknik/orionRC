@@ -104,6 +104,8 @@ const CameraDetail: React.FC<CameraDetailProps> = ({ cameraId, onBack }) => {
                         className="w-full h-full object-contain"
                         controls
                         autoPlay
+                        muted
+                        loop
                         poster={`https://picsum.photos/seed/${camera.id}/800/600`}
                     >
                         <source src={camera.streamUrl} type="video/mp4" />

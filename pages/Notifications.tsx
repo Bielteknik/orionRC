@@ -1,11 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Notification, Severity } from '../types.ts';
 import Card from '../components/common/Card.tsx';
 import { SearchIcon, BellIcon, ExclamationIcon, CheckIcon, DeleteIcon } from '../components/icons/Icons.tsx';
+import { markAllNotificationsAsRead, clearAllNotifications } from '../services/apiService.ts';
 
 interface NotificationsProps {
     notifications: Notification[];
     setNotifications: React.Dispatch<React.SetStateAction<Notification[]>>;
+    onRefresh: () => void;
 }
 
 const severityStyles: Record<Severity, { iconClass: string, bgClass: string, textClass: string }> = {
@@ -14,7 +16,7 @@ const severityStyles: Record<Severity, { iconClass: string, bgClass: string, tex
     'Bilgi': { iconClass: 'text-blue-500', bgClass: 'bg-blue-500/10', textClass: 'text-blue-500' },
 };
 
-const Notifications: React.FC<NotificationsProps> = ({ notifications, setNotifications }) => {
+const Notifications: React.FC<NotificationsProps> = ({ notifications, setNotifications, onRefresh }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [severityFilter, setSeverityFilter] = useState<Severity | 'all'>('all');
     const [statusFilter, setStatusFilter] = useState<'all' | 'read' | 'unread'>('all');
@@ -27,20 +29,34 @@ const Notifications: React.FC<NotificationsProps> = ({ notifications, setNotific
     }, [notifications, searchTerm, severityFilter, statusFilter]);
     
     const handleMarkAsRead = (id: string) => {
+        // Mocked until backend endpoint is available
         setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
     };
 
-    const handleMarkAllAsRead = () => {
-        setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    const handleMarkAllAsRead = async () => {
+        try {
+            await markAllNotificationsAsRead();
+            onRefresh();
+        } catch(error) {
+            console.error("Failed to mark all as read", error);
+            alert("Bir hata oluştu.");
+        }
     };
 
     const handleDelete = (id: string) => {
+        // Mocked until backend endpoint is available
         setNotifications(prev => prev.filter(n => n.id !== id));
     };
 
-    const handleClearAll = () => {
+    const handleClearAll = async () => {
         if (window.confirm('Tüm bildirimleri silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) {
-            setNotifications([]);
+            try {
+                await clearAllNotifications();
+                onRefresh();
+            } catch(error) {
+                console.error("Failed to clear notifications", error);
+                alert("Bir hata oluştu.");
+            }
         }
     };
 
@@ -99,7 +115,7 @@ const Notifications: React.FC<NotificationsProps> = ({ notifications, setNotific
                                             {n.stationName} - {n.sensorName} (<span className={`font-semibold ${severityStyles[n.severity].textClass}`}>{n.triggeredValue}</span>)
                                         </p>
                                     </div>
-                                    <p className="text-xs text-muted flex-shrink-0 ml-4">{n.timestamp}</p>
+                                    <p className="text-xs text-muted flex-shrink-0 ml-4">{new Date(n.timestamp).toLocaleString('tr-TR')}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
