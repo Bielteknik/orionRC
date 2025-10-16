@@ -281,7 +281,8 @@ class OrionAgent {
                     await fs.unlink(tempFilePath);
                 } catch (unlinkError) {
                     if ((unlinkError as NodeJS.ErrnoException).code !== 'ENOENT') {
-                        logger.warn(`Geçici resim dosyası silinemedi: ${tempFilePath}`, unlinkError);
+                        // FIX: 'Expected 1 arguments, but got 2.' Combine arguments into one string.
+                        logger.warn(`Geçici resim dosyası silinemedi: ${tempFilePath}: ${String(unlinkError)}`);
                     }
                 }
             }
