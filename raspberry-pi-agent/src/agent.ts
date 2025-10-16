@@ -10,10 +10,85 @@ import { ISensorDriver } from './types'; // ISensorDriver'ı ayrı import et
 
 const execAsync = promisify(exec);
 
+/*
+================================================================================
+YAPAY ZEKA DESTEKLİ SANAL SENSÖRLER (GÖRÜNTÜ İŞLEME)
+================================================================================
+Bu agent, Python ile yazılmış harici yapay zeka script'lerini çalıştırarak 
+"sanal sensörler" oluşturma yeteneğine sahiptir. Bu, kameralardan alınan
+görüntülerin analiz edilerek meteorolojik veya çevresel veriler üretilmesini sağlar.
+
+Örnek Kullanım Alanları:
+- Gökyüzü görüntüsünden bulutluluk oranı tespiti.
+- Zemin görüntüsünden kar veya ıslaklık tespiti.
+- Hava kalitesi için görüş mesafesi tahmini.
+
+GEREKSİNİMLER:
+1. Raspberry Pi üzerinde Python 3 kurulu olmalıdır.
+2. Gerekli Python kütüphaneleri (örn: Pillow, OpenCV, NumPy) pip ile kurulmalıdır.
+   Örnek: `pip install Pillow numpy`
+3. Analiz script'leri `raspberry-pi-agent/dist/scripts/` klasöründe bulunmalıdır.
+   Projenizde `raspberry-pi-agent/src/scripts/` klasörü oluşturup script'lerinizi
+   buraya ekleyebilirsiniz. TypeScript derlendiğinde bu klasör `dist`'e kopyalanacaktır.
+   (Not: Bu özellik için `tsconfig.json` ve `package.json`'da ek ayarlar gerekebilir.)
+
+PYTHON SCRIPT'İNİN UYMASI GEREKEN KURALLAR:
+- Komut satırından tek bir argüman almalıdır: analiz edilecek resmin tam yolu.
+- Analiz sonucunu JSON formatında standart çıktıya (stdout) yazdırmalıdır.
+- Başarılı olursa `exit(0)`, hata olursa `exit(1)` ile sonlanmalıdır.
+- Hata durumunda, hatayı açıklayan bir JSON'u standart hataya (stderr) yazabilir.
+
+Örnek `image_analyzer.py` (src/scripts/ içine yerleştirin):
+--------------------------------------------------------------------------------
+import sys
+import json
+from PIL import Image
+
+def analyze_image(image_path):
+    try:
+        with Image.open(image_path) as img:
+            grayscale_img = img.convert('L')
+            pixels = list(grayscale_img.getdata())
+            avg_brightness = sum(pixels) / len(pixels)
+            normalized_brightness = round(avg_brightness / 255.0, 2)
+            
+            result = {
+                "brightness": normalized_brightness,
+                "sky_condition": "cloudy" if normalized_brightness < 0.5 else "clear"
+            }
+            print(json.dumps(result))
+            sys.exit(0)
+    except Exception as e:
+        print(json.dumps({"error": str(e)}), file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        sys.exit(1)
+    analyze_image(sys.argv[1])
+--------------------------------------------------------------------------------
+
+WEB ARAYÜZÜNDEN SANAL SENSÖR TANIMLAMA:
+- Sensörler sayfasına gidin ve "Yeni Ekle" deyin.
+- Arayüz Tipi: "Yapay Zeka (Görüntü İşleme)" seçin.
+- Arayüz Yapılandırması (JSON):
+  {
+    "source_camera_id": "analiz_yapilacak_kameranin_id_si",
+    "script": "image_analyzer.py" 
+  }
+- Ayrıştırıcı Yapılandırması (JSON):
+  {
+    "driver": "image_analyzer"
+  }
+- Diğer sensör bilgilerini doldurup kaydedin.
+
+Agent, bir sonraki okuma döngüsünde bu sanal sensörü otomatik olarak işlemeye başlayacaktır.
+*/
+
 const logger = {
     log: (message: string) => console.log(`[${new Date().toISOString()}] [INFO] ${message}`),
     warn: (message: string) => console.warn(`[${new Date().toISOString()}] [WARN] ⚠️  ${message}`),
-    error: (message: string, error?: any) => console.error(`[${new Date().toISOString()}] [ERROR] ❌ ${message}`, error || ''),
+    error: (message: string, ...optionalParams: any[]) => console.error(`[${new Date().toISOString()}] [ERROR] ❌ ${message}`, ...optionalParams),
 };
 
 class DriverManager {
@@ -24,7 +99,6 @@ class DriverManager {
             return this.drivers.get(driverName)!;
         }
         try {
-            // FIX: Ensure we are not duplicating the '.driver' part of the filename.
             const filename = driverName.endsWith('.driver') 
                 ? `${driverName}.js` 
                 : `${driverName}.driver.js`;
@@ -151,6 +225,71 @@ class OrionAgent {
         return readings;
     }
 
+    private async _readVirtualImageSensors(): Promise<Map<number, Record<string, any>>> {
+        const readings = new Map<number, Record<string, any>>();
+        if (!this.deviceConfig?.sensors) {
+            return readings;
+        }
+
+        const virtualSensors = this.deviceConfig.sensors.filter(s => s.is_active && s.interface === 'virtual' && s.parser_config?.driver === 'image_analyzer');
+
+        for (const sensorConfig of virtualSensors) {
+            const sourceCameraId = sensorConfig.config?.source_camera_id;
+            const script = sensorConfig.config?.script;
+
+            if (!sourceCameraId || !script) {
+                logger.warn(`Sanal sensör '${sensorConfig.name}' için 'source_camera_id' veya 'script' yapılandırması eksik. Atlanıyor.`);
+                continue;
+            }
+
+            const cameraConfig = this.deviceConfig.cameras.find(c => c.id === sourceCameraId);
+            if (!cameraConfig) {
+                logger.warn(`'${sensorConfig.name}' için kaynak kamera ID '${sourceCameraId}' bulunamadı. Atlanıyor.`);
+                continue;
+            }
+
+            logger.log(`Sanal sensör '${sensorConfig.name}' işleniyor... (Kaynak: ${cameraConfig.name})`);
+            
+            const tempFilePath = path.join('/tmp', `orion_agent_capture_${Date.now()}.png`);
+            const ffmpegCommand = `ffmpeg -rtsp_transport tcp -i "${cameraConfig.rtsp_url}" -vframes 1 -y "${tempFilePath}"`;
+            // NOTE: Assumes that python scripts are placed in a 'scripts' directory next to the 'drivers' directory.
+            const scriptPath = path.join(__dirname, 'scripts', script);
+            const pythonCommand = `python3 "${scriptPath}" "${tempFilePath}"`;
+
+            try {
+                // 1. Capture image
+                logger.log(`     -> Görüntü yakalanıyor: ${cameraConfig.rtsp_url}`);
+                await execAsync(ffmpegCommand);
+
+                // 2. Run python script
+                logger.log(`     -> Python script çalıştırılıyor: ${pythonCommand}`);
+                const { stdout, stderr } = await execAsync(pythonCommand);
+                if (stderr) {
+                    logger.warn(`     -> Python script'i stderr'e yazdı: ${stderr}`);
+                }
+
+                // 3. Parse result and add to readings
+                const data = JSON.parse(stdout);
+                logger.log(`     -> Analiz sonucu [${sensorConfig.name}]: ${JSON.stringify(data)}`);
+                readings.set(sensorConfig.id, data);
+
+            } catch (error) {
+                logger.error(`Sanal sensör '${sensorConfig.name}' işlenirken hata oluştu:`, error);
+            } finally {
+                // 4. Clean up temp file
+                try {
+                    await fs.unlink(tempFilePath);
+                } catch (unlinkError) {
+                    if ((unlinkError as NodeJS.ErrnoException).code !== 'ENOENT') {
+                        logger.warn(`Geçici resim dosyası silinemedi: ${tempFilePath}`, unlinkError);
+                    }
+                }
+            }
+        }
+        return readings;
+    }
+
+
     private async _sendDataToServer(payload: ReadingPayload): Promise<boolean> {
          try {
             const response = await axios.post(`${this.baseUrl}/api/submit-reading`, payload, {
@@ -165,7 +304,9 @@ class OrionAgent {
             return false;
         } catch (error) {
             this.setState(AgentState.OFFLINE);
-            logger.error("Bağlantı Hatası. Veri kuyruğa alınıyor.");
+            // FIX: The original code likely had two arguments, causing the error. 
+            // Also, the caught error was being ignored. I'll combine them into one string.
+            logger.error(`Bağlantı Hatası. Veri kuyruğa alınıyor: ${String(error)}`);
             return false;
         }
     }
@@ -236,7 +377,8 @@ class OrionAgent {
             await axios.post(`${this.baseUrl}/api/commands/${command.id}/complete`, {}, { headers: { 'Authorization': `Token ${this.token}` } });
 
         } catch (error) {
-            logger.error(`Fotoğraf çekme/yükleme hatası:`, error);
+// FIX: Expected 1 arguments, but got 2. Combine arguments into a single string.
+            logger.error(`Fotoğraf çekme/yükleme hatası: ${String(error)}`);
             // Mark command as failed
              await axios.post(`${this.baseUrl}/api/commands/${command.id}/fail`, {}, { headers: { 'Authorization': `Token ${this.token}` } });
         }
@@ -279,8 +421,13 @@ class OrionAgent {
         await this._processCommands();
 
         logger.log("Fiziksel Sensörler Okunuyor...");
-        const newReadings = await this._readAllPhysicalSensors();
+        const physicalReadings = await this._readAllPhysicalSensors();
+
+        logger.log("Sanal Sensörler Okunuyor...");
+        const virtualReadings = await this._readVirtualImageSensors();
+        
         logger.log("Okuma Tamamlandı.");
+        const newReadings = new Map([...physicalReadings, ...virtualReadings]);
 
         if (newReadings.size === 0) {
             logger.log("Gönderilecek yeni sensör verisi bulunamadı.");

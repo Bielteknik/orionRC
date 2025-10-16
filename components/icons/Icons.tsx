@@ -152,6 +152,12 @@ export const CpuChipIcon: React.FC<IconProps> = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 21v-1.5M15.75 3v1.5m0 15v1.5M12 4.5v-1.5m0 18v-1.5" /><path strokeLinecap="round" strokeLinejoin="round" d="M15.375 18.375a3 3 0 00-3.375-3.375h-1.5a3 3 0 00-3.375 3.375V21h8.25v-2.625z" /><path strokeLinecap="round" strokeLinejoin="round" d="M18 11.25a3 3 0 00-3-3h-1.5a3 3 0 00-3 3v1.5a3 3 0 003 3h1.5a3 3 0 003-3v-1.5zM8.625 4.875a3 3 0 013.375-3.375h1.5a3 3 0 013.375 3.375V6h-8.25V4.875z" /></svg>
 );
 
+export const BrainIcon: React.FC<IconProps> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.25 12L18 14.25l-.25-2.25a.75.75 0 01.5-1.5L20.25 9l-2.25-.25a.75.75 0 01-1.5-.5L18 6l-.25 2.25a.75.75 0 01-1.5.5L14.25 9l2.25.25a.75.75 0 01.5 1.5z" />
+    </svg>
+);
+
 export const HttpIcon: React.FC<IconProps> = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c-4.97 0-9-4.03-9-9s4.03-9 9-9 9 4.03 9 9-4.03 9-9 9z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 3.75v16.5" /></svg>
 );

@@ -5,7 +5,7 @@ import Card from '../components/common/Card.tsx';
 import InteractiveMap from '../components/common/InteractiveMap.tsx';
 import Pagination from '../components/common/Pagination.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
-import { ArrowLeftIcon, SensorIcon, CameraIcon, SettingsIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, OnlineIcon, OfflineIcon, PlayIcon, PhotographIcon, SearchIcon, ExclamationIcon } from '../components/icons/Icons.tsx';
+import { ArrowLeftIcon, SensorIcon, CameraIcon, SettingsIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, OnlineIcon, OfflineIcon, PlayIcon, PhotographIcon, SearchIcon, ExclamationIcon, DownloadIcon } from '../components/icons/Icons.tsx';
 import SensorDetailModal from '../components/SensorDetailModal.tsx'; // Import the new modal
 
 interface StationDetailProps {
@@ -26,7 +26,6 @@ interface SensorReading {
 
 const ITEMS_PER_PAGE_DATA = 10;
 const ITEMS_PER_PAGE_SENSORS = 6;
-const ITEMS_PER_PAGE_CAMERAS = 4;
 
 const formatTimeAgo = (isoString: string | undefined): string => {
     if (!isoString) return 'bilinmiyor';
@@ -52,12 +51,6 @@ const statusInfo: Record<string, { text: string, className: string }> = {
     active: { text: 'Aktif', className: 'bg-gray-800 text-white' },
     inactive: { text: 'Pasif', className: 'bg-gray-200 text-gray-700' },
     maintenance: { text: 'Bakımda', className: 'bg-amber-500/20 text-amber-600' },
-};
-
-const cameraStatusInfo: Record<CameraStatus, { text: string; className: string; isLive: boolean }> = {
-    [CameraStatus.Online]: { text: 'CANLI', className: 'bg-red-600', isLive: true },
-    [CameraStatus.Recording]: { text: 'CANLI', className: 'bg-red-600', isLive: true },
-    [CameraStatus.Offline]: { text: 'Çevrimdışı', className: 'bg-gray-700', isLive: false },
 };
 
 const SensorCard: React.FC<{ sensor: Sensor, onClick: () => void }> = ({ sensor, onClick }) => {
@@ -102,39 +95,6 @@ const SensorCard: React.FC<{ sensor: Sensor, onClick: () => void }> = ({ sensor,
     );
 };
 
-const CameraCard: React.FC<{ camera: Camera; onView: (id: string) => void; }> = ({ camera, onView }) => {
-    const status = cameraStatusInfo[camera.status];
-    return (
-         <Card className="p-0 overflow-hidden flex flex-col">
-            <div className="relative">
-                <img src={`https://picsum.photos/seed/${camera.id}/800/600`} alt={camera.name} className={`w-full h-72 object-cover ${camera.status === CameraStatus.Offline ? 'filter grayscale' : ''}`} />
-                <div className="absolute top-3 left-3 flex items-center space-x-2">
-                    <span className={`flex items-center space-x-1.5 text-xs px-2 py-1 rounded-md font-semibold text-white ${status.className}`}>
-                        <div className={`w-1.5 h-1.5 rounded-full ${status.isLive ? 'bg-white animate-pulse' : 'bg-white/70'}`}></div>
-                        <span>{status.text}</span>
-                    </span>
-                    <span className="text-xs px-2 py-1 rounded-md font-semibold text-white bg-black/50">{camera.fps} FPS</span>
-                </div>
-                 {camera.status === CameraStatus.Offline && (
-                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                    <p className="text-white font-semibold">Görüntü Alınamıyor</p>
-                  </div>
-                )}
-            </div>
-            <div className="p-4 flex justify-between items-center border-t border-gray-200">
-                <div>
-                    <h3 className="font-bold text-gray-900">{camera.name}</h3>
-                    <p className="text-sm text-muted">{camera.viewDirection}</p>
-                </div>
-                <button onClick={() => onView(camera.id)} className="flex items-center justify-center gap-1.5 text-accent font-semibold py-1 px-3 rounded-lg hover:bg-accent/10 transition-colors text-sm">
-                    <PlayIcon className="w-4 h-4 text-accent" />
-                    <span>Canlı İzle</span>
-                </button>
-            </div>
-        </Card>
-    );
-};
-
 const TabContent: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <div className="py-6">{children}</div>
 );
@@ -151,7 +111,9 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
   const [dataSearchTerm, setDataSearchTerm] = useState('');
   const [dataPage, setDataPage] = useState(1);
   const [sensorPage, setSensorPage] = useState(1);
-  const [cameraPage, setCameraPage] = useState(1);
+  
+  const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
+  const [photoDateFilter, setPhotoDateFilter] = useState('');
 
   // State for Sensor Detail Modal
   const [isSensorModalOpen, setIsSensorModalOpen] = useState(false);
@@ -187,6 +149,12 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
     fetchData();
   }, [stationId]);
   
+  useEffect(() => {
+      if (activeTab === 'Kameralar' && cameras.length > 0 && !selectedCameraId) {
+          setSelectedCameraId(cameras[0].id);
+      }
+  }, [activeTab, cameras, selectedCameraId]);
+
   const handleOpenSensorModal = (sensor: Sensor) => {
     setSelectedSensor(sensor);
     setIsSensorModalOpen(true);
@@ -207,11 +175,21 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
     const startIndex = (sensorPage - 1) * ITEMS_PER_PAGE_SENSORS;
     return sensors.slice(startIndex, startIndex + ITEMS_PER_PAGE_SENSORS);
   }, [sensors, sensorPage]);
+  
+  const selectedCamera = useMemo(() => {
+      return cameras.find(c => c.id === selectedCameraId);
+  }, [cameras, selectedCameraId]);
 
-  const paginatedCameras = useMemo(() => {
-    const startIndex = (cameraPage - 1) * ITEMS_PER_PAGE_CAMERAS;
-    return cameras.slice(startIndex, startIndex + ITEMS_PER_PAGE_CAMERAS);
-  }, [cameras, cameraPage]);
+  const filteredPhotos = useMemo(() => {
+    if (!selectedCamera?.photos) return [];
+    if (!photoDateFilter) return selectedCamera.photos;
+    
+    return selectedCamera.photos.filter(photoUrl => {
+        const filename = photoUrl.split('/').pop() || '';
+        const datePart = filename.split('T')[0];
+        return datePart === photoDateFilter;
+    });
+  }, [selectedCamera, photoDateFilter]);
   
   if (isLoading) {
     return (
@@ -354,16 +332,84 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
             {activeTab === 'Kameralar' && (
                 <TabContent>
                     {cameras.length > 0 ? (
-                        <>
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                {paginatedCameras.map(camera => <CameraCard key={camera.id} camera={camera} onView={onViewCamera} />)}
+                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                            {/* Camera List */}
+                            <div className="md:col-span-1 lg:col-span-1">
+                                <h3 className="font-semibold text-gray-800 mb-3 px-1">Kameralar ({cameras.length})</h3>
+                                <ul className="space-y-2">
+                                    {cameras.map(camera => (
+                                        <li key={camera.id}>
+                                            <div 
+                                                onClick={() => setSelectedCameraId(camera.id)}
+                                                className={`w-full p-3 rounded-lg flex items-center justify-between gap-3 transition-colors cursor-pointer ${
+                                                    selectedCameraId === camera.id 
+                                                    ? 'bg-accent/10 border border-accent/50' 
+                                                    : 'hover:bg-gray-100 border border-transparent'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <CameraIcon className="w-5 h-5 text-muted" />
+                                                    <div>
+                                                        <p className="font-semibold text-sm">{camera.name}</p>
+                                                        <p className="text-xs text-muted">{camera.viewDirection}</p>
+                                                    </div>
+                                                </div>
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); onViewCamera(camera.id); }} 
+                                                    className="flex items-center gap-1 text-accent font-semibold p-1 rounded-md hover:bg-accent/10 text-sm"
+                                                    title="Canlı izle"
+                                                >
+                                                    <PlayIcon className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
                             </div>
-                             <Pagination 
-                                currentPage={cameraPage}
-                                totalPages={Math.ceil(cameras.length / ITEMS_PER_PAGE_CAMERAS)}
-                                onPageChange={setCameraPage}
-                            />
-                        </>
+                            {/* Photo Gallery */}
+                            <div className="md:col-span-2 lg:col-span-3">
+                                {selectedCamera ? (
+                                    <div>
+                                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-3">
+                                            <h3 className="font-semibold text-gray-800">Yakalanan Görüntüler ({filteredPhotos.length})</h3>
+                                            <div className="relative">
+                                                <input 
+                                                    type="date" 
+                                                    value={photoDateFilter}
+                                                    onChange={e => setPhotoDateFilter(e.target.value)}
+                                                    className="bg-secondary border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                                                />
+                                            </div>
+                                        </div>
+                                        {filteredPhotos.length > 0 ? (
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                                {filteredPhotos.map((photo, index) => (
+                                                    <div key={index} className="group relative rounded-lg overflow-hidden border border-gray-200 aspect-w-4 aspect-h-3">
+                                                        <img src={photo} alt={`Yakalanan görüntü ${index + 1}`} className="w-full h-full object-cover" />
+                                                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-2">
+                                                            <a href={photo} download target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-white text-xs bg-black/60 px-2 py-1 rounded-md hover:bg-black/80">
+                                                                <DownloadIcon className="w-4 h-4" />
+                                                                <span>İndir</span>
+                                                            </a>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="text-center py-16 text-muted border border-dashed rounded-lg">
+                                                <PhotographIcon className="w-10 h-10 mx-auto text-gray-300 mb-2"/>
+                                                <p>Bu kamera için seçilen tarihte kayıtlı görüntü bulunamadı.</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                     <div className="text-center py-16 text-muted border border-dashed rounded-lg h-full flex flex-col justify-center">
+                                        <CameraIcon className="w-10 h-10 mx-auto text-gray-300 mb-2"/>
+                                        <p>Görüntüleri görmek için bir kamera seçin.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     ) : (
                         <p className="text-muted text-center py-4">Bu istasyona bağlı kamera bulunmamaktadır.</p>
                     )}

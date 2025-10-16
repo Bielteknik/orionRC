@@ -71,12 +71,12 @@ export interface Sensor {
   type: string;
   stationId: string;
   status: SensorStatus;
-  value: number;
+  value: any; // Can be a number or a complex object for virtual sensors
   unit: string;
   battery: number;
   lastUpdate: string;
   // Advanced config
-  interface: string;
+  interface: 'serial' | 'i2c' | 'http' | 'virtual';
   config: any; // JSON object for interface config
   parser_config: any; // JSON object for parser config
   read_frequency: number;

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Sensor, Station, SensorStatus } from '../types.ts';
 import Card from '../components/common/Card.tsx';
-import { AddIcon, SearchIcon, EditIcon, DeleteIcon, ExclamationIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, SensorIcon as GenericSensorIcon } from '../components/icons/Icons.tsx';
+import { AddIcon, SearchIcon, EditIcon, DeleteIcon, ExclamationIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, SensorIcon as GenericSensorIcon, BrainIcon } from '../components/icons/Icons.tsx';
 import AddSensorDrawer from '../components/AddSensorDrawer.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
 import { getSensors, getStations, addSensor, updateSensor, deleteSensor, getDefinitions } from '../services/apiService.ts';
@@ -12,8 +12,11 @@ const SensorCard: React.FC<{
     onEdit: (sensor: Sensor) => void;
     onDelete: (id: string) => void;
 }> = ({ sensor, stationName, onEdit, onDelete }) => {
-    const getSensorIcon = (type: string) => {
-        switch (type) {
+    const getSensorIcon = (sensor: Sensor) => {
+        if (sensor.interface === 'virtual') {
+            return <BrainIcon className="w-6 h-6 text-muted" />;
+        }
+        switch (sensor.type) {
             case 'Sıcaklık': return <ThermometerIcon className="w-6 h-6 text-muted" />;
             case 'Nem': return <DropletIcon className="w-6 h-6 text-muted" />;
             case 'Rüzgar Hızı': case 'Rüzgar Yönü': return <WindSockIcon className="w-6 h-6 text-muted" />;
@@ -29,11 +32,15 @@ const SensorCard: React.FC<{
         [SensorStatus.Maintenance]: 'bg-warning/10 text-warning',
     };
 
+    const displayValue = typeof sensor.value === 'object' && sensor.value !== null 
+        ? Object.values(sensor.value).find(v => typeof v === 'number') ?? 'N/A'
+        : sensor.value;
+
     return (
         <Card className="p-4 flex flex-col h-full">
             <div className="flex justify-between items-start">
                 <div className="flex items-center space-x-3">
-                    <div className="bg-gray-100 p-2.5 rounded-lg">{getSensorIcon(sensor.type)}</div>
+                    <div className="bg-gray-100 p-2.5 rounded-lg">{getSensorIcon(sensor)}</div>
                     <div>
                         <h3 className="font-semibold text-gray-900">{sensor.name}</h3>
                         <p className="text-sm text-muted">{stationName || 'Atanmamış'}</p>
@@ -45,7 +52,7 @@ const SensorCard: React.FC<{
                 </div>
             </div>
             <div className="flex-grow text-center my-4">
-                <p className="text-4xl font-bold text-gray-900">{sensor.value}<span className="text-xl text-muted ml-1">{sensor.unit || ''}</span></p>
+                <p className="text-4xl font-bold text-gray-900">{displayValue}<span className="text-xl text-muted ml-1">{sensor.unit || ''}</span></p>
                 <p className="text-sm text-gray-600">{sensor.type}</p>
             </div>
             <div className="flex justify-between items-center text-sm pt-3 border-t border-gray-200">

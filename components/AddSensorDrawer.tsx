@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Station, Sensor, SensorStatus } from '../types.ts';
-import { SerialPortIcon, CpuChipIcon, HttpIcon } from './icons/Icons.tsx';
+import { SerialPortIcon, CpuChipIcon, HttpIcon, BrainIcon } from './icons/Icons.tsx';
 
 interface AddSensorDrawerProps {
   isOpen: boolean;
@@ -15,6 +15,7 @@ const interfaceIcons: { [key: string]: React.ReactNode } = {
     'serial': <SerialPortIcon className="w-5 h-5 text-muted" />,
     'i2c': <CpuChipIcon className="w-5 h-5 text-muted" />,
     'http': <HttpIcon className="w-5 h-5 text-muted" />,
+    'virtual': <BrainIcon className="w-5 h-5 text-muted" />,
 };
 
 const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSave, stations, sensorTypes, sensorToEdit }) => {
@@ -82,6 +83,9 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
         } else if (interfaceType === 'serial') {
              setInterfaceConfig('{\n  "port": "/dev/ttyUSB0",\n  "baudrate": 9600\n}');
              setParserConfig('{\n  "driver": "dfrobot_ult"\n}');
+        } else if (interfaceType === 'virtual') {
+            setInterfaceConfig('{\n  "source_camera_id": "cam_...",\n  "script": "image_analyzer.py"\n}');
+            setParserConfig('{\n  "driver": "image_analyzer"\n}');
         } else {
             setInterfaceConfig('{}');
             setParserConfig('{}');
@@ -183,6 +187,7 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
                                         <option value="serial">Seri Port</option>
                                         <option value="i2c">I2C</option>
                                         <option value="http">HTTP</option>
+                                        <option value="virtual">Yapay Zeka (Görüntü İşleme)</option>
                                     </select>
                                 </div>
                             </div>
