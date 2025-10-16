@@ -45,7 +45,7 @@ const SensorCard: React.FC<{
                 </div>
             </div>
             <div className="flex-grow text-center my-4">
-                <p className="text-4xl font-bold text-gray-900">{sensor.value}<span className="text-xl text-muted ml-1">{sensor.unit}</span></p>
+                <p className="text-4xl font-bold text-gray-900">{sensor.value}<span className="text-xl text-muted ml-1">{sensor.unit || ''}</span></p>
                 <p className="text-sm text-gray-600">{sensor.type}</p>
             </div>
             <div className="flex justify-between items-center text-sm pt-3 border-t border-gray-200">

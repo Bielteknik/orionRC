@@ -304,7 +304,7 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
                               <td className="px-6 py-4 font-mono text-gray-800">{reading.timestamp}</td>
                               <td className="px-6 py-4 font-medium text-gray-900">{reading.sensorName}</td>
                               <td className="px-6 py-4">{reading.sensorType}</td>
-                              <td className="px-6 py-4 text-right font-semibold text-gray-900">{`${reading.value} ${reading.unit}`}</td>
+                              <td className="px-6 py-4 text-right font-semibold text-gray-900">{`${reading.value} ${reading.unit || ''}`}</td>
                             </tr>
                           ))}
                         </tbody>
