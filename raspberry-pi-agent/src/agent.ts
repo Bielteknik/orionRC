@@ -1,21 +1,21 @@
 import axios from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import sqlite3 from 'sqlite3';
 import { open, Database } from 'sqlite';
-import { DeviceConfig, ReadingPayload, SensorConfig, ISensorDriver, AgentState } from './types';
+import { DeviceConfig, ReadingPayload, AgentState, AgentCommand } from './types';
+import { ISensorDriver } from './types'; // ISensorDriver'ı ayrı import et
 
-// In a CommonJS module (as defined in tsconfig.json), `__dirname` is a global variable.
-// The previous ES-Module-style definition using `import.meta.url` is not needed and caused a compile error.
+const execAsync = promisify(exec);
 
-// --- Yardımcı Fonksiyonlar ---
 const logger = {
     log: (message: string) => console.log(`[${new Date().toISOString()}] [INFO] ${message}`),
     warn: (message: string) => console.warn(`[${new Date().toISOString()}] [WARN] ⚠️  ${message}`),
     error: (message: string, error?: any) => console.error(`[${new Date().toISOString()}] [ERROR] ❌ ${message}`, error || ''),
 };
 
-// --- Sürücü Yöneticisi ---
 class DriverManager {
     private drivers: Map<string, ISensorDriver> = new Map();
 
@@ -37,7 +37,6 @@ class DriverManager {
     }
 }
 
-// --- Ana Orkestra Şefi Sınıfı ---
 class OrionAgent {
     private state: AgentState = AgentState.INITIALIZING;
     private baseUrl: string = '';
@@ -68,9 +67,7 @@ class OrionAgent {
             this.baseUrl = config.server.base_url;
             this.token = config.device.token;
             this.deviceId = config.device.id;
-            if (!this.baseUrl || !this.token || !this.deviceId) {
-                throw new Error("Yapılandırma dosyasında 'base_url', 'token' veya 'id' eksik.");
-            }
+            if (!this.baseUrl || !this.token || !this.deviceId) throw new Error("Yapılandırma dosyasında 'base_url', 'token' veya 'id' eksik.");
             return true;
         } catch (error) {
             logger.error(`Yerel konfigürasyon okunamadı! Lütfen 'config.json' dosyasını kontrol edin.`, error);
@@ -81,10 +78,7 @@ class OrionAgent {
     private async _initLocalDb(): Promise<boolean> {
         logger.log("Yerel çevrimdışı kuyruk veritabanı kontrol ediliyor...");
         try {
-            this.db = await open({
-                filename: this.dbPath,
-                driver: sqlite3.Database
-            });
+            this.db = await open({ filename: this.dbPath, driver: sqlite3.Database });
             await this.db.exec('CREATE TABLE IF NOT EXISTS readings (id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)');
             logger.log("Veritabanı hazır.");
             return true;
@@ -119,15 +113,12 @@ class OrionAgent {
     
     private async _readAllPhysicalSensors(): Promise<Map<number, Record<string, any>>> {
         const readings = new Map<number, Record<string, any>>();
-        if (!this.deviceConfig) {
-            logger.warn("Cihaz yapılandırması olmadığı için sensör okuma atlanıyor.");
+        if (!this.deviceConfig?.sensors) {
+            logger.warn("Cihaz yapılandırmasında sensör bulunmadığı için sensör okuma atlanıyor.");
             return readings;
         }
 
-        const activeSensors = this.deviceConfig.sensors.filter(
-            s => s.is_active && s.interface !== 'virtual'
-        );
-
+        const activeSensors = this.deviceConfig.sensors.filter(s => s.is_active && s.interface !== 'virtual');
         for (const sensorConfig of activeSensors) {
             const driverName = sensorConfig.parser_config?.driver;
             if (!driverName) {
@@ -147,9 +138,7 @@ class OrionAgent {
                 if (data) {
                     logger.log(`Okunan Veri [${sensorConfig.name}]: ${JSON.stringify(data)}`);
                     readings.set(sensorConfig.id, data);
-                } else {
-                    logger.warn(`Veri okunamadı [${sensorConfig.name}].`);
-                }
+                } else logger.warn(`Veri okunamadı [${sensorConfig.name}].`);
             } catch (error) {
                 logger.error(`Sürücü '${driverName}' çalışırken hata oluştu:`, error);
             }
@@ -160,10 +149,7 @@ class OrionAgent {
     private async _sendDataToServer(payload: ReadingPayload): Promise<boolean> {
          try {
             const response = await axios.post(`${this.baseUrl}/api/submit-reading`, payload, {
-                headers: { 
-                    'Authorization': `Token ${this.token}`,
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Authorization': `Token ${this.token}`, 'Content-Type': 'application/json' },
                 timeout: 10000
             });
             if (response.status >= 200 && response.status < 300) {
@@ -188,7 +174,7 @@ class OrionAgent {
         }
     }
 
-     private async _processOfflineQueue(): Promise<void> {
+    private async _processOfflineQueue(): Promise<void> {
         try {
             const items = await this.db.all("SELECT id, payload FROM readings ORDER BY id ASC LIMIT 100");
             if (items.length > 0) {
@@ -209,26 +195,94 @@ class OrionAgent {
         }
     }
 
+    private async _handleCaptureImageCommand(command: AgentCommand): Promise<void> {
+        const { camera_id } = command.payload;
+        const cameraConfig = this.deviceConfig?.cameras.find(c => c.id === camera_id);
+        if (!cameraConfig) {
+            logger.error(`Fotoğraf çekme komutu başarısız: Kamera ID '${camera_id}' yapılandırmada bulunamadı.`);
+            return;
+        }
+        const { rtsp_url, name: cameraName } = cameraConfig;
+        
+        const now = new Date();
+        const timestamp = now.toISOString().replace(/:/g, '-').replace(/\..+/, '');
+        const filename = `${timestamp}_${cameraName.replace(/\s+/g, '_')}.png`;
+        const tempFilePath = path.join('/tmp', filename);
+
+        const ffmpegCommand = `ffmpeg -rtsp_transport tcp -i "${rtsp_url}" -vframes 1 -y "${tempFilePath}"`;
+        
+        logger.log(`ffmpeg komutu çalıştırılıyor: ${ffmpegCommand}`);
+        try {
+            await execAsync(ffmpegCommand);
+            logger.log(`Görüntü başarıyla yakalandı: ${tempFilePath}`);
+
+            const imageBuffer = await fs.readFile(tempFilePath);
+            const base64Image = imageBuffer.toString('base64');
+            
+            logger.log(`Görüntü sunucuya yükleniyor...`);
+            await axios.post(`${this.baseUrl}/api/cameras/${camera_id}/upload-photo`, 
+                { image: base64Image, filename },
+                { headers: { 'Authorization': `Token ${this.token}`, 'Content-Type': 'application/json' } }
+            );
+            logger.log(`Görüntü başarıyla yüklendi.`);
+            await fs.unlink(tempFilePath); // Clean up temp file
+
+            // Mark command as complete
+            await axios.post(`${this.baseUrl}/api/commands/${command.id}/complete`, {}, { headers: { 'Authorization': `Token ${this.token}` } });
+
+        } catch (error) {
+            logger.error(`Fotoğraf çekme/yükleme hatası:`, error);
+            // Mark command as failed
+             await axios.post(`${this.baseUrl}/api/commands/${command.id}/fail`, {}, { headers: { 'Authorization': `Token ${this.token}` } });
+        }
+    }
+
+    private async _processCommands(): Promise<void> {
+        if (this.state === AgentState.OFFLINE) return;
+        try {
+            const response = await axios.get(`${this.baseUrl}/api/commands/${this.deviceId}`, {
+                headers: { 'Authorization': `Token ${this.token}` },
+            });
+            const commands: AgentCommand[] = response.data;
+            if (commands.length > 0) {
+                logger.log(`${commands.length} adet yeni komut bulundu.`);
+                for (const command of commands) {
+                    logger.log(`Komut işleniyor: ID=${command.id}, Tip=${command.command_type}`);
+                    switch (command.command_type) {
+                        case 'CAPTURE_IMAGE':
+                            await this._handleCaptureImageCommand(command);
+                            break;
+                        default:
+                            logger.warn(`Bilinmeyen komut tipi: ${command.command_type}`);
+                    }
+                }
+            }
+        } catch (error) {
+            logger.error('Sunucudan komutlar alınamadı:', error);
+        }
+    }
+
     async masterReadCycle() {
         logger.log(`--- [${this.state}] Ana okuma döngüsü başladı ---`);
         
         await this._processOfflineQueue();
         
-        // Periyodik olarak sunucu yapılandırmasını güncellemeyi dene
         if (this.state === AgentState.OFFLINE) {
             await this.getServerConfiguration();
         }
+
+        await this._processCommands();
 
         logger.log("Fiziksel Sensörler Okunuyor...");
         const newReadings = await this._readAllPhysicalSensors();
         logger.log("Okuma Tamamlandı.");
 
         if (newReadings.size === 0) {
-            logger.log("Gönderilecek yeni veri bulunamadı.");
+            logger.log("Gönderilecek yeni sensör verisi bulunamadı.");
             return;
         }
 
-        logger.log("Yeni Veriler Sunucuya Gönderiliyor...");
+        logger.log("Yeni Sensör Verileri Sunucuya Gönderiliyor...");
         for (const [sensorId, value] of newReadings.entries()) {
             const payload: ReadingPayload = { sensor: sensorId, value: value };
             const success = await this._sendDataToServer(payload);
@@ -240,13 +294,11 @@ class OrionAgent {
     }
     
     private setupGracefulShutdown() {
-        // Fix: Cast process to any to bypass incorrect type definitions for 'on'.
         (process as any).on('SIGINT', async () => {
             logger.log("\n--- Kapatma sinyali (Ctrl+C) alındı. ---");
             logger.log("Kalan veriler gönderilmeye çalışılıyor...");
             await this._processOfflineQueue();
             logger.log("--- ORION Agent kapatıldı. ---");
-            // Fix: Cast process to any to bypass incorrect type definitions for 'exit'.
             (process as any).exit(0);
         });
     }
@@ -274,6 +326,5 @@ class OrionAgent {
     }
 }
 
-// Agent'ı başlat
 const agent = new OrionAgent(path.join(__dirname, '..', 'config.json'));
 agent.run().catch(err => logger.error("Beklenmedik bir hata oluştu ve agent durdu.", err));

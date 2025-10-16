@@ -1,7 +1,7 @@
 // Sunucudan gelen cihaz yapılandırması
 export interface DeviceConfig {
     sensors: SensorConfig[];
-    // Diğer cihaz ayarları buraya eklenebilir
+    cameras: CameraConfig[];
 }
 
 // Tek bir sensörün yapılandırması
@@ -14,6 +14,23 @@ export interface SensorConfig {
         driver: string;
     };
     config: any; // Porta özel ayarlar (port, baudrate, address vb.)
+}
+
+// Tek bir kameranın yapılandırması
+export interface CameraConfig {
+    id: string;
+    name: string;
+    rtsp_url: string;
+}
+
+// Sunucudan gelen komut
+export interface AgentCommand {
+    id: number;
+    command_type: 'CAPTURE_IMAGE' | string;
+    payload: {
+        camera_id: string;
+        // Diğer payload verileri
+    };
 }
 
 // Sensör sürücülerinin uygulayacağı arayüz

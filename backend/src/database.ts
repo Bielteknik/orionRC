@@ -98,6 +98,16 @@ export async function migrate() {
             is_read BOOLEAN
         );
 
+        CREATE TABLE IF NOT EXISTS commands (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id TEXT NOT NULL,
+            command_type TEXT NOT NULL,
+            payload TEXT, -- JSON payload
+            status TEXT DEFAULT 'pending', -- pending, processing, completed, failed
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE TABLE IF NOT EXISTS station_types ( id INTEGER PRIMARY KEY, name TEXT UNIQUE );
         CREATE TABLE IF NOT EXISTS sensor_types ( id INTEGER PRIMARY KEY, name TEXT UNIQUE );
         CREATE TABLE IF NOT EXISTS camera_types ( id INTEGER PRIMARY KEY, name TEXT UNIQUE );
@@ -107,16 +117,22 @@ export async function migrate() {
 
     await db.exec(schema);
 
-    // Check if sensor_types is empty, then add defaults
+    // Seed default sensor types if the table is empty.
     const countResult = await db.get("SELECT COUNT(*) as count FROM sensor_types");
     if (countResult.count === 0) {
         console.log('Seeding default sensor types...');
         const defaultSensorTypes = ['Sıcaklık', 'Nem', 'Rüzgar Hızı', 'Basınç', 'Yağış', 'UV İndeksi', 'Rüzgar Yönü', 'Mesafe', 'Ağırlık'];
-        const stmt = await db.prepare("INSERT INTO sensor_types (name) VALUES (?)");
-        for (const type of defaultSensorTypes) {
-            await stmt.run(type);
+        const existingTypes = await db.all("SELECT name FROM sensor_types");
+        const existingTypeNames = new Set(existingTypes.map(t => t.name));
+        const typesToAdd = defaultSensorTypes.filter(t => !existingTypeNames.has(t));
+        
+        if (typesToAdd.length > 0) {
+            const stmt = await db.prepare("INSERT INTO sensor_types (name) VALUES (?)");
+            for (const type of typesToAdd) {
+                await stmt.run(type);
+            }
+            await stmt.finalize();
         }
-        await stmt.finalize();
     }
 
 

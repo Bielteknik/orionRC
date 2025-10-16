@@ -22,11 +22,16 @@ export interface SensorConfig {
     };
 }
 
+export interface CameraConfig {
+    id: string;
+    name: string;
+    rtsp_url: string;
+}
+
 // The complete configuration for a single IoT device (Raspberry Pi)
 export interface DeviceConfig {
     sensors: SensorConfig[];
-    // Future device-wide settings can be added here,
-    // e.g., check_in_interval_seconds: 300
+    cameras: CameraConfig[];
 }
 
 // Data structure for a station, sent to the frontend

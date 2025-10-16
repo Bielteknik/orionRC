@@ -35,6 +35,7 @@ export const getCameras = (): Promise<Camera[]> => apiClient.get('/cameras').the
 export const getUnassignedCameras = (): Promise<Camera[]> => apiClient.get('/cameras?unassigned=true').then(res => res.data).catch(e => handleError(e, 'fetching unassigned cameras'));
 export const addCamera = (data: any): Promise<Camera> => apiClient.post('/cameras', data).then(res => res.data).catch(e => handleError(e, 'adding camera'));
 export const deleteCamera = (id: string): Promise<void> => apiClient.delete(`/cameras/${id}`).then(res => res.data).catch(e => handleError(e, 'deleting camera'));
+export const captureCameraImage = (id: string): Promise<void> => apiClient.post(`/cameras/${id}/capture`).then(res => res.data).catch(e => handleError(e, 'capturing camera image'));
 
 
 // Readings
