@@ -6,6 +6,7 @@ import InteractiveMap from '../components/common/InteractiveMap.tsx';
 import Pagination from '../components/common/Pagination.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
 import { ArrowLeftIcon, SensorIcon, CameraIcon, SettingsIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, OnlineIcon, OfflineIcon, PlayIcon, PhotographIcon, SearchIcon, ExclamationIcon } from '../components/icons/Icons.tsx';
+import SensorDetailModal from '../components/SensorDetailModal.tsx'; // Import the new modal
 
 interface StationDetailProps {
   stationId: string;
@@ -59,7 +60,7 @@ const cameraStatusInfo: Record<CameraStatus, { text: string; className: string; 
     [CameraStatus.Offline]: { text: 'Çevrimdışı', className: 'bg-gray-700', isLive: false },
 };
 
-const SensorCard: React.FC<{ sensor: Sensor }> = ({ sensor }) => {
+const SensorCard: React.FC<{ sensor: Sensor, onClick: () => void }> = ({ sensor, onClick }) => {
     const getSensorIcon = (type: string) => {
         switch (type) {
             case 'Sıcaklık': return <ThermometerIcon className="w-6 h-6 text-muted" />;
@@ -72,7 +73,7 @@ const SensorCard: React.FC<{ sensor: Sensor }> = ({ sensor }) => {
     const batteryColor = sensor.battery > 20 ? 'text-green-500' : 'text-danger';
 
     return (
-        <Card className="p-4 flex flex-col space-y-3 h-full">
+        <Card className="p-4 flex flex-col space-y-3 h-full cursor-pointer hover:shadow-md hover:border-accent transition-all" onClick={onClick}>
             <div className="flex justify-between items-start">
                  <div className="flex items-center space-x-3">
                     <div className="bg-gray-100 p-2.5 rounded-lg">{getSensorIcon(sensor.type)}</div>
@@ -152,6 +153,10 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
   const [sensorPage, setSensorPage] = useState(1);
   const [cameraPage, setCameraPage] = useState(1);
 
+  // State for Sensor Detail Modal
+  const [isSensorModalOpen, setIsSensorModalOpen] = useState(false);
+  const [selectedSensor, setSelectedSensor] = useState<Sensor | null>(null);
+
   useEffect(() => {
     const fetchData = async () => {
         try {
@@ -182,6 +187,11 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
     fetchData();
   }, [stationId]);
   
+  const handleOpenSensorModal = (sensor: Sensor) => {
+    setSelectedSensor(sensor);
+    setIsSensorModalOpen(true);
+  };
+
   const filteredSensorReadings = useMemo(() =>
     readings.filter(reading =>
       reading.sensorName.toLowerCase().includes(dataSearchTerm.toLowerCase()) ||
@@ -328,7 +338,7 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
                     {sensors.length > 0 ? (
                         <>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {paginatedSensors.map(sensor => <SensorCard key={sensor.id} sensor={sensor} />)}
+                                {paginatedSensors.map(sensor => <SensorCard key={sensor.id} sensor={sensor} onClick={() => handleOpenSensorModal(sensor)} />)}
                             </div>
                             <Pagination 
                                 currentPage={sensorPage}
@@ -386,6 +396,15 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
             )}
          </div>
       </Card>
+
+        {selectedSensor && (
+            <SensorDetailModal
+                isOpen={isSensorModalOpen}
+                onClose={() => setIsSensorModalOpen(false)}
+                sensor={selectedSensor}
+                readings={readings.filter(r => r.sensorId === selectedSensor.id)}
+            />
+        )}
     </div>
   );
 };

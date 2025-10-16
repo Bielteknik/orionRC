@@ -14,19 +14,19 @@ const statusStyles: Record<string, { color: string; text: string; }> = {
     inactive: { color: 'muted', text: 'Pasif' },
 };
 
-// Tailwind's JIT compiler needs to see the full class names to include them in the CSS bundle.
-// Since we are creating them dynamically, we list them here to prevent them from being purged.
-// bg-success bg-warning bg-muted text-success text-warning text-muted
 const FullMap: React.FC<FullMapProps> = ({ stations, onViewStationDetails }) => {
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<any>(null);
+    const markersLayerRef = useRef<any>(null);
+    const initialFitDoneRef = useRef(false);
 
+    // Effect for one-time map initialization
     useEffect(() => {
         if (mapContainerRef.current && !mapRef.current) {
             const map = L.map(mapContainerRef.current, { 
                 scrollWheelZoom: true,
                 attributionControl: false 
-            }).setView([39.90, 41.26], 11);
+            }).setView([39.90, 41.26], 6); // A more zoomed-out initial view
             mapRef.current = map;
 
             const streetLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
@@ -47,11 +47,36 @@ const FullMap: React.FC<FullMapProps> = ({ stations, onViewStationDetails }) => 
             };
             L.control.layers(baseMaps).addTo(map);
 
+            // Create a layer group for markers and add it to the map
+            markersLayerRef.current = L.layerGroup().addTo(map);
 
-            stations.forEach(station => {
-                const status = statusStyles[station.status] || statusStyles.inactive;
-                
-                let iconHtml = '';
+            setTimeout(() => map.invalidateSize(), 100);
+        }
+
+        // Cleanup function for when the component unmounts
+        return () => {
+            if (mapRef.current) {
+                mapRef.current.remove();
+                mapRef.current = null;
+            }
+        };
+    }, []); // Empty dependency array ensures this runs only once
+
+    // Effect for updating markers when stations change
+    useEffect(() => {
+        if (!mapRef.current || !markersLayerRef.current) return;
+        
+        // Clear existing markers
+        markersLayerRef.current.clearLayers();
+        
+        if (stations.length === 0) return;
+
+        const allMarkers: any[] = [];
+
+        stations.forEach(station => {
+            const status = statusStyles[station.status] || statusStyles.inactive;
+            
+            let iconHtml = '';
                 switch (station.status) {
                     case 'active':
                         iconHtml = `
@@ -81,97 +106,56 @@ const FullMap: React.FC<FullMapProps> = ({ stations, onViewStationDetails }) => 
                         break;
                 }
 
-                const customIcon = L.divIcon({
-                    className: '', // No extra class needed
-                    html: iconHtml,
-                    iconSize: [32, 32],
-                    iconAnchor: [16, 16],
-                });
+            const customIcon = L.divIcon({ className: '', html: iconHtml, iconSize: [32, 32], iconAnchor: [16, 16] });
+            const marker = L.marker([station.locationCoords.lat, station.locationCoords.lng], { icon: customIcon });
+            
+            const container = L.DomUtil.create('div', 'space-y-1.5 p-1 text-sm font-sans');
+            const infoHtml = `
+                <h3 class="font-bold text-base text-gray-900">${station.name}</h3>
+                <div class="flex items-center justify-between text-xs">
+                    <span class="text-muted">Durum:</span>
+                    <span class="font-semibold text-${status.color}">${status.text}</span>
+                </div>
+                 <div class="flex items-center justify-between text-xs border-t border-gray-200 pt-1.5 mt-1.5">
+                    <span class="text-muted">Sensörler:</span>
+                    <span class="font-semibold text-gray-700">${station.sensorCount}</span>
+                </div>
+            `;
+            container.innerHTML = infoHtml;
+            const btn = L.DomUtil.create('button', 'w-full mt-2 text-center bg-accent text-white font-semibold text-xs py-1.5 px-2 rounded-md hover:bg-orange-600 transition-colors', container);
+            btn.innerText = 'Detayları Görüntüle';
 
-                const marker = L.marker([station.locationCoords.lat, station.locationCoords.lng], { icon: customIcon }).addTo(map);
-
-                // Create popup content programmatically
-                const container = L.DomUtil.create('div', 'space-y-1.5 p-1 text-sm font-sans');
-
-                const infoHtml = `
-                    <h3 class="font-bold text-base text-gray-900">${station.name}</h3>
-                    <div class="flex items-center justify-between text-xs">
-                        <span class="text-muted">Durum:</span>
-                        <span class="font-semibold text-${status.color}">${status.text}</span>
-                    </div>
-                     <div class="flex items-center justify-between text-xs border-t border-gray-200 pt-1.5 mt-1.5">
-                        <span class="text-muted">Sensörler:</span>
-                        <span class="font-semibold text-gray-700">${station.sensorCount}</span>
-                    </div>
-                `;
-                container.innerHTML = infoHtml;
-
-                const btn = L.DomUtil.create('button', 'w-full mt-2 text-center bg-accent text-white font-semibold text-xs py-1.5 px-2 rounded-md hover:bg-orange-600 transition-colors', container);
-                btn.innerText = 'Detayları Görüntüle';
-
-                L.DomEvent.on(btn, 'click', (e: Event) => {
-                    L.DomEvent.stopPropagation(e); // Stop event from propagating to map
-                    
-                    // Defer the navigation to allow Leaflet to finish its click handling
-                    // before React unmounts the map component. This prevents the race condition.
-                    setTimeout(() => {
-                        onViewStationDetails(station.id);
-                    }, 0);
-                });
-
-                marker.bindPopup(container, {
-                    minWidth: 200,
-                    closeButton: false,
-                });
+            L.DomEvent.on(btn, 'click', (e: Event) => {
+                L.DomEvent.stopPropagation(e);
+                setTimeout(() => onViewStationDetails(station.id), 0);
             });
 
-            setTimeout(() => map.invalidateSize(), 100);
+            marker.bindPopup(container, { minWidth: 200, closeButton: false });
+            allMarkers.push(marker);
+        });
+
+        // Add all markers to the layer group at once
+        allMarkers.forEach(marker => markersLayerRef.current.addLayer(marker));
+
+        // Fit bounds only on the initial load
+        if (!initialFitDoneRef.current && stations.length > 0) {
+            const bounds = L.latLngBounds(stations.map(s => [s.locationCoords.lat, s.locationCoords.lng]));
+            mapRef.current.fitBounds(bounds.pad(0.2));
+            initialFitDoneRef.current = true;
         }
 
-        return () => {
-            if (mapRef.current) {
-                mapRef.current.remove();
-                mapRef.current = null;
-            }
-        };
     }, [stations, onViewStationDetails]);
 
     return (
         <>
             <style>{`
-                .leaflet-popup-content-wrapper {
-                    background-color: #FFFFFF;
-                    border: 1px solid #E5E7EB;
-                    border-radius: 8px;
-                    box-shadow: 0 4px 14px rgba(0,0,0,0.1);
-                    padding: 1px;
-                }
-                .leaflet-popup-tip {
-                    background: #FFFFFF;
-                    border-top: 1px solid #E5E7EB;
-                }
-                .leaflet-popup-content {
-                    margin: 0;
-                    width: auto !important;
-                }
-                .leaflet-popup-content-wrapper .leaflet-popup-content {
-                    padding: 8px;
-                }
-                 .leaflet-control-layers {
-                    background: #FFFFFF;
-                    border: 1px solid #E5E7EB;
-                    border-radius: 8px;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                }
-                .leaflet-control-layers-base label {
-                    font-weight: 500;
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                }
-                .leaflet-control-layers-selector {
-                    margin-top: 2px;
-                }
+                .leaflet-popup-content-wrapper { background-color: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.1); padding: 1px; }
+                .leaflet-popup-tip { background: #FFFFFF; border-top: 1px solid #E5E7EB; }
+                .leaflet-popup-content { margin: 0; width: auto !important; }
+                .leaflet-popup-content-wrapper .leaflet-popup-content { padding: 8px; }
+                 .leaflet-control-layers { background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+                .leaflet-control-layers-base label { font-weight: 500; display: flex; align-items: center; gap: 8px; }
+                .leaflet-control-layers-selector { margin-top: 2px; }
             `}</style>
             <div ref={mapContainerRef} className="w-full h-full rounded-md" />
         </>

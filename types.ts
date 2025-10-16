@@ -139,7 +139,7 @@ export interface ReportSchedule {
     lastRun?: string;
 }
 
-export type WidgetType = 'dataCard' | 'sensorChart' | 'windRose';
+export type WidgetType = 'dataCard' | 'sensorChart' | 'windRose' | 'temperatureScatter' | 'humidityArea' | 'windSpeedBar' | 'multiStationCompare';
 
 export interface WidgetConfig {
     id: string;

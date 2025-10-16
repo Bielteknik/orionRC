@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, BarChart, Bar, ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Trend, Station, WidgetConfig, Sensor } from '../types.ts';
 import Card from '../components/common/Card.tsx';
 import FullMap from '../components/common/FullMap.tsx';
@@ -21,15 +21,10 @@ const INITIAL_CHART_STYLES: Record<string, ChartStyle> = {};
 
 
 const DEFAULT_WIDGETS: WidgetConfig[] = [
-    { id: 'card-temp', type: 'dataCard', config: { title: 'Ortalama Sıcaklık', sensorType: 'Sıcaklık' }, gridArea: '1 / 1 / 2 / 2' },
-    { id: 'card-hum', type: 'dataCard', config: { title: 'Ortalama Nem', sensorType: 'Nem' }, gridArea: '1 / 2 / 2 / 3' },
-    { id: 'card-wind', type: 'dataCard', config: { title: 'Ortalama Rüzgar Hızı', sensorType: 'Rüzgar Hızı' }, gridArea: '1 / 3 / 2 / 4' },
-    { id: 'card-press', type: 'dataCard', config: { title: 'Ortalama Basınç', sensorType: 'Basınç' }, gridArea: '1 / 4 / 2 / 5' },
-    { id: 'chart-temp', type: 'sensorChart', config: { sensorType: 'Sıcaklık' }, gridArea: '2 / 1 / 3 / 3' },
-    { id: 'chart-hum', type: 'sensorChart', config: { sensorType: 'Nem' }, gridArea: '2 / 3 / 3 / 5' },
-    { id: 'chart-wind', type: 'sensorChart', config: { sensorType: 'Rüzgar Hızı' }, gridArea: '3 / 1 / 4 / 3' },
-    { id: 'chart-press', type: 'sensorChart', config: { sensorType: 'Basınç' }, gridArea: '3 / 3 / 4 / 5' },
-    { id: 'chart-windrose', type: 'windRose', config: {}, gridArea: '4 / 1 / 5 / 5' },
+    { id: 'chart-temp-scatter', type: 'temperatureScatter', config: {}, gridArea: '1 / 1 / 2 / 3' },
+    { id: 'chart-hum-area', type: 'humidityArea', config: {}, gridArea: '1 / 3 / 2 / 5' },
+    { id: 'chart-wind-bar', type: 'windSpeedBar', config: {}, gridArea: '2 / 1 / 3 / 3' },
+    { id: 'chart-multi-station', type: 'multiStationCompare', config: {}, gridArea: '2 / 3 / 3 / 5' },
 ];
 
 const getPastDateString = (daysAgo: number) => {
@@ -38,190 +33,157 @@ const getPastDateString = (daysAgo: number) => {
     return date.toISOString().split('T')[0];
 };
 
-
 // --- WIDGET COMPONENTS ---
 
-const DataCardWidget: React.FC<{ title: string; sensorType: string; stations: Station[]; sensors: Sensor[] }> = ({ title, sensorType, stations, sensors }) => {
-    const [data, setData] = useState({ value: 'N/A', trend: Trend.Stable, change: '0.0%' });
-    const prevValueRef = useRef<number | null>(null);
-
-    const getIcon = () => {
-        switch (sensorType) {
-            case 'Sıcaklık': return <TemperatureIcon />;
-            case 'Nem': return <HumidityIcon />;
-            case 'Rüzgar Hızı': return <WindSockIcon />;
-            case 'Basınç': return <GaugeIcon />;
-            default: return <ChartBarIcon />;
-        }
-    };
-
-    useEffect(() => {
-        if (stations.length === 0 || sensors.length === 0) {
-            setData({ value: 'N/A', trend: Trend.Stable, change: '0.0%' });
-            prevValueRef.current = null;
-            return;
-        }
-
-        const relevantSensors = sensors.filter(sensor => 
-            stations.some(station => station.id === sensor.stationId) && sensor.type === sensorType
-        );
-
-        if (relevantSensors.length === 0) {
-            setData({ value: 'N/A', trend: Trend.Stable, change: '0.0%' });
-            prevValueRef.current = null;
-            return;
-        }
-
-        const currentValue = relevantSensors.reduce((acc, s) => acc + s.value, 0) / relevantSensors.length;
-
-        let trend = Trend.Stable;
-        let change = '0.0%';
-
-        if (prevValueRef.current !== null && prevValueRef.current > 0) {
-            const numericChange = ((currentValue - prevValueRef.current) / prevValueRef.current) * 100;
-            if (Math.abs(numericChange) > 0.1) {
-                trend = numericChange > 0 ? Trend.Up : Trend.Down;
-                change = `${numericChange > 0 ? '+' : ''}${numericChange.toFixed(1)}%`;
-            }
-        }
-
-        setData({
-            value: `${currentValue.toFixed(1)}${unitMap[sensorType] || ''}`,
-            trend: trend,
-            change: change
-        });
-        
-        const timeoutId = setTimeout(() => {
-            prevValueRef.current = currentValue;
-        }, 500);
-
-        return () => clearTimeout(timeoutId);
-
-    }, [sensorType, stations, sensors]);
-
-    const trendIcons = { [Trend.Up]: <TrendUpIcon className="text-danger" />, [Trend.Down]: <TrendDownIcon className="text-success" />, [Trend.Stable]: <TrendStableIcon className="text-muted dark:text-gray-400" /> };
-    return (
-        <div className="bg-primary dark:bg-gray-800 p-3 h-full flex flex-col">
-          <div className="flex items-center justify-between">
-            <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full">{getIcon()}</div>
-            <div className="flex items-center space-x-1 text-sm"><div className="w-4 h-4">{trendIcons[data.trend]}</div><span>{data.change}</span></div>
-          </div>
-          <div className="mt-2 flex-grow flex flex-col justify-center">
-            <p className="text-muted dark:text-gray-400 text-sm">{title}</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{data.value}</p>
-          </div>
-        </div>
-    );
-};
-
-const SensorChartWidget: React.FC<{
-  sensorType: string;
-  stations: Station[];
-  dateRange: { start: string, end: string };
-  styles: Record<string, ChartStyle>;
-}> = ({ sensorType, stations, dateRange, styles }) => {
-    const [chartData, setChartData] = useState<any[]>([]);
-    const [isChartLoading, setIsChartLoading] = useState(true);
+const TemperatureScatterChart: React.FC<{ stations: Station[], dateRange: { start: string, end: string } }> = ({ stations, dateRange }) => {
+    const [data, setData] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const { theme } = useTheme();
     const tickColor = theme === 'dark' ? '#9CA3AF' : '#6B7281';
-    const gridColor = theme === 'dark' ? '#374151' : '#E5E7EB';
 
     useEffect(() => {
-        const fetchChartData = async () => {
-            if (stations.length === 0) {
-                setChartData([]);
-                return;
-            }
-            setIsChartLoading(true);
-            try {
-                const history = await getReadingsHistory({
-                    stationIds: stations.map(s => s.id),
-                    sensorTypes: [sensorType],
-                    start: new Date(dateRange.start).toISOString(),
-                    end: new Date(dateRange.end).toISOString()
-                });
-
-                // Group by timestamp
-                const groupedByTime: { [key: string]: any } = {};
-                history.forEach(reading => {
-                    const time = new Date(reading.timestamp).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
-                    if (!groupedByTime[time]) {
-                        groupedByTime[time] = { time };
-                    }
-                    groupedByTime[time][reading.stationName] = reading.value;
-                });
-                
-                const finalData = Object.values(groupedByTime).sort((a,b) => new Date(a.time).getTime() - new Date(b.time).getTime());
-
-                setChartData(finalData);
-            } catch (error) {
-                console.error(`Error fetching history for ${sensorType}:`, error);
-                setChartData([]);
-            } finally {
-                setIsChartLoading(false);
-            }
-        };
-
-        fetchChartData();
-    }, [sensorType, stations, dateRange]);
+        if (stations.length === 0) { setData([]); return; }
+        setIsLoading(true);
+        getReadingsHistory({ stationIds: stations.map(s => s.id), sensorTypes: ['Sıcaklık'], start: dateRange.start, end: dateRange.end })
+            .then(history => {
+                const chartData = history.map(d => ({ ...d, time: new Date(d.timestamp).getTime() }));
+                setData(chartData);
+            })
+            .catch(err => console.error(err))
+            .finally(() => setIsLoading(false));
+    }, [stations, dateRange]);
 
     return (
         <div className="h-full p-4 flex flex-col">
-            <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">{sensorType} Trendi</h3>
-             {stations.length > 0 ? (
-                <div className="flex-grow h-64">
-                    {isChartLoading ? <Skeleton className="w-full h-full"/> : 
-                    <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                            <XAxis dataKey="time" stroke={tickColor} fontSize={10} tick={{ dy: 5 }} interval="preserveStartEnd" />
-                            <YAxis stroke={tickColor} fontSize={12} unit={unitMap[sensorType]} domain={['dataMin - 1', 'dataMax + 1']}/>
-                            <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF', border: `1px solid ${gridColor}` }} />
-                            <Legend wrapperStyle={{fontSize: "12px"}}/>
-                            {stations.map((station, index) => (
-                                <Line key={station.id} type={styles[sensorType]?.type || 'monotone'} dataKey={station.name} name={station.name} stroke={DEFAULT_COLORS[index % DEFAULT_COLORS.length]} strokeWidth={2} dot={false} />
-                            ))}
-                        </LineChart>
-                    </ResponsiveContainer>}
-                </div>
-             ) : (
-                <div className="flex-grow flex items-center justify-center h-64 text-muted dark:text-gray-400">
-                    <p>Verileri görüntülemek için bir istasyon seçin.</p>
-                </div>
-            )}
+            <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">Sıcaklık Trendleri</h3>
+            <p className="text-xs text-muted mb-2 -mt-2">Son 24 saatlik sıcaklık değişimleri</p>
+            {isLoading ? <Skeleton className="w-full h-full"/> : 
+            <ResponsiveContainer width="100%" height="100%">
+                <ScatterChart margin={{ top: 5, right: 20, left: -20, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#374151' : '#E5E7EB'} />
+                    <XAxis type="number" dataKey="time" name="zaman" domain={['dataMin', 'dataMax']} tickFormatter={(unixTime) => new Date(unixTime).toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'})} stroke={tickColor} fontSize={10} />
+                    <YAxis type="number" dataKey="value" name="sıcaklık" unit="°C" stroke={tickColor} fontSize={10}/>
+                    <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF' }}/>
+                    {stations.map((station, index) => (
+                        <Scatter key={station.id} name={station.name} data={data.filter(d => d.stationId === station.id)} fill={DEFAULT_COLORS[index % DEFAULT_COLORS.length]} />
+                    ))}
+                </ScatterChart>
+            </ResponsiveContainer>}
         </div>
     );
 };
 
-const WidgetWrapper: React.FC<{
-    widget: WidgetConfig;
-    onRemove: (id: string) => void;
-    children: React.ReactNode;
-    onDragStart: (e: React.DragEvent<HTMLDivElement>, id: string) => void;
-    onDrop: (e: React.DragEvent<HTMLDivElement>, id: string) => void;
-}> = ({ widget, onRemove, children, onDragStart, onDrop }) => {
+const HumidityAreaChart: React.FC<{ stations: Station[], dateRange: { start: string, end: string } }> = ({ stations, dateRange }) => {
+    const [data, setData] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const { theme } = useTheme();
+    const tickColor = theme === 'dark' ? '#9CA3AF' : '#6B7281';
+
+    useEffect(() => {
+        if (stations.length === 0) { setData([]); return; }
+        setIsLoading(true);
+        getReadingsHistory({ stationIds: stations.map(s => s.id), sensorTypes: ['Nem'], start: dateRange.start, end: dateRange.end })
+            .then(history => {
+                const groupedByTime: { [key: string]: any } = {};
+                history.forEach(r => {
+                    const time = new Date(r.timestamp).toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'});
+                    if (!groupedByTime[time]) groupedByTime[time] = { time };
+                    groupedByTime[time][r.stationName] = r.value;
+                });
+                setData(Object.values(groupedByTime));
+            })
+            .catch(err => console.error(err))
+            .finally(() => setIsLoading(false));
+    }, [stations, dateRange]);
+
     return (
-        <div
-            id={widget.id}
-            style={{ gridArea: widget.gridArea }}
-            className="relative group bg-primary dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm"
-            draggable="true"
-            onDragStart={(e) => onDragStart(e, widget.id)}
-            onDrop={(e) => onDrop(e, widget.id)}
-            onDragOver={(e) => e.preventDefault()}
-        >
-            <div className="absolute top-1 right-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => onRemove(widget.id)} className="p-1 bg-white/50 dark:bg-gray-900/50 hover:bg-white dark:hover:bg-gray-900 rounded-full text-muted dark:text-gray-400 hover:text-danger">
-                    <DeleteIcon className="w-4 h-4" />
-                </button>
-            </div>
-            {children}
+        <div className="h-full p-4 flex flex-col">
+            <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">Nem Oranları</h3>
+            <p className="text-xs text-muted mb-2 -mt-2">İstasyonlara göre nem seviyeleri</p>
+             {isLoading ? <Skeleton className="w-full h-full"/> : 
+            <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data} margin={{ top: 5, right: 20, left: -20, bottom: 20 }}>
+                     <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#374151' : '#E5E7EB'} />
+                    <XAxis dataKey="time" stroke={tickColor} fontSize={10}/>
+                    <YAxis stroke={tickColor} fontSize={10} unit="%"/>
+                    <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF' }}/>
+                    {stations.map((station, index) => (
+                        <Area key={station.id} type="monotone" dataKey={station.name} stroke={DEFAULT_COLORS[index % DEFAULT_COLORS.length]} fill={DEFAULT_COLORS[index % DEFAULT_COLORS.length]} fillOpacity={0.6} />
+                    ))}
+                </AreaChart>
+            </ResponsiveContainer>}
+        </div>
+    );
+};
+
+const WindSpeedBarChart: React.FC<{ stations: Station[], sensors: Sensor[] }> = ({ stations, sensors }) => {
+    const { theme } = useTheme();
+    const tickColor = theme === 'dark' ? '#9CA3AF' : '#6B7281';
+    
+    const data = useMemo(() => {
+        return stations.map(station => {
+            const windSensor = sensors.find(s => s.stationId === station.id && s.type === 'Rüzgar Hızı');
+            return {
+                name: station.name,
+                'Rüzgar Hızı': windSensor ? windSensor.value : 0
+            };
+        });
+    }, [stations, sensors]);
+
+    return (
+        <div className="h-full p-4 flex flex-col">
+            <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">Rüzgar Hızları</h3>
+            <p className="text-xs text-muted mb-2 -mt-2">İstasyonlardaki mevcut rüzgar hızları</p>
+            <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data} margin={{ top: 5, right: 20, left: -20, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#374151' : '#E5E7EB'} />
+                    <XAxis dataKey="name" stroke={tickColor} fontSize={10} interval={0} angle={-25} textAnchor="end"/>
+                    <YAxis stroke={tickColor} fontSize={10} unit="km/h"/>
+                    <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF' }}/>
+                    <Bar dataKey="Rüzgar Hızı" fill="#334155" />
+                </BarChart>
+            </ResponsiveContainer>
         </div>
     );
 };
 
 
-// --- MAIN COMPONENT ---
+const MultiStationComparisonChart: React.FC<{ stations: Station[], dateRange: { start: string, end: string } }> = ({ stations, dateRange }) => {
+     const [data, setData] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const { theme } = useTheme();
+    const tickColor = theme === 'dark' ? '#9CA3AF' : '#6B7281';
+
+    useEffect(() => {
+        if (stations.length === 0) { setData([]); return; }
+        setIsLoading(true);
+        getReadingsHistory({ stationIds: stations.map(s => s.id), sensorTypes: ['Sıcaklık'], start: dateRange.start, end: dateRange.end })
+            .then(history => {
+                setData(history);
+            })
+            .catch(err => console.error(err))
+            .finally(() => setIsLoading(false));
+    }, [stations, dateRange]);
+
+    return (
+         <div className="h-full p-4 flex flex-col">
+            <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">Çoklu İstasyon Karşılaştırma</h3>
+            <p className="text-xs text-muted mb-2 -mt-2">Tüm istasyonlardaki sıcaklık karşılaştırması</p>
+            {isLoading ? <Skeleton className="w-full h-full"/> : 
+            <ResponsiveContainer width="100%" height="100%">
+                <ScatterChart margin={{ top: 5, right: 20, left: -20, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#374151' : '#E5E7EB'} />
+                    <XAxis type="category" dataKey="stationName" name="istasyon" stroke={tickColor} fontSize={10} interval={0} angle={-25} textAnchor="end"/>
+                    <YAxis type="number" dataKey="value" name="sıcaklık" unit="°C" stroke={tickColor} fontSize={10}/>
+                    <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF' }}/>
+                    <Scatter name="Sıcaklık Okumaları" data={data} fill="#334155" shape="circle" />
+                </ScatterChart>
+            </ResponsiveContainer>}
+        </div>
+    );
+};
+
+
 
 const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }> = ({ onViewStationDetails }) => {
     const [isLoading, setIsLoading] = useState(true);
@@ -236,24 +198,13 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
     const draggedWidgetId = useRef<string | null>(null);
 
     const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
-    const [selectedSensorTypes, setSelectedSensorTypes] = useState<string[]>([]);
-    const [dateRange, setDateRange] = useState({ start: getPastDateString(7), end: getPastDateString(0) });
+    const [dateRange, setDateRange] = useState({ start: getPastDateString(1), end: getPastDateString(0) });
     
     const allSensorTypes = useMemo(() => [...new Set(sensors.map(s => s.type))], [sensors]);
-
-    useEffect(() => {
-        allSensorTypes.forEach((type, index) => {
-            if (!INITIAL_CHART_STYLES[type]) {
-                INITIAL_CHART_STYLES[type] = { stroke: DEFAULT_COLORS[index % DEFAULT_COLORS.length], type: 'monotone' };
-            }
-        });
-    }, [allSensorTypes]);
-    
     const stationOptions = useMemo(() => stations.map(s => ({ value: s.id, label: s.name })), [stations]);
-    const sensorTypeOptions = useMemo(() => allSensorTypes.map(type => ({ value: type, label: type })), [allSensorTypes]);
     
     const filteredStations = useMemo(() => 
-        stations.filter(s => selectedStationIds.includes(s.id)),
+        stations.filter(s => selectedStationIds.length === 0 || selectedStationIds.includes(s.id)),
         [selectedStationIds, stations]
     );
 
@@ -271,87 +222,14 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
                 setError('Pano verileri yüklenirken bir hata oluştu.');
                 console.error(err);
             } finally {
-                try {
-                    const savedWidgets = localStorage.getItem('dashboardWidgets');
-                    setWidgets(savedWidgets ? JSON.parse(savedWidgets) : DEFAULT_WIDGETS);
-                } catch { setWidgets(DEFAULT_WIDGETS); }
+                setWidgets(DEFAULT_WIDGETS); // Always set default widgets as per new design
                 setIsLoading(false);
             }
         };
 
-        const fetchSensorData = async () => {
-            try {
-                const [sensorsData, stationsData] = await Promise.all([getSensors(), getStations()]);
-                setSensors(sensorsData);
-                setStations(stationsData);
-            } catch (err) {
-                console.warn("Sensör verileri güncellenemedi:", err);
-            }
-        }
-
         fetchInitialData();
-        const intervalId = setInterval(fetchSensorData, 5000);
-        return () => clearInterval(intervalId);
     }, []);
 
-    useEffect(() => {
-        if (selectedStationIds.length === 0) { setSelectedSensorTypes([]); return; }
-        if (selectedStationIds.length === 1) {
-            const stationSensors = sensors.filter(s => s.stationId === selectedStationIds[0]);
-            setSelectedSensorTypes([...new Set(stationSensors.map(s => s.type))]);
-            return;
-        }
-        const sensorTypesByStation = selectedStationIds.map(id => new Set(sensors.filter(s => s.stationId === id).map(s => s.type)));
-        if(sensorTypesByStation.length === 0) { setSelectedSensorTypes([]); return; }
-        const commonTypes = sensorTypesByStation.reduce((common, currentSet) => new Set([...common].filter(type => currentSet.has(type))));
-        setSelectedSensorTypes(Array.from(commonTypes));
-    }, [selectedStationIds, sensors]);
-
-    const filteredWidgets = useMemo(() => {
-        return widgets.filter(widget => {
-            if (widget.type === 'dataCard' || widget.type === 'sensorChart') {
-                return selectedSensorTypes.includes(widget.config.sensorType);
-            }
-            if (widget.type === 'windRose') {
-                return selectedSensorTypes.includes('Rüzgar Yönü') && selectedSensorTypes.includes('Rüzgar Hızı');
-            }
-            return true;
-        });
-    }, [widgets, selectedSensorTypes]);
-
-    useEffect(() => {
-        if (!isLoading) { localStorage.setItem('dashboardWidgets', JSON.stringify(widgets)); }
-    }, [widgets, isLoading]);
-
-    const handleAddWidget = (widget: Omit<WidgetConfig, 'id' | 'gridArea'>) => {
-        const newWidget: WidgetConfig = { ...widget, id: `${widget.type}-${Date.now()}`, gridArea: 'auto / span 2' };
-        setWidgets(prev => [...prev, newWidget]);
-    };
-
-    const handleRemoveWidget = (idToRemove: string) => {
-        setWidgets(prev => prev.filter(w => w.id !== idToRemove));
-    };
-    
-    const handleDragStart = (e: React.DragEvent<HTMLDivElement>, id: string) => {
-        draggedWidgetId.current = id;
-        e.dataTransfer.effectAllowed = 'move';
-    };
-
-    const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetId: string) => {
-        e.preventDefault();
-        const sourceId = draggedWidgetId.current;
-        if (!sourceId || sourceId === targetId) return;
-        setWidgets(prev => {
-            const sourceIndex = prev.findIndex(w => w.id === sourceId);
-            const targetIndex = prev.findIndex(w => w.id === targetId);
-            if (sourceIndex === -1 || targetIndex === -1) return prev;
-            const reordered = [...prev];
-            const [removed] = reordered.splice(sourceIndex, 1);
-            reordered.splice(targetIndex, 0, removed);
-            return reordered;
-        });
-        draggedWidgetId.current = null;
-    };
     
     return (
         <div className="flex flex-col h-full">
@@ -360,28 +238,18 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
                     <button onClick={() => setActiveTab('analytics')} className={`flex items-center gap-2 whitespace-nowrap py-2 px-1 border-b-2 font-semibold text-sm transition-colors ${activeTab === 'analytics' ? 'border-accent text-accent' : 'border-transparent text-muted dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'}`}><ChartBarIcon className="w-5 h-5" /><span>Analitik</span></button>
                     <button onClick={() => setActiveTab('map')} className={`flex items-center gap-2 whitespace-nowrap py-2 px-1 border-b-2 font-semibold text-sm transition-colors ${activeTab === 'map' ? 'border-accent text-accent' : 'border-transparent text-muted dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'}`}><MapIcon className="w-5 h-5" /><span>İstasyon Haritası</span></button>
                 </nav>
-                 {activeTab === 'analytics' && (
-                    <div className="flex items-center gap-2">
-                        <button onClick={() => setIsAddWidgetModalOpen(true)} className="flex items-center justify-center gap-2 bg-accent text-white px-3 py-1.5 rounded-lg hover:bg-orange-600 transition-colors"><AddIcon className="w-5 h-5" /><span className="font-semibold text-sm">Widget Ekle</span></button>
-                        <button onClick={() => setIsSettingsModalOpen(true)} className="flex items-center justify-center gap-2 bg-primary dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"><PaletteIcon className="w-5 h-5 text-muted dark:text-gray-400" /><span className="font-semibold text-sm">Görünüm</span></button>
-                    </div>
-                 )}
             </div>
 
             {activeTab === 'analytics' && (
                 <div className="overflow-y-auto pt-4 space-y-4">
                     <Card>
-                         {isLoading ? <Skeleton className="h-24"/> : error ? (
+                         {isLoading ? <Skeleton className="h-12"/> : error ? (
                              <div className="text-center py-4 text-danger flex items-center justify-center gap-2"><ExclamationIcon/><span>{error}</span></div>
                          ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                                 <div className="w-full">
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">İstasyonlar</label>
                                     <MultiSelectDropdown options={stationOptions} selected={selectedStationIds} onChange={setSelectedStationIds} label="İstasyon"/>
-                                </div>
-                                <div className="w-full">
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sensör Tipleri (Otomatik)</label>
-                                    <MultiSelectDropdown options={sensorTypeOptions} selected={selectedSensorTypes} onChange={setSelectedSensorTypes} label="Sensör"/>
                                 </div>
                                 <div className="w-full">
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Zaman Aralığı</label>
@@ -397,25 +265,19 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
                     </Card>
 
                     {isLoading ? (
-                        <div className="grid grid-cols-4 gap-6 auto-rows-[120px]">
-                            {Array.from({ length: 9 }).map((_, i) => <Skeleton key={i} className={i > 3 ? "col-span-2" : "col-span-1"}/>)}
+                        <div className="grid grid-cols-4 gap-6 auto-rows-[300px]">
+                            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="col-span-2"/>)}
                         </div>
                     ) : error ? null : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 auto-rows-[minmax(120px,_auto)]">
-                           {filteredWidgets.map(widget => (
-                                <WidgetWrapper key={widget.id} widget={widget} onRemove={handleRemoveWidget} onDragStart={handleDragStart} onDrop={handleDrop}>
-                                    {widget.type === 'dataCard' && <DataCardWidget title={widget.config.title} sensorType={widget.config.sensorType} stations={filteredStations} sensors={sensors} />}
-                                    {widget.type === 'sensorChart' && <SensorChartWidget sensorType={widget.config.sensorType} stations={filteredStations} dateRange={dateRange} styles={INITIAL_CHART_STYLES} />}
-                                    {widget.type === 'windRose' && <WindRoseChart stations={filteredStations} sensors={sensors} />}
-                                </WidgetWrapper>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 auto-rows-[minmax(300px,_auto)]">
+                           {widgets.map(widget => (
+                                <Card key={widget.id} className="p-0" style={{ gridArea: widget.gridArea }}>
+                                    {widget.type === 'temperatureScatter' && <TemperatureScatterChart stations={filteredStations} dateRange={dateRange} />}
+                                    {widget.type === 'humidityArea' && <HumidityAreaChart stations={filteredStations} dateRange={dateRange} />}
+                                    {widget.type === 'windSpeedBar' && <WindSpeedBarChart stations={filteredStations} sensors={sensors} />}
+                                    {widget.type === 'multiStationCompare' && <MultiStationComparisonChart stations={filteredStations} dateRange={dateRange} />}
+                                </Card>
                            ))}
-                           {filteredWidgets.length === 0 && (
-                               <div className="lg:col-span-4 md:col-span-2 text-center py-16">
-                                   <Card>
-                                       <p className="text-muted dark:text-gray-400">Seçili filtrelere uygun widget bulunamadı.</p>
-                                   </Card>
-                               </div>
-                           )}
                         </div>
                     )}
                 </div>
@@ -431,9 +293,6 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
                     )}
                 </div>
             )}
-
-            <ChartSettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} sensorTypes={allSensorTypes} initialStyles={INITIAL_CHART_STYLES} onSave={(s) => { console.log(s); setIsSettingsModalOpen(false);}}/>
-            <AddWidgetModal isOpen={isAddWidgetModalOpen} onClose={() => setIsAddWidgetModalOpen(false)} onAddWidget={handleAddWidget} sensorTypes={allSensorTypes} />
         </div>
     );
 };
