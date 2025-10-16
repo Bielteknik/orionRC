@@ -1,5 +1,7 @@
 
-import express, { Request, Response, NextFunction } from 'express';
+
+
+import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -32,14 +34,14 @@ const SENSOR_UNIT_MAP: { [key: string]: string } = {
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
 app.use(express.json({ limit: '10mb' })); // Increase limit for base64 images
 
-// FIX: Added explicit types from express import to resolve handler type errors.
-app.use((req: Request, res: Response, next: NextFunction) => {
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
     next();
 });
 
-// FIX: Added explicit types from express import to resolve handler type errors.
-const authenticateDevice = (req: Request, res: Response, next: NextFunction) => {
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+const authenticateDevice = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const authHeader = req.headers.authorization;
     const expectedToken = `Token ${DEVICE_AUTH_TOKEN}`;
     if (!authHeader || authHeader !== expectedToken) {
@@ -52,8 +54,8 @@ const authenticateDevice = (req: Request, res: Response, next: NextFunction) => 
 const apiRouter = express.Router();
 app.use('/api', apiRouter);
 
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.get('/', (req: Request, res: Response) => {
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.get('/', (req: express.Request, res: express.Response) => {
     res.json({ status: 'API is running' });
 });
 
@@ -79,8 +81,8 @@ const dbCameraToApi = (camera: any): any => {
 
 // --- Agent Endpoints ---
 
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.get('/config/:deviceId', authenticateDevice, async (req: Request, res: Response) => {
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.get('/config/:deviceId', authenticateDevice, async (req: express.Request, res: express.Response) => {
     const { deviceId } = req.params;
     console.log(`Configuration requested for device: ${deviceId}`);
     try {
@@ -102,8 +104,8 @@ apiRouter.get('/config/:deviceId', authenticateDevice, async (req: Request, res:
 });
 
 
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.post('/submit-reading', authenticateDevice, async (req: Request, res: Response) => {
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.post('/submit-reading', authenticateDevice, async (req: express.Request, res: express.Response) => {
     const { sensor: sensorId, value } = req.body;
     console.log('✅ Received sensor reading:', JSON.stringify({ sensorId, value }, null, 2));
 
@@ -124,8 +126,8 @@ apiRouter.post('/submit-reading', authenticateDevice, async (req: Request, res: 
 });
 
 // --- Command Endpoints for Agent ---
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.get('/commands/:deviceId', authenticateDevice, async (req: Request, res: Response) => {
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.get('/commands/:deviceId', authenticateDevice, async (req: express.Request, res: express.Response) => {
     const { deviceId } = req.params;
     try {
         const commands = await db.all("SELECT * FROM commands WHERE device_id = ? AND status = 'pending' ORDER BY created_at ASC", deviceId);
@@ -140,8 +142,8 @@ apiRouter.get('/commands/:deviceId', authenticateDevice, async (req: Request, re
         res.status(500).json({ error: "Failed to fetch commands." });
     }
 });
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.post('/commands/:commandId/:status', authenticateDevice, async (req: Request, res: Response) => {
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.post('/commands/:commandId/:status', authenticateDevice, async (req: express.Request, res: express.Response) => {
     const { commandId, status } = req.params;
     if (!['complete', 'fail'].includes(status)) return res.status(400).json({ error: "Invalid status" });
     await db.run("UPDATE commands SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", status === 'complete' ? 'completed' : 'failed', commandId);
@@ -152,10 +154,10 @@ apiRouter.post('/commands/:commandId/:status', authenticateDevice, async (req: R
 // --- Frontend Endpoints ---
 
 // STATIONS
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.get('/stations', async (req: Request, res: Response) => { const rows = await db.all('SELECT * FROM stations'); res.json(rows.map(dbStationToApi)); });
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.post('/stations', async (req: Request, res: Response) => {
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.get('/stations', async (req: express.Request, res: express.Response) => { const rows = await db.all('SELECT * FROM stations'); res.json(rows.map(dbStationToApi)); });
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.post('/stations', async (req: express.Request, res: express.Response) => {
     const { id, name, location, locationCoords, selectedSensorIds, selectedCameraIds } = req.body;
     if (!id || !id.trim()) return res.status(400).json({ error: 'Device ID is required and cannot be empty.' });
     const existingStation = await db.get('SELECT id FROM stations WHERE id = ?', id);
@@ -167,8 +169,8 @@ apiRouter.post('/stations', async (req: Request, res: Response) => {
     if (!newStation) return res.status(404).json({ error: 'Could not find station after creation.' });
     res.status(201).json(dbStationToApi(newStation));
 });
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.put('/stations/:id', async (req: Request, res: Response) => {
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.put('/stations/:id', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     const { name, location, locationCoords, status } = req.body;
     await db.run('UPDATE stations SET name = ?, location = ?, lat = ?, lng = ?, status = ? WHERE id = ?', name, location, locationCoords.lat, locationCoords.lng, status, id);
@@ -176,17 +178,17 @@ apiRouter.put('/stations/:id', async (req: Request, res: Response) => {
     if (!updatedStation) return res.status(404).json({ error: 'Station not found.' });
     res.json(dbStationToApi(updatedStation));
 });
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.delete('/stations/:id', async (req: Request, res: Response) => { await db.run('DELETE FROM stations WHERE id = ?', req.params.id); res.status(204).send(); });
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.delete('/stations/:id', async (req: express.Request, res: express.Response) => { await db.run('DELETE FROM stations WHERE id = ?', req.params.id); res.status(204).send(); });
 
 // SENSORS
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.get('/sensors', async (req: Request, res: Response) => {
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.get('/sensors', async (req: express.Request, res: express.Response) => {
     const rows = await db.all(req.query.unassigned === 'true' ? 'SELECT * FROM sensors WHERE station_id IS NULL' : 'SELECT * FROM sensors');
     res.json(rows.map(s => { const apiSensor = dbSensorToApi(s); try { const latestValue = s.value ? JSON.parse(s.value) : {}; const numericValue = Object.values(latestValue).find(v => typeof v === 'number'); apiSensor.value = typeof numericValue === 'number' ? numericValue : 0; } catch { apiSensor.value = 0; } return apiSensor; }));
 });
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.post('/sensors', async (req: Request, res: Response) => {
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.post('/sensors', async (req: express.Request, res: express.Response) => {
     const { name, stationId, type, isActive, interfaceType, interfaceConfig, parserConfig, readFrequency } = req.body;
     const newId = `S${Date.now()}`;
     const unit = SENSOR_UNIT_MAP[type] || '';
@@ -195,8 +197,8 @@ apiRouter.post('/sensors', async (req: Request, res: Response) => {
     if (!newSensor) return res.status(404).json({ error: 'Could not find sensor after creation.' });
     res.status(201).json(dbSensorToApi(newSensor));
 });
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.put('/sensors/:id', async (req: Request, res: Response) => {
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.put('/sensors/:id', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     const { name, stationId, type, isActive, interfaceType, interfaceConfig, parserConfig, readFrequency } = req.body;
     const unit = SENSOR_UNIT_MAP[type] || '';
@@ -205,14 +207,14 @@ apiRouter.put('/sensors/:id', async (req: Request, res: Response) => {
     if (!updatedSensor) return res.status(404).json({ error: 'Sensor not found.' });
     res.json(dbSensorToApi(updatedSensor));
 });
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.delete('/sensors/:id', async (req: Request, res: Response) => { await db.run('DELETE FROM sensors WHERE id = ?', req.params.id); res.status(204).send(); });
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.delete('/sensors/:id', async (req: express.Request, res: express.Response) => { await db.run('DELETE FROM sensors WHERE id = ?', req.params.id); res.status(204).send(); });
 
 // CAMERAS
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.get('/cameras', async (req: Request, res: Response) => { const rows = await db.all(req.query.unassigned === 'true' ? 'SELECT * FROM cameras WHERE station_id IS NULL' : 'SELECT * FROM cameras'); res.json(rows.map(dbCameraToApi)); });
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.post('/cameras', async (req: Request, res: Response) => {
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.get('/cameras', async (req: express.Request, res: express.Response) => { const rows = await db.all(req.query.unassigned === 'true' ? 'SELECT * FROM cameras WHERE station_id IS NULL' : 'SELECT * FROM cameras'); res.json(rows.map(dbCameraToApi)); });
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.post('/cameras', async (req: express.Request, res: express.Response) => {
     const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
     const newId = `cam${Date.now()}`;
     await db.run('INSERT INTO cameras (id, name, station_id, status, view_direction, rtsp_url, camera_type, fps, stream_url, photos) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', newId, name, stationId, status, viewDirection, rtspUrl, cameraType, 30, 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4', '[]');
@@ -220,12 +222,12 @@ apiRouter.post('/cameras', async (req: Request, res: Response) => {
     if (!newCamera) return res.status(404).json({ error: 'Could not find camera after creation.' });
     res.status(201).json(dbCameraToApi(newCamera));
 });
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.delete('/cameras/:id', async (req: Request, res: Response) => { await db.run('DELETE FROM cameras WHERE id = ?', req.params.id); res.status(204).send(); });
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.delete('/cameras/:id', async (req: express.Request, res: express.Response) => { await db.run('DELETE FROM cameras WHERE id = ?', req.params.id); res.status(204).send(); });
 
 // New endpoint to trigger capture
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.post('/cameras/:id/capture', async (req: Request, res: Response) => {
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.post('/cameras/:id/capture', async (req: express.Request, res: express.Response) => {
     const { id: cameraId } = req.params;
     try {
         const camera = await db.get('SELECT station_id FROM cameras WHERE id = ?', cameraId);
@@ -240,8 +242,8 @@ apiRouter.post('/cameras/:id/capture', async (req: Request, res: Response) => {
     }
 });
 // New endpoint to receive uploaded photo
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.post('/cameras/:id/upload-photo', authenticateDevice, async (req: Request, res: Response) => {
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.post('/cameras/:id/upload-photo', authenticateDevice, async (req: express.Request, res: express.Response) => {
     const { id: cameraId } = req.params;
     const { image, filename } = req.body; // base64 encoded image
     if (!image || !filename) return res.status(400).json({ error: "Image data and filename are required." });
@@ -270,10 +272,10 @@ apiRouter.post('/cameras/:id/upload-photo', authenticateDevice, async (req: Requ
 
 
 // READINGS (for reports)
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.get('/readings', async (req: Request, res: Response) => { const rows = await db.all(`SELECT r.id, r.sensor_id, r.value, r.timestamp, s.name as sensor_name, s.type as sensor_type, s.unit, st.id as station_id, st.name as station_name FROM readings r JOIN sensors s ON r.sensor_id = s.id JOIN stations st ON s.station_id = st.id ORDER BY r.timestamp DESC LIMIT 2000`); const formatted = rows.map(r => { try { const readingValue = r.value ? JSON.parse(r.value) : {}; const numericValue = Object.values(readingValue).find(v => typeof v === 'number'); return { id: r.id, sensorId: r.sensor_id, stationId: r.station_id, sensorName: r.sensor_name, stationName: r.station_name, sensorType: r.sensor_type, value: typeof numericValue === 'number' ? numericValue : 0, unit: r.unit, timestamp: new Date(r.timestamp).toISOString(), }; } catch { return null; } }).filter(Boolean); res.json(formatted); });
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.get('/readings/history', async (req: Request, res: Response) => {
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.get('/readings', async (req: express.Request, res: express.Response) => { const rows = await db.all(`SELECT r.id, r.sensor_id, r.value, r.timestamp, s.name as sensor_name, s.type as sensor_type, s.unit, st.id as station_id, st.name as station_name FROM readings r JOIN sensors s ON r.sensor_id = s.id JOIN stations st ON s.station_id = st.id ORDER BY r.timestamp DESC LIMIT 2000`); const formatted = rows.map(r => { try { const readingValue = r.value ? JSON.parse(r.value) : {}; const numericValue = Object.values(readingValue).find(v => typeof v === 'number'); return { id: r.id, sensorId: r.sensor_id, stationId: r.station_id, sensorName: r.sensor_name, stationName: r.station_name, sensorType: r.sensor_type, value: typeof numericValue === 'number' ? numericValue : 0, unit: r.unit, timestamp: new Date(r.timestamp).toISOString(), }; } catch { return null; } }).filter(Boolean); res.json(formatted); });
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.get('/readings/history', async (req: express.Request, res: express.Response) => {
     const { stationIds, sensorTypes, start, end } = req.query;
     if (!stationIds || !sensorTypes) return res.status(400).json({ error: 'stationIds and sensorTypes are required.' });
     const stationIdList = (stationIds as string).split(',');
@@ -285,35 +287,35 @@ apiRouter.get('/readings/history', async (req: Request, res: Response) => {
 
 // DEFINITIONS
 const allowedDefTypes = ['station_types', 'sensor_types', 'camera_types'];
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.get('/definitions', async(req: Request, res: Response) => { const [stationTypes, sensorTypes, cameraTypes] = await Promise.all([ db.all('SELECT * FROM station_types'), db.all('SELECT * FROM sensor_types'), db.all('SELECT * FROM camera_types'), ]); res.json({ stationTypes, sensorTypes, cameraTypes }); });
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.post('/definitions/:type', async (req: Request, res: Response) => { const { type } = req.params; const { name } = req.body; if (!allowedDefTypes.includes(type)) return res.status(400).json({ error: 'Invalid definition type.' }); if (!name) return res.status(400).json({ error: 'Name is required.' }); const result = await db.run(`INSERT INTO ${type} (name) VALUES (?)`, name); res.status(201).json({ id: result.lastID, name }); });
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.put('/definitions/:type/:id', async (req: Request, res: Response) => { const { type, id } = req.params; const { name } = req.body; if (!allowedDefTypes.includes(type)) return res.status(400).json({ error: 'Invalid definition type.' }); if (!name) return res.status(400).json({ error: 'Name is required.' }); await db.run(`UPDATE ${type} SET name = ? WHERE id = ?`, name, id); res.json({ id: parseInt(id), name }); });
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.delete('/definitions/:type/:id', async (req: Request, res: Response) => { const { type, id } = req.params; if (!allowedDefTypes.includes(type)) return res.status(400).json({ error: 'Invalid definition type.' }); await db.run(`DELETE FROM ${type} WHERE id = ?`, id); res.status(204).send(); });
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.get('/definitions', async(req: express.Request, res: express.Response) => { const [stationTypes, sensorTypes, cameraTypes] = await Promise.all([ db.all('SELECT * FROM station_types'), db.all('SELECT * FROM sensor_types'), db.all('SELECT * FROM camera_types'), ]); res.json({ stationTypes, sensorTypes, cameraTypes }); });
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.post('/definitions/:type', async (req: express.Request, res: express.Response) => { const { type } = req.params; const { name } = req.body; if (!allowedDefTypes.includes(type)) return res.status(400).json({ error: 'Invalid definition type.' }); if (!name) return res.status(400).json({ error: 'Name is required.' }); const result = await db.run(`INSERT INTO ${type} (name) VALUES (?)`, name); res.status(201).json({ id: result.lastID, name }); });
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.put('/definitions/:type/:id', async (req: express.Request, res: express.Response) => { const { type, id } = req.params; const { name } = req.body; if (!allowedDefTypes.includes(type)) return res.status(400).json({ error: 'Invalid definition type.' }); if (!name) return res.status(400).json({ error: 'Name is required.' }); await db.run(`UPDATE ${type} SET name = ? WHERE id = ?`, name, id); res.json({ id: parseInt(id), name }); });
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.delete('/definitions/:type/:id', async (req: express.Request, res: express.Response) => { const { type, id } = req.params; if (!allowedDefTypes.includes(type)) return res.status(400).json({ error: 'Invalid definition type.' }); await db.run(`DELETE FROM ${type} WHERE id = ?`, id); res.status(204).send(); });
 
 // REPORTS, NOTIFICATIONS etc.
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.get('/alert-rules', async (req: Request, res: Response) => res.json(await db.all('SELECT * FROM alert_rules')));
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.get('/reports', async (req: Request, res: Response) => res.json(await db.all('SELECT * FROM reports ORDER BY created_at DESC')));
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.get('/report-schedules', async (req: Request, res: Response) => res.json(await db.all('SELECT * FROM report_schedules')));
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.get('/notifications', async (req: Request, res: Response) => res.json(await db.all('SELECT * FROM notifications ORDER BY timestamp DESC')));
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.post('/notifications/mark-all-read', async(req: Request, res: Response) => { await db.run('UPDATE notifications SET is_read = 1'); res.status(204).send(); });
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.delete('/notifications/clear-all', async(req: Request, res: Response) => { await db.run('DELETE FROM notifications'); res.status(204).send(); });
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.get('/alert-rules', async (req: express.Request, res: express.Response) => res.json(await db.all('SELECT * FROM alert_rules')));
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.get('/reports', async (req: express.Request, res: express.Response) => res.json(await db.all('SELECT * FROM reports ORDER BY created_at DESC')));
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.get('/report-schedules', async (req: express.Request, res: express.Response) => res.json(await db.all('SELECT * FROM report_schedules')));
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.get('/notifications', async (req: express.Request, res: express.Response) => res.json(await db.all('SELECT * FROM notifications ORDER BY timestamp DESC')));
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.post('/notifications/mark-all-read', async(req: express.Request, res: express.Response) => { await db.run('UPDATE notifications SET is_read = 1'); res.status(204).send(); });
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.delete('/notifications/clear-all', async(req: express.Request, res: express.Response) => { await db.run('DELETE FROM notifications'); res.status(204).send(); });
 
 // --- Gemini Chat Proxy ---
 let ai: GoogleGenAI | null = null;
 let chat: Chat | null = null;
 if (GEMINI_API_KEY) { ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY }); const SYSTEM_INSTRUCTION = "Sen ORION platformu için geliştirilmiş, dünya standartlarında bir meteoroloji asistanısın. Kullanıcı sorularını açık ve öz bir şekilde yanıtla. Hava olaylarını açıklayabilir, sensör okumalarını yorumlayabilir ve trendlere göre tahminlerde bulunabilirsin. Cevaplarını her zaman Türkçe ver."; chat = ai.chats.create({ model: 'gemini-2.5-flash', config: { systemInstruction: SYSTEM_INSTRUCTION }, }); } else { console.warn('⚠️ GEMINI_API_KEY not set. Gemini Assistant will be disabled.'); }
-// FIX: Added explicit types from express import to resolve handler type errors.
-apiRouter.post('/gemini-chat-stream', async (req: Request, res: Response) => { if (!chat) return res.status(503).json({ error: 'Gemini assistant is not configured on the server.' }); const { message } = req.body; if (!message) return res.status(400).json({ error: 'Message is required.' }); try { const stream = await chat.sendMessageStream({ message }); res.setHeader('Content-Type', 'text/plain; charset=utf-8'); res.setHeader('Transfer-Encoding', 'chunked'); for await (const chunk of stream) { res.write(chunk.text); } res.end(); } catch (error) { console.error('Error streaming from Gemini:', error); res.status(500).json({ error: 'Failed to get response from assistant.' }); } });
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+apiRouter.post('/gemini-chat-stream', async (req: express.Request, res: express.Response) => { if (!chat) return res.status(503).json({ error: 'Gemini assistant is not configured on the server.' }); const { message } = req.body; if (!message) return res.status(400).json({ error: 'Message is required.' }); try { const stream = await chat.sendMessageStream({ message }); res.setHeader('Content-Type', 'text/plain; charset=utf-8'); res.setHeader('Transfer-Encoding', 'chunked'); for await (const chunk of stream) { res.write(chunk.text); } res.end(); } catch (error) { console.error('Error streaming from Gemini:', error); res.status(500).json({ error: 'Failed to get response from assistant.' }); } });
 
 // --- Frontend Serving ---
 const httpdocsPath = path.join(__dirname, '..', '..', 'httpdocs');
@@ -321,8 +323,8 @@ const uploadsPath = path.join(__dirname, '..', '..', 'uploads');
 
 app.use('/uploads', express.static(uploadsPath));
 
-// FIX: Added explicit types from express import to resolve handler type errors.
-app.use(async (req: Request, res: Response, next: NextFunction) => {
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+app.use(async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const filePath = path.join(httpdocsPath, req.path);
   const possiblePaths = [ filePath, `${filePath}.ts`, `${filePath}.tsx` ];
   let actualPath: string | null = null;
@@ -341,8 +343,8 @@ app.use(async (req: Request, res: Response, next: NextFunction) => {
 });
 
 app.use(express.static(httpdocsPath));
-// FIX: Added explicit types from express import to resolve handler type errors.
-app.get('*', (req: Request, res: Response) => { res.sendFile(path.join(httpdocsPath, 'index.html')); });
+// FIX: Explicitly use express types to avoid conflict with global DOM types.
+app.get('*', (req: express.Request, res: express.Response) => { res.sendFile(path.join(httpdocsPath, 'index.html')); });
 
 // --- Start Server ---
 const startServer = async () => {

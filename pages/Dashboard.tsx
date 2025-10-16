@@ -8,9 +8,10 @@ import WindRoseChart from '../components/WindRoseChart.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
 import ChartSettingsModal, { ChartStyle } from '../components/ChartSettingsModal.tsx';
 import { useTheme } from '../components/ThemeContext.tsx';
-import { TemperatureIcon, HumidityIcon, WindSockIcon, GaugeIcon, TrendUpIcon, TrendDownIcon, TrendStableIcon, PaletteIcon, ChartBarIcon, MapIcon, AddIcon, DeleteIcon, CalendarIcon, ExclamationIcon } from '../components/icons/Icons.tsx';
+import { TemperatureIcon, HumidityIcon, WindSockIcon, GaugeIcon, TrendUpIcon, TrendDownIcon, TrendStableIcon, PaletteIcon, ChartBarIcon, MapIcon, AddIcon, DeleteIcon, CalendarIcon, ExclamationIcon, ReportsIcon } from '../components/icons/Icons.tsx';
 import { getStations, getSensors, getReadingsHistory } from '../services/apiService.ts';
 import MultiSelectDropdown from '../components/common/MultiSelectDropdown.tsx';
+import Reports from './Reports.tsx';
 
 
 // Constants & Defaults
@@ -191,7 +192,7 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
     const [stations, setStations] = useState<Station[]>([]);
     const [sensors, setSensors] = useState<Sensor[]>([]);
     
-    const [activeTab, setActiveTab] = useState<'analytics' | 'map'>('analytics');
+    const [activeTab, setActiveTab] = useState<'analytics' | 'map' | 'reports'>('analytics');
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isAddWidgetModalOpen, setIsAddWidgetModalOpen] = useState(false);
     const [widgets, setWidgets] = useState<WidgetConfig[]>([]);
@@ -236,6 +237,7 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
             <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                 <nav className="-mb-px flex space-x-8">
                     <button onClick={() => setActiveTab('analytics')} className={`flex items-center gap-2 whitespace-nowrap py-2 px-1 border-b-2 font-semibold text-sm transition-colors ${activeTab === 'analytics' ? 'border-accent text-accent' : 'border-transparent text-muted dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'}`}><ChartBarIcon className="w-5 h-5" /><span>Analitik</span></button>
+                    <button onClick={() => setActiveTab('reports')} className={`flex items-center gap-2 whitespace-nowrap py-2 px-1 border-b-2 font-semibold text-sm transition-colors ${activeTab === 'reports' ? 'border-accent text-accent' : 'border-transparent text-muted dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'}`}><ReportsIcon className="w-5 h-5" /><span>Raporlar</span></button>
                     <button onClick={() => setActiveTab('map')} className={`flex items-center gap-2 whitespace-nowrap py-2 px-1 border-b-2 font-semibold text-sm transition-colors ${activeTab === 'map' ? 'border-accent text-accent' : 'border-transparent text-muted dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'}`}><MapIcon className="w-5 h-5" /><span>İstasyon Haritası</span></button>
                 </nav>
             </div>
@@ -291,6 +293,11 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
                             <FullMap stations={stations} onViewStationDetails={onViewStationDetails} />
                         </div>
                     )}
+                </div>
+            )}
+            {activeTab === 'reports' && (
+                 <div className="overflow-y-auto pt-4">
+                    <Reports />
                 </div>
             )}
         </div>

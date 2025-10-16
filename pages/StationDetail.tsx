@@ -5,7 +5,7 @@ import Card from '../components/common/Card.tsx';
 import InteractiveMap from '../components/common/InteractiveMap.tsx';
 import Pagination from '../components/common/Pagination.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
-import { ArrowLeftIcon, SensorIcon, CameraIcon, SettingsIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, OnlineIcon, OfflineIcon, PlayIcon, PhotographIcon, SearchIcon, ExclamationIcon, DownloadIcon } from '../components/icons/Icons.tsx';
+import { ArrowLeftIcon, SensorIcon, CameraIcon, SettingsIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, OnlineIcon, OfflineIcon, PlayIcon, PhotographIcon, SearchIcon, ExclamationIcon, DownloadIcon, CalendarIcon } from '../components/icons/Icons.tsx';
 import SensorDetailModal from '../components/SensorDetailModal.tsx'; // Import the new modal
 
 interface StationDetailProps {
@@ -113,7 +113,7 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
   const [sensorPage, setSensorPage] = useState(1);
   
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
-  const [photoDateFilter, setPhotoDateFilter] = useState('');
+  const [photoDateFilter, setPhotoDateFilter] = useState(new Date().toISOString().split('T')[0]);
 
   // State for Sensor Detail Modal
   const [isSensorModalOpen, setIsSensorModalOpen] = useState(false);
@@ -184,10 +184,18 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
     if (!selectedCamera?.photos) return [];
     if (!photoDateFilter) return selectedCamera.photos;
     
+    // YYYY-MM-DD formatını baz alarak filtreleme
+    const filterDate = new Date(photoDateFilter);
+    filterDate.setHours(0, 0, 0, 0);
+
     return selectedCamera.photos.filter(photoUrl => {
         const filename = photoUrl.split('/').pop() || '';
+        // Filename format: 2025-10-16T23-20-15_Ejder_Eshel.png
         const datePart = filename.split('T')[0];
-        return datePart === photoDateFilter;
+        const photoDate = new Date(datePart);
+        photoDate.setHours(0, 0, 0, 0);
+
+        return photoDate.getTime() === filterDate.getTime();
     });
   }, [selectedCamera, photoDateFilter]);
   
@@ -371,13 +379,14 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
                                 {selectedCamera ? (
                                     <div>
                                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-3">
-                                            <h3 className="font-semibold text-gray-800">Yakalanan Görüntüler ({filteredPhotos.length})</h3>
-                                            <div className="relative">
+                                            <h3 className="font-semibold text-gray-800">{selectedCamera.name} için Yakalanan Görüntüler ({filteredPhotos.length})</h3>
+                                            <div className="relative flex items-center gap-2 bg-secondary border border-gray-300 rounded-lg px-3 py-1.5">
+                                                 <CalendarIcon className="w-5 h-5 text-muted"/>
                                                 <input 
                                                     type="date" 
                                                     value={photoDateFilter}
                                                     onChange={e => setPhotoDateFilter(e.target.value)}
-                                                    className="bg-secondary border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                                                    className="bg-transparent text-sm focus:outline-none"
                                                 />
                                             </div>
                                         </div>

@@ -281,7 +281,6 @@ class OrionAgent {
                     await fs.unlink(tempFilePath);
                 } catch (unlinkError) {
                     if ((unlinkError as NodeJS.ErrnoException).code !== 'ENOENT') {
-                        // FIX: 'Expected 1 arguments, but got 2.' Combine arguments into one string.
                         logger.warn(`Geçici resim dosyası silinemedi: ${tempFilePath}: ${String(unlinkError)}`);
                     }
                 }
@@ -305,8 +304,6 @@ class OrionAgent {
             return false;
         } catch (error) {
             this.setState(AgentState.OFFLINE);
-            // FIX: The original code likely had two arguments, causing the error. 
-            // Also, the caught error was being ignored. I'll combine them into one string.
             logger.error(`Bağlantı Hatası. Veri kuyruğa alınıyor: ${String(error)}`);
             return false;
         }
@@ -378,7 +375,6 @@ class OrionAgent {
             await axios.post(`${this.baseUrl}/api/commands/${command.id}/complete`, {}, { headers: { 'Authorization': `Token ${this.token}` } });
 
         } catch (error) {
-// FIX: Expected 1 arguments, but got 2. Combine arguments into a single string.
             logger.error(`Fotoğraf çekme/yükleme hatası: ${String(error)}`);
             // Mark command as failed
              await axios.post(`${this.baseUrl}/api/commands/${command.id}/fail`, {}, { headers: { 'Authorization': `Token ${this.token}` } });
