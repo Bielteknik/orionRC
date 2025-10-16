@@ -72,6 +72,22 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
         }
     }, [isOpen, sensorToEdit, sensorTypes]);
 
+    // Automatically set example config when interface type changes for a new sensor
+    useEffect(() => {
+        if (sensorToEdit) return; // Don't override when editing
+
+        if (interfaceType === 'i2c') {
+            setInterfaceConfig('{\n  "address": "0x44",\n  "bus": 1\n}');
+            setParserConfig('{\n  "driver": "sht3x"\n}');
+        } else if (interfaceType === 'serial') {
+             setInterfaceConfig('{\n  "port": "/dev/ttyUSB0",\n  "baudrate": 9600\n}');
+             setParserConfig('{\n  "driver": "dfrobot_ult"\n}');
+        } else {
+            setInterfaceConfig('{}');
+            setParserConfig('{}');
+        }
+    }, [interfaceType, sensorToEdit]);
+
 
     useEffect(() => {
         try {
