@@ -1,4 +1,5 @@
-// Fix: Import express types explicitly to avoid type conflicts with global Request/Response.
+
+// Fix: Correctly import Express types to resolve conflicts with global types and fix numerous compilation errors.
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -54,19 +55,25 @@ const dbStationToApi = (station: any): any => {
 
 const dbSensorToApi = (sensor: any): any => {
     if (!sensor) return null;
-    return {
+    const apiSensor = {
         ...sensor,
+        stationId: sensor.station_id,
         config: sensor.config ? JSON.parse(sensor.config) : {},
         parser_config: sensor.parser_config ? JSON.parse(sensor.parser_config) : {},
-    }
+    };
+    delete apiSensor.station_id;
+    return apiSensor;
 };
 
 const dbCameraToApi = (camera: any): any => {
     if (!camera) return null;
-    return {
-        ...camera,
+    const apiCamera = {
+         ...camera,
+        stationId: camera.station_id,
         photos: camera.photos ? JSON.parse(camera.photos) : [],
-    }
+    };
+    delete apiCamera.station_id;
+    return apiCamera;
 };
 
 // --- Agent Endpoints ---
@@ -147,21 +154,29 @@ apiRouter.get('/stations', async (req: Request, res: Response) => {
     res.json(rows.map(dbStationToApi));
 });
 apiRouter.post('/stations', async (req: Request, res: Response) => {
-    const { name, location, locationCoords, selectedSensorIds, selectedCameraIds } = req.body;
-    const newId = `STN${Date.now()}`;
+    const { id, name, location, locationCoords, selectedSensorIds, selectedCameraIds } = req.body;
+    
+    if (!id || !id.trim()) {
+        return res.status(400).json({ error: 'Device ID is required and cannot be empty.' });
+    }
+    const existingStation = await db.get('SELECT id FROM stations WHERE id = ?', id);
+    if (existingStation) {
+        return res.status(409).json({ error: `Station with device ID ${id} already exists.` });
+    }
+
     await db.run(
         'INSERT INTO stations (id, name, location, lat, lng, status, sensor_count, camera_count, last_update) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        newId, name, location, locationCoords.lat, locationCoords.lng, 'active', selectedSensorIds.length, selectedCameraIds.length, new Date().toISOString()
+        id, name, location, locationCoords.lat, locationCoords.lng, 'active', selectedSensorIds.length, selectedCameraIds.length, new Date().toISOString()
     );
     if (selectedSensorIds?.length > 0) {
         const placeholders = selectedSensorIds.map(() => '?').join(',');
-        await db.run(`UPDATE sensors SET station_id = ? WHERE id IN (${placeholders})`, newId, ...selectedSensorIds);
+        await db.run(`UPDATE sensors SET station_id = ? WHERE id IN (${placeholders})`, id, ...selectedSensorIds);
     }
     if (selectedCameraIds?.length > 0) {
         const placeholders = selectedCameraIds.map(() => '?').join(',');
-        await db.run(`UPDATE cameras SET station_id = ? WHERE id IN (${placeholders})`, newId, ...selectedCameraIds);
+        await db.run(`UPDATE cameras SET station_id = ? WHERE id IN (${placeholders})`, id, ...selectedCameraIds);
     }
-    const newStation = await db.get('SELECT * FROM stations WHERE id = ?', newId);
+    const newStation = await db.get('SELECT * FROM stations WHERE id = ?', id);
     if (!newStation) return res.status(404).json({ error: 'Could not find station after creation.' });
     res.status(201).json(dbStationToApi(newStation));
 });

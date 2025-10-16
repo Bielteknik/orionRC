@@ -6,7 +6,7 @@ import { Sensor, Camera } from '../types.ts';
 interface AddStationDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (newStationData: { name: string; location: string; locationCoords: { lat: number; lng: number; }; selectedSensorIds: string[]; selectedCameraIds: string[] }) => void;
+  onSave: (newStationData: { id: string; name: string; location: string; locationCoords: { lat: number; lng: number; }; selectedSensorIds: string[]; selectedCameraIds: string[] }) => void;
   unassignedSensors: Sensor[];
   unassignedCameras: Camera[];
 }
@@ -20,6 +20,7 @@ const AddStationDrawer: React.FC<AddStationDrawerProps> = ({
     unassignedSensors,
     unassignedCameras
 }) => {
+  const [deviceId, setDeviceId] = useState('');
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
   const [coords, setCoords] = useState<{ lat: number; lng: number }>(INITIAL_CENTER);
@@ -40,6 +41,7 @@ const AddStationDrawer: React.FC<AddStationDrawerProps> = ({
   }, [onClose]);
   
   const resetState = () => {
+    setDeviceId('');
     setName('');
     setLocation('');
     setCoords(INITIAL_CENTER);
@@ -54,12 +56,13 @@ const AddStationDrawer: React.FC<AddStationDrawerProps> = ({
   };
   
   const handleSave = () => {
-    if (!name.trim() || !location.trim()) {
-      setError('İstasyon Adı ve Konum Açıklaması alanları zorunludur.');
+    if (!deviceId.trim() || !name.trim() || !location.trim()) {
+      setError('Cihaz ID, İstasyon Adı ve Konum Açıklaması alanları zorunludur.');
       return;
     }
     setError('');
     onSave({
+      id: deviceId,
       name,
       location,
       locationCoords: coords,
@@ -101,7 +104,20 @@ const AddStationDrawer: React.FC<AddStationDrawerProps> = ({
           
           <div className="space-y-4 bg-primary p-4 rounded-lg border border-gray-200">
             <div>
-              <label htmlFor="station-name" className="block text-sm font-medium text-gray-700 mb-1">İstasyon Adı</label>
+              <label htmlFor="station-id" className="block text-sm font-medium text-gray-700 mb-1">Cihaz ID *</label>
+              <input
+                type="text"
+                id="station-id"
+                value={deviceId}
+                onChange={e => setDeviceId(e.target.value)}
+                className="w-full bg-secondary border border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-accent font-mono"
+                placeholder="Örn: ejder3200-01"
+                required
+              />
+              <p className="text-xs text-muted mt-1.5">Agent'ın `config.json` dosyasındaki ID ile aynı olmalıdır.</p>
+            </div>
+            <div>
+              <label htmlFor="station-name" className="block text-sm font-medium text-gray-700 mb-1">İstasyon Adı *</label>
               <input
                 type="text"
                 id="station-name"
@@ -112,7 +128,7 @@ const AddStationDrawer: React.FC<AddStationDrawerProps> = ({
               />
             </div>
             <div>
-              <label htmlFor="station-location" className="block text-sm font-medium text-gray-700 mb-1">Konum Açıklaması</label>
+              <label htmlFor="station-location" className="block text-sm font-medium text-gray-700 mb-1">Konum Açıklaması *</label>
               <input
                 type="text"
                 id="station-location"
