@@ -17,6 +17,7 @@ const CameraDetail: React.FC<CameraDetailProps> = ({ cameraId, onBack }) => {
   const [error, setError] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const pollingIntervalRef = useRef<number | null>(null);
+  const videoContainerRef = useRef<HTMLDivElement>(null);
 
   const fetchData = async (isPolling = false) => {
     if (!isPolling) setIsLoading(true);
@@ -81,6 +82,19 @@ const CameraDetail: React.FC<CameraDetailProps> = ({ cameraId, onBack }) => {
     }
   };
 
+  const handleFullscreen = () => {
+    const videoElement = videoContainerRef.current;
+    if (!videoElement) return;
+
+    if (!document.fullscreenElement) {
+        videoElement.requestFullscreen().catch(err => {
+            alert(`Tam ekran modu etkinleştirilemedi: ${err.message}`);
+        });
+    } else {
+        document.exitFullscreen();
+    }
+  };
+
 
   if (isLoading) {
       return (
@@ -138,7 +152,7 @@ const CameraDetail: React.FC<CameraDetailProps> = ({ cameraId, onBack }) => {
             </div>
 
             {/* Video Player */}
-            <div className="relative bg-gray-800 aspect-video w-full flex items-center justify-center">
+            <div ref={videoContainerRef} className="relative bg-gray-800 aspect-video w-full flex items-center justify-center">
                 {camera.status !== CameraStatus.Offline ? (
                     <video
                         key={camera.streamUrl}
@@ -165,7 +179,7 @@ const CameraDetail: React.FC<CameraDetailProps> = ({ cameraId, onBack }) => {
 
             {/* Controls */}
             <div className="flex justify-center items-center gap-4 p-4 bg-gray-50 border-t border-gray-200">
-                 <button className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors">
+                 <button onClick={handleFullscreen} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors">
                     <FullscreenIcon className="w-5 h-5" />
                     <span>Tam Ekran</span>
                 </button>

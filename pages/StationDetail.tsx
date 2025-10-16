@@ -364,10 +364,11 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
                                                 </div>
                                                 <button 
                                                     onClick={(e) => { e.stopPropagation(); onViewCamera(camera.id); }} 
-                                                    className="flex items-center gap-1 text-accent font-semibold p-1 rounded-md hover:bg-accent/10 text-sm"
+                                                    className="flex items-center gap-1.5 text-accent font-semibold py-1 px-3 rounded-lg hover:bg-accent/10 transition-colors text-sm"
                                                     title="Canlı izle"
                                                 >
                                                     <PlayIcon className="w-4 h-4" />
+                                                    <span>İzle</span>
                                                 </button>
                                             </div>
                                         </li>
