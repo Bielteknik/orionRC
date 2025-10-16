@@ -24,7 +24,12 @@ class DriverManager {
             return this.drivers.get(driverName)!;
         }
         try {
-            const driverPath = path.join(__dirname, 'drivers', `${driverName}.driver.js`);
+            // FIX: Ensure we are not duplicating the '.driver' part of the filename.
+            const filename = driverName.endsWith('.driver') 
+                ? `${driverName}.js` 
+                : `${driverName}.driver.js`;
+            const driverPath = path.join(__dirname, 'drivers', filename);
+
             const driverModule = await import(driverPath);
             const driverInstance: ISensorDriver = new driverModule.default();
             this.drivers.set(driverName, driverInstance);
