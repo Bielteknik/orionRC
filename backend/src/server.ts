@@ -1,5 +1,4 @@
-
-
+// Fix: Import Request, Response, and NextFunction types from express to resolve type errors.
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -297,11 +296,14 @@ app.use(express.static(frontendDistPath));
 
 // All other non-API routes should serve the frontend's index.html
 app.get('*', (req: Request, res: Response) => {
-    if (!req.path.startsWith('/api/')) {
-        res.sendFile(path.join(frontendDistPath, 'index.html'));
-    } else {
-        res.status(404).json({ error: 'API endpoint not found.' });
-    }
+    // API routes are handled by the router mounted at '/api', so any `GET` request
+    // reaching here is a client-side route and should be served the index.html file.
+    res.sendFile(path.join(frontendDistPath, 'index.html'), (err) => {
+        if (err) {
+            console.error('Error sending index.html:', err);
+            res.status(500).send("Application not found. Please ensure the frontend has been built correctly.");
+        }
+    });
 });
 
 // --- Start Server ---
@@ -312,8 +314,6 @@ const startServer = async () => {
     try {
         await fs.access(path.join(frontendDistPath, 'index.html'));
     } catch (e) {
-        // In a development environment (like the one this code runs in), we don't want to crash the server.
-        // We'll just log a warning. For a true production build, you might exit.
         console.warn('--- UYARI ---');
         console.warn('Frontend build dosyaları bulunamadı. Lütfen ana dizinde `npm run build` komutunu çalıştırın veya Vite dev sunucusunu kullanın.');
         console.warn('Beklenen Dizin:', frontendDistPath);
