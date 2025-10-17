@@ -6,7 +6,7 @@ export interface SensorConfig {
     id: number; // Unique ID for this sensor in the database
     name: string; // Human-readable name, e.g., "Sıcaklık Sensörü 1"
     is_active: boolean;
-    interface: 'i2c' | 'serial' | 'virtual' | 'openweather'; // The hardware interface type
+    interface: 'i2c' | 'serial' | 'virtual' | 'openweather' | 'http'; // The hardware interface type
     
     // Defines which driver to use on the agent
     parser_config: {
