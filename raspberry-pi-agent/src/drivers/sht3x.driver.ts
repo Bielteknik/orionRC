@@ -9,7 +9,7 @@ const CMD_MEASURE_HPM = [0x2C, 0x06]; // Yüksek Tekrarlanabilirlikte Tek Ölç�
 
 // Sensörden veri okumadan önce beklenecek süre (ms)
 const RESET_DELAY = 10; // Soft reset sonrası bekleme süresi
-const MEASUREMENT_DELAY = 50; // Ölçüm sonrası bekleme süresi, 20'den artırıldı.
+const MEASUREMENT_DELAY = 500; // Ölçüm sonrası bekleme süresi, CRC hatalarını önlemek için 50'den 500'e artırıldı.
 
 // CRC-8 (Cyclic Redundancy Check) hesaplama fonksiyonu
 // SHT3x datasheet'inden alınmıştır. Veri bütünlüğünü doğrulamak için kritiktir.
