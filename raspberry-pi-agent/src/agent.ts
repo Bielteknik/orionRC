@@ -1,14 +1,20 @@
+
+
 import axios from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import sqlite3 from 'sqlite3';
 import { open, Database } from 'sqlite';
-import { DeviceConfig, ReadingPayload, AgentState, AgentCommand } from './types';
-import { ISensorDriver } from './types'; // ISensorDriver'ı ayrı import et
+import { DeviceConfig, ReadingPayload, AgentState, AgentCommand, ISensorDriver, SensorConfig, CameraConfig } from './types.js';
 
 const execAsync = promisify(exec);
+
+// Fix: Define __dirname for ES modules to resolve path errors.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /*
 ================================================================================
@@ -197,7 +203,7 @@ class OrionAgent {
             return readings;
         }
 
-        const activeSensors = this.deviceConfig.sensors.filter(s => s.is_active && s.interface !== 'virtual');
+        const activeSensors = this.deviceConfig.sensors.filter((s: SensorConfig) => s.is_active && s.interface !== 'virtual');
         for (const sensorConfig of activeSensors) {
             const driverName = sensorConfig.parser_config?.driver;
             if (!driverName) {
@@ -231,7 +237,7 @@ class OrionAgent {
             return readings;
         }
 
-        const virtualSensors = this.deviceConfig.sensors.filter(s => s.is_active && s.interface === 'virtual' && s.parser_config?.driver === 'image_analyzer');
+        const virtualSensors = this.deviceConfig.sensors.filter((s: SensorConfig) => s.is_active && s.interface === 'virtual' && s.parser_config?.driver === 'image_analyzer');
 
         for (const sensorConfig of virtualSensors) {
             const sourceCameraId = sensorConfig.config?.source_camera_id;
@@ -242,7 +248,7 @@ class OrionAgent {
                 continue;
             }
 
-            const cameraConfig = this.deviceConfig.cameras.find(c => c.id === sourceCameraId);
+            const cameraConfig = this.deviceConfig.cameras.find((c: CameraConfig) => c.id === sourceCameraId);
             if (!cameraConfig) {
                 logger.warn(`'${sensorConfig.name}' için kaynak kamera ID '${sourceCameraId}' bulunamadı. Atlanıyor.`);
                 continue;
@@ -280,7 +286,8 @@ class OrionAgent {
                 try {
                     await fs.unlink(tempFilePath);
                 } catch (unlinkError) {
-                    if ((unlinkError as NodeJS.ErrnoException).code !== 'ENOENT') {
+                    // Fix: Cannot find namespace 'NodeJS'. Cast to any to access code property.
+                    if ((unlinkError as any).code !== 'ENOENT') {
                         logger.warn(`Geçici resim dosyası silinemedi: ${tempFilePath}: ${String(unlinkError)}`);
                     }
                 }
@@ -341,7 +348,7 @@ class OrionAgent {
 
     private async _handleCaptureImageCommand(command: AgentCommand): Promise<void> {
         const { camera_id } = command.payload;
-        const cameraConfig = this.deviceConfig?.cameras.find(c => c.id === camera_id);
+        const cameraConfig = this.deviceConfig?.cameras.find((c: CameraConfig) => c.id === camera_id);
         if (!cameraConfig) {
             logger.error(`Fotoğraf çekme komutu başarısız: Kamera ID '${camera_id}' yapılandırmada bulunamadı.`);
             return;

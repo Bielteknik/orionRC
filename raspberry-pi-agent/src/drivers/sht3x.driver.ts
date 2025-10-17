@@ -1,4 +1,4 @@
-import { ISensorDriver } from "../types";
+import { ISensorDriver } from "../types.js";
 import { openSync, I2CBus } from 'i2c-bus';
 // Fix: Import Buffer to resolve 'Cannot find name' error.
 import { Buffer } from 'buffer';

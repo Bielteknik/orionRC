@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "TypeScript-based agent for reading sensor data on Raspberry Pi and sending it to a remote server.",
   "main": "dist/agent.js",
+  "type": "module",
   "scripts": {
     "start": "node dist/agent.js",
     "build": "tsc",

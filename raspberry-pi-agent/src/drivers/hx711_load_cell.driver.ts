@@ -1,4 +1,4 @@
-import { ISensorDriver } from "../types";
+import { ISensorDriver } from "../types.js";
 import { SerialPort } from 'serialport';
 import { ReadlineParser } from '@serialport/parser-readline';
 
@@ -35,7 +35,8 @@ export default class Hx711Driver implements ISensorDriver {
 
             let readAttempts = 0;
             const maxAttempts = 10; // Geçerli veri için en fazla kaç satır deneneceği
-            let timeout: NodeJS.Timeout | null = null;
+            // Fix: Cannot find namespace 'NodeJS'. Use ReturnType for type safety.
+            let timeout: ReturnType<typeof setTimeout> | null = null;
 
             // Portu ve dinleyicileri temizleyip Promise'i sonlandıran fonksiyon
             const cleanupAndResolve = (value: Record<string, any> | null) => {
