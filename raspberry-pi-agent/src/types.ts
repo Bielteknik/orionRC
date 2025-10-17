@@ -9,7 +9,7 @@ export interface SensorConfig {
     id: number;
     name: string;
     is_active: boolean;
-    interface: 'i2c' | 'serial' | 'virtual';
+    interface: 'i2c' | 'serial' | 'virtual' | 'openweather';
     parser_config: {
         driver: string;
     };
