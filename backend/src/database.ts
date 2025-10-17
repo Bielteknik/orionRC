@@ -1,6 +1,11 @@
 import sqlite3 from 'sqlite3';
 import { open, Database } from 'sqlite';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Fix: Define __dirname for ES modules to resolve path errors.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export let db: Database;
 

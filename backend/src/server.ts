@@ -7,6 +7,11 @@ import fs from 'fs/promises';
 import { GoogleGenAI, Chat } from "@google/genai";
 import { openDb, db, migrate } from './database';
 import { DeviceConfig, SensorConfig, CameraConfig } from './types';
+import { fileURLToPath } from 'url';
+
+// Fix: Define __dirname for ES modules to resolve path errors.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -47,7 +52,6 @@ const authenticateDevice = (req: Request, res: Response, next: NextFunction) => 
 };
 
 const apiRouter = express.Router();
-app.use('/api', apiRouter);
 
 apiRouter.get('/', (req: Request, res: Response) => {
     res.json({ status: 'API is running' });
@@ -294,7 +298,10 @@ app.use('/uploads', express.static(uploadsPath));
 // Serve static assets from the vite build folder
 app.use(express.static(frontendDistPath));
 
-// All other non-API routes should serve the frontend's index.html
+// API routes
+app.use('/api', apiRouter);
+
+// All other non-API routes should serve the frontend's index.html for client-side routing
 app.get('*', (req: Request, res: Response) => {
     // API routes are handled by the router mounted at '/api', so any `GET` request
     // reaching here is a client-side route and should be served the index.html file.
