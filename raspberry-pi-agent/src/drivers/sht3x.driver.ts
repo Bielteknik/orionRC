@@ -4,10 +4,12 @@ import { openSync, I2CBus } from 'i2c-bus';
 import { Buffer } from 'buffer';
 
 // SHT3x sensörü için I2C komutları
+const CMD_SOFT_RESET = [0x30, 0xA2];
 const CMD_MEASURE_HPM = [0x2C, 0x06]; // Yüksek Tekrarlanabilirlikte Tek Ölçüm
 
 // Sensörden veri okumadan önce beklenecek süre (ms)
-const MEASUREMENT_DELAY = 20;
+const RESET_DELAY = 10; // Soft reset sonrası bekleme süresi
+const MEASUREMENT_DELAY = 50; // Ölçüm sonrası bekleme süresi, 20'den artırıldı.
 
 // CRC-8 (Cyclic Redundancy Check) hesaplama fonksiyonu
 // SHT3x datasheet'inden alınmıştır. Veri bütünlüğünü doğrulamak için kritiktir.
@@ -45,14 +47,19 @@ export default class Sht3xDriver implements ISensorDriver {
                 // I2C bus'ı aç
                 i2cBus = openSync(busNumber);
 
-                // Ölçüm komutunu gönder
+                // 1. Soft Reset gönder (Her okumadan önce sensörün bilinen bir durumda başlamasını sağlar)
+                const resetBuffer = Buffer.from(CMD_SOFT_RESET);
+                i2cBus.i2cWriteSync(address, resetBuffer.length, resetBuffer);
+                await new Promise(resolve => setTimeout(resolve, RESET_DELAY));
+
+                // 2. Ölçüm komutunu gönder
                 const writeBuffer = Buffer.from(CMD_MEASURE_HPM);
                 i2cBus.i2cWriteSync(address, writeBuffer.length, writeBuffer);
 
                 // Sensörün ölçüm yapması için bekle
                 await new Promise(resolve => setTimeout(resolve, MEASUREMENT_DELAY));
 
-                // 6 byte veri oku: [Sıcaklık MSB, Sıcaklık LSB, Sıcaklık CRC, Nem MSB, Nem LSB, Nem CRC]
+                // 3. 6 byte veri oku: [Sıcaklık MSB, Sıcaklık LSB, Sıcaklık CRC, Nem MSB, Nem LSB, Nem CRC]
                 const readBuffer = Buffer.alloc(6);
                 i2cBus.i2cReadSync(address, readBuffer.length, readBuffer);
 
