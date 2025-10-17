@@ -4,7 +4,8 @@ import Card from '../components/common/Card.tsx';
 import AddReportDrawer from '../components/AddReportDrawer.tsx';
 import ScheduleReportDrawer from '../components/ScheduleReportDrawer.tsx';
 import { AddIcon, SearchIcon, DownloadIcon, EditIcon, DeleteIcon, CalendarIcon } from '../components/icons/Icons.tsx';
-import { getStations, getSensors, getReports, getReportSchedules, getReadings } from '../services/apiService.ts';
+import { getStations, getSensors, getReports, getReportSchedules, getReadings, deleteReport, deleteReportSchedule } from '../services/apiService.ts';
+import DeleteConfirmationModal from '../components/DeleteConfirmationModal.tsx';
 
 declare const XLSX: any;
 
@@ -24,28 +25,34 @@ const Reports: React.FC = () => {
     const [isScheduleDrawerOpen, setIsScheduleDrawerOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [reportToDelete, setReportToDelete] = useState<Report | null>(null);
+    const [isScheduleDeleteModalOpen, setIsScheduleDeleteModalOpen] = useState(false);
+    const [scheduleToDelete, setScheduleToDelete] = useState<ReportSchedule | null>(null);
+
+    const fetchData = async () => {
+        setIsLoading(true);
+        try {
+            const [stationsData, sensorsData, reportsData, schedulesData, readingsData] = await Promise.all([
+                getStations(), 
+                getSensors(),
+                getReports(),
+                getReportSchedules(),
+                getReadings()
+            ]);
+            setStations(stationsData);
+            setSensors(sensorsData);
+            setReports(reportsData);
+            setSchedules(schedulesData);
+            setReadings(readingsData);
+        } catch (error) {
+            console.error("Failed to fetch data for reports:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     useEffect(() => {
-        const fetchData = async () => {
-            setIsLoading(true);
-            try {
-                const [stationsData, sensorsData, reportsData, schedulesData, readingsData] = await Promise.all([
-                    getStations(), 
-                    getSensors(),
-                    getReports(),
-                    getReportSchedules(),
-                    getReadings()
-                ]);
-                setStations(stationsData);
-                setSensors(sensorsData);
-                setReports(reportsData);
-                setSchedules(schedulesData);
-                setReadings(readingsData);
-            } catch (error) {
-                console.error("Failed to fetch data for reports:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
         fetchData();
     }, []);
     
@@ -144,6 +151,38 @@ const Reports: React.FC = () => {
         }
     };
 
+    const handleOpenDeleteReportModal = (report: Report) => {
+        setReportToDelete(report);
+        setIsDeleteModalOpen(true);
+    };
+
+    const executeDeleteReport = async () => {
+        if (!reportToDelete) return;
+        try {
+            await deleteReport(reportToDelete.id);
+            fetchData();
+        } catch (error) {
+            console.error("Failed to delete report:", error);
+            alert("Rapor silinirken bir hata oluştu.");
+        }
+    };
+
+    const handleOpenDeleteScheduleModal = (schedule: ReportSchedule) => {
+        setScheduleToDelete(schedule);
+        setIsScheduleDeleteModalOpen(true);
+    };
+
+    const executeDeleteSchedule = async () => {
+        if (!scheduleToDelete) return;
+        try {
+            await deleteReportSchedule(scheduleToDelete.id);
+            fetchData();
+        } catch (error) {
+            console.error("Failed to delete schedule:", error);
+            alert("Rapor planı silinirken bir hata oluştu.");
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -170,18 +209,43 @@ const Reports: React.FC = () => {
 
             {activeTab === 'generated' && (
                 <Card className="p-0"><div className="overflow-x-auto"><table className="w-full text-sm text-left text-gray-600"><thead className="text-xs text-gray-700 uppercase bg-gray-100"><tr><th scope="col" className="px-6 py-3">Rapor Başlığı</th><th scope="col" className="px-6 py-3">Rapor Tipi</th><th scope="col" className="px-6 py-3">Oluşturulma Tarihi</th><th scope="col" className="px-6 py-3 text-right">İşlemler</th></tr></thead><tbody>
-                {filteredReports.map(report => (<tr key={report.id} className="border-b border-gray-200 hover:bg-gray-50"><td className="px-6 py-4 font-medium text-gray-900">{report.title}</td><td className="px-6 py-4"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${report.type === 'daily' ? 'bg-blue-100 text-blue-800' : report.type === 'weekly' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'}`}>{report.type}</span></td><td className="px-6 py-4 font-mono text-gray-800">{new Date(report.createdAt).toLocaleString('tr-TR')}</td><td className="px-6 py-4 text-right"><button onClick={() => handleDownloadReport(report)} className="flex items-center gap-2 text-accent font-semibold py-1 px-3 rounded-lg hover:bg-accent/10 transition-colors text-sm"><DownloadIcon className="w-4 h-4" /><span>İndir</span></button></td></tr>))}
+                {filteredReports.map(report => (<tr key={report.id} className="border-b border-gray-200 hover:bg-gray-50"><td className="px-6 py-4 font-medium text-gray-900">{report.title}</td><td className="px-6 py-4"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${report.type === 'daily' ? 'bg-blue-100 text-blue-800' : report.type === 'weekly' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'}`}>{report.type}</span></td><td className="px-6 py-4 font-mono text-gray-800">{new Date(report.createdAt).toLocaleString('tr-TR')}</td>
+                <td className="px-6 py-4 text-right flex justify-end items-center gap-2">
+                    <button onClick={() => handleDownloadReport(report)} className="flex items-center gap-2 text-accent font-semibold py-1 px-3 rounded-lg hover:bg-accent/10 transition-colors text-sm"><DownloadIcon className="w-4 h-4" /><span>İndir</span></button>
+                    <button onClick={() => handleOpenDeleteReportModal(report)} className="text-muted hover:text-danger p-2 rounded-lg hover:bg-danger/10 transition-colors"><DeleteIcon className="w-4 h-4"/></button>
+                </td>
+                </tr>))}
                 </tbody></table></div>{filteredReports.length === 0 && (<div className="text-center py-8 text-muted"><p>Rapor bulunamadı.</p></div>)}</Card>
             )}
 
              {activeTab === 'scheduled' && (
                 <Card className="p-0"><div className="overflow-x-auto"><table className="w-full text-sm text-left text-gray-600"><thead className="text-xs text-gray-700 uppercase bg-gray-100"><tr><th scope="col" className="px-6 py-3">Plan Adı</th><th scope="col" className="px-6 py-3">Sıklık</th><th scope="col" className="px-6 py-3">Alıcı</th><th scope="col" className="px-6 py-3">Durum</th><th scope="col" className="px-6 py-3">Son Çalışma</th><th scope="col" className="px-6 py-3 text-right">İşlemler</th></tr></thead><tbody>
-                {schedules.map(schedule => (<tr key={schedule.id} className="border-b border-gray-200 hover:bg-gray-50"><td className="px-6 py-4 font-medium text-gray-900">{schedule.name}</td><td className="px-6 py-4 capitalize">{schedule.frequency} @ {schedule.time}</td><td className="px-6 py-4">{schedule.recipient}</td><td className="px-6 py-4"><span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${schedule.isEnabled ? 'bg-success/10 text-success' : 'bg-gray-200 text-muted'}`}>{schedule.isEnabled ? 'Aktif' : 'Pasif'}</span></td><td className="px-6 py-4 font-mono text-gray-800 text-xs">{schedule.lastRun}</td><td className="px-6 py-4 text-right flex justify-end gap-2"><button className="text-muted hover:text-accent p-1"><EditIcon className="w-4 h-4"/></button><button className="text-muted hover:text-danger p-1"><DeleteIcon className="w-4 h-4"/></button></td></tr>))}
+                {schedules.map(schedule => (<tr key={schedule.id} className="border-b border-gray-200 hover:bg-gray-50"><td className="px-6 py-4 font-medium text-gray-900">{schedule.name}</td><td className="px-6 py-4 capitalize">{schedule.frequency} @ {schedule.time}</td><td className="px-6 py-4">{schedule.recipient}</td><td className="px-6 py-4"><span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${schedule.isEnabled ? 'bg-success/10 text-success' : 'bg-gray-200 text-muted'}`}>{schedule.isEnabled ? 'Aktif' : 'Pasif'}</span></td><td className="px-6 py-4 font-mono text-gray-800 text-xs">{schedule.lastRun}</td>
+                <td className="px-6 py-4 text-right flex justify-end gap-2">
+                    <button className="text-muted hover:text-accent p-1"><EditIcon className="w-4 h-4"/></button>
+                    <button onClick={() => handleOpenDeleteScheduleModal(schedule)} className="text-muted hover:text-danger p-1"><DeleteIcon className="w-4 h-4"/></button>
+                </td>
+                </tr>))}
                 </tbody></table></div>{filteredSchedules.length === 0 && (<div className="text-center py-8 text-muted"><p>Zamanlanmış rapor bulunamadı.</p></div>)}</Card>
             )}
             
             <AddReportDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} onSave={handleSaveReport} stations={stations} sensorTypes={sensorTypes}/>
             <ScheduleReportDrawer isOpen={isScheduleDrawerOpen} onClose={() => setIsScheduleDrawerOpen(false)} onSave={handleSaveSchedule} stations={stations} sensorTypes={sensorTypes}/>
+        
+            <DeleteConfirmationModal
+                isOpen={isDeleteModalOpen}
+                onClose={() => setIsDeleteModalOpen(false)}
+                onConfirm={executeDeleteReport}
+                title="Raporu Sil"
+                message={<><strong>{reportToDelete?.title}</strong> adlı raporu silmek üzeresiniz. Bu işlem geri alınamaz. Onaylamak için şifreyi girin.</>}
+            />
+             <DeleteConfirmationModal
+                isOpen={isScheduleDeleteModalOpen}
+                onClose={() => setIsScheduleDeleteModalOpen(false)}
+                onConfirm={executeDeleteSchedule}
+                title="Rapor Planını Sil"
+                message={<><strong>{scheduleToDelete?.name}</strong> adlı rapor planını silmek üzeresiniz. Bu işlem geri alınamaz. Onaylamak için şifreyi girin.</>}
+            />
         </div>
     );
 };

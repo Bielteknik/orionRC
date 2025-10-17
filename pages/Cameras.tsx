@@ -5,6 +5,7 @@ import { AddIcon, FilterIcon, SearchIcon, PlayIcon, ListIcon, GridIcon, Exclamat
 import AddCameraDrawer from '../components/AddCameraDrawer.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
 import { getCameras, getStations, addCamera, deleteCamera } from '../services/apiService.ts';
+import DeleteConfirmationModal from '../components/DeleteConfirmationModal.tsx';
 
 const MosaicView: React.FC<{ cameras: Camera[], onViewDetails: (id: string) => void }> = ({ cameras, onViewDetails }) => {
     const onlineCameras = cameras.filter(c => c.status !== CameraStatus.Offline);
@@ -48,6 +49,9 @@ const Cameras: React.FC<CamerasProps> = ({ onViewDetails }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [cameraToDelete, setCameraToDelete] = useState<Camera | null>(null);
+
     const fetchData = useCallback(async () => {
         try {
             setIsLoading(true);
@@ -88,15 +92,19 @@ const Cameras: React.FC<CamerasProps> = ({ onViewDetails }) => {
         }
     };
 
-    const handleDeleteCamera = async (id: string) => {
-        if (window.confirm('Bu kamerayı silmek istediğinizden emin misiniz?')) {
-            try {
-                await deleteCamera(id);
-                fetchData();
-            } catch (error) {
-                console.error("Failed to delete camera:", error);
-                alert("Kamera silinirken bir hata oluştu.");
-            }
+    const handleDeleteCamera = (camera: Camera) => {
+        setCameraToDelete(camera);
+        setIsDeleteModalOpen(true);
+    };
+
+    const executeDelete = async () => {
+        if (!cameraToDelete) return;
+        try {
+            await deleteCamera(cameraToDelete.id);
+            fetchData();
+        } catch (error) {
+            console.error("Failed to delete camera:", error);
+            alert("Kamera silinirken bir hata oluştu.");
         }
     };
 
@@ -194,7 +202,7 @@ const Cameras: React.FC<CamerasProps> = ({ onViewDetails }) => {
                           <PlayIcon className="w-4 h-4 text-accent" />
                           <span>İzle</span>
                       </button>
-                      <button onClick={() => handleDeleteCamera(camera.id)} className="p-2 text-muted hover:text-danger rounded-full hover:bg-danger/10"><DeleteIcon className="w-4 h-4" /></button>
+                      <button onClick={() => handleDeleteCamera(camera)} className="p-2 text-muted hover:text-danger rounded-full hover:bg-danger/10"><DeleteIcon className="w-4 h-4" /></button>
                   </div>
                 </div>
               </div>
@@ -213,6 +221,17 @@ const Cameras: React.FC<CamerasProps> = ({ onViewDetails }) => {
         onClose={() => setIsDrawerOpen(false)}
         onSave={handleSaveCamera}
         stations={stations}
+      />
+      <DeleteConfirmationModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={executeDelete}
+        title="Kamerayı Sil"
+        message={
+          <>
+            <strong>{cameraToDelete?.name}</strong> adlı kamerayı silmek üzeresiniz. Bu işlem geri alınamaz. Onaylamak için şifreyi girin.
+          </>
+        }
       />
     </div>
   );

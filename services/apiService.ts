@@ -60,7 +60,10 @@ export const getAlertRules = (): Promise<AlertRule[]> => apiClient.get('/alert-r
 
 // Reports
 export const getReports = (): Promise<Report[]> => apiClient.get('/reports').then(res => res.data).catch(e => handleError(e, 'fetching reports'));
+export const deleteReport = (id: string): Promise<void> => apiClient.delete(`/reports/${id}`).then(res => res.data).catch(e => handleError(e, 'deleting report'));
 export const getReportSchedules = (): Promise<ReportSchedule[]> => apiClient.get('/report-schedules').then(res => res.data).catch(e => handleError(e, 'fetching report schedules'));
+export const deleteReportSchedule = (id: string): Promise<void> => apiClient.delete(`/report-schedules/${id}`).then(res => res.data).catch(e => handleError(e, 'deleting report schedule'));
+
 
 // Notifications
 export const getNotifications = (): Promise<Notification[]> => apiClient.get('/notifications').then(res => res.data).catch(e => handleError(e, 'fetching notifications'));

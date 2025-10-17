@@ -5,12 +5,13 @@ import { AddIcon, SearchIcon, EditIcon, DeleteIcon, ExclamationIcon, Thermometer
 import AddSensorDrawer from '../components/AddSensorDrawer.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
 import { getSensors, getStations, addSensor, updateSensor, deleteSensor, getDefinitions } from '../services/apiService.ts';
+import DeleteConfirmationModal from '../components/DeleteConfirmationModal.tsx';
 
 const SensorCard: React.FC<{
     sensor: Sensor;
     stationName: string;
     onEdit: (sensor: Sensor) => void;
-    onDelete: (id: string) => void;
+    onDelete: (sensor: Sensor) => void;
 }> = ({ sensor, stationName, onEdit, onDelete }) => {
     const getSensorIcon = (sensor: Sensor) => {
         if (sensor.interface === 'virtual') {
@@ -48,7 +49,7 @@ const SensorCard: React.FC<{
                 </div>
                 <div className="flex items-center gap-1">
                     <button onClick={() => onEdit(sensor)} className="p-2 text-muted hover:text-accent rounded-full hover:bg-accent/10 transition-colors"><EditIcon className="w-4 h-4" /></button>
-                    <button onClick={() => onDelete(sensor.id)} className="p-2 text-muted hover:text-danger rounded-full hover:bg-danger/10 transition-colors"><DeleteIcon className="w-4 h-4" /></button>
+                    <button onClick={() => onDelete(sensor)} className="p-2 text-muted hover:text-danger rounded-full hover:bg-danger/10 transition-colors"><DeleteIcon className="w-4 h-4" /></button>
                 </div>
             </div>
             <div className="flex-grow text-center my-4">
@@ -75,6 +76,9 @@ const Sensors: React.FC = () => {
     const [statusFilter, setStatusFilter] = useState<SensorStatus | 'all'>('all');
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [sensorToEdit, setSensorToEdit] = useState<Sensor | null>(null);
+
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [sensorToDelete, setSensorToDelete] = useState<Sensor | null>(null);
 
     const fetchData = useCallback(async () => {
         try {
@@ -122,15 +126,19 @@ const Sensors: React.FC = () => {
         }
     };
 
-    const handleDeleteSensor = async (id: string) => {
-        if (window.confirm('Bu sensörü silmek istediğinizden emin misiniz?')) {
-            try {
-                await deleteSensor(id);
-                fetchData();
-            } catch (error) {
-                console.error("Failed to delete sensor:", error);
-                alert("Sensör silinirken bir hata oluştu.");
-            }
+    const handleDeleteSensor = (sensor: Sensor) => {
+        setSensorToDelete(sensor);
+        setIsDeleteModalOpen(true);
+    };
+
+    const executeDelete = async () => {
+        if (!sensorToDelete) return;
+        try {
+            await deleteSensor(sensorToDelete.id);
+            fetchData();
+        } catch (error) {
+            console.error("Failed to delete sensor:", error);
+            alert("Sensör silinirken bir hata oluştu.");
         }
     };
 
@@ -225,6 +233,17 @@ const Sensors: React.FC = () => {
                 stations={stations}
                 sensorTypes={sensorTypes}
                 sensorToEdit={sensorToEdit}
+            />
+            <DeleteConfirmationModal
+                isOpen={isDeleteModalOpen}
+                onClose={() => setIsDeleteModalOpen(false)}
+                onConfirm={executeDelete}
+                title="Sensörü Sil"
+                message={
+                <>
+                    <strong>{sensorToDelete?.name}</strong> adlı sensörü silmek üzeresiniz. Bu işlem geri alınamaz. Onaylamak için şifreyi girin.
+                </>
+                }
             />
         </div>
     );

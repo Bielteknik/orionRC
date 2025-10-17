@@ -6,6 +6,7 @@ import AddStationDrawer from '../components/AddStationModal.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
 import { getStations, getUnassignedSensors, getUnassignedCameras, addStation, deleteStation, updateStation } from '../services/apiService.ts';
 import LocationPickerMap from '../components/common/LocationPickerMap.tsx';
+import DeleteConfirmationModal from '../components/DeleteConfirmationModal.tsx';
 
 // Re-using AddStationDrawer for editing by creating a new component wrapper
 const EditStationDrawer: React.FC<{
@@ -100,12 +101,12 @@ const statusInfo: Record<string, { text: string, className: string }> = {
     maintenance: { text: 'Bakımda', className: 'bg-warning/80 text-white' },
 };
 
-const StationCard: React.FC<{ station: Station, onViewDetails: (id: string) => void, onEdit: (station: Station) => void, onDelete: (id: string) => void }> = ({ station, onViewDetails, onEdit, onDelete }) => {
+const StationCard: React.FC<{ station: Station, onViewDetails: (id: string) => void, onEdit: (station: Station) => void, onDelete: (station: Station) => void }> = ({ station, onViewDetails, onEdit, onDelete }) => {
     const status = statusInfo[station.status];
 
     const handleDelete = (e: React.MouseEvent) => {
         e.stopPropagation();
-        onDelete(station.id);
+        onDelete(station);
     };
 
     return (
@@ -189,6 +190,9 @@ const Stations: React.FC<StationsProps> = ({ onViewDetails }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [stationToDelete, setStationToDelete] = useState<Station | null>(null);
+
   const fetchData = useCallback(async () => {
     try {
         setIsLoading(true);
@@ -240,16 +244,20 @@ const Stations: React.FC<StationsProps> = ({ onViewDetails }) => {
     }
   };
 
-  const handleDeleteStation = async (id: string) => {
-    if (window.confirm('Bu istasyonu silmek istediğinizden emin misiniz? Bağlı sensör ve kameralar boşa çıkacaktır.')) {
-        try {
-            await deleteStation(id);
-            fetchData();
-        } catch (error) {
-            console.error("Failed to delete station:", error);
-            alert("İstasyon silinirken bir hata oluştu.");
-        }
-    }
+  const handleDeleteStation = (station: Station) => {
+    setStationToDelete(station);
+    setIsDeleteModalOpen(true);
+  };
+
+  const executeDelete = async () => {
+      if (!stationToDelete) return;
+      try {
+          await deleteStation(stationToDelete.id);
+          fetchData();
+      } catch (error) {
+          console.error("Failed to delete station:", error);
+          alert("İstasyon silinirken bir hata oluştu.");
+      }
   };
   
   const handleOpenEdit = (station: Station) => {
@@ -319,6 +327,17 @@ const Stations: React.FC<StationsProps> = ({ onViewDetails }) => {
             onClose={() => setIsEditDrawerOpen(false)}
             onSave={handleUpdateStation}
             station={editingStation}
+        />
+        <DeleteConfirmationModal
+            isOpen={isDeleteModalOpen}
+            onClose={() => setIsDeleteModalOpen(false)}
+            onConfirm={executeDelete}
+            title="İstasyonu Sil"
+            message={
+                <>
+                    <strong>{stationToDelete?.name}</strong> adlı istasyonu silmek üzeresiniz. Bu işlem geri alınamaz. Onaylamak için şifreyi girin.
+                </>
+            }
         />
     </div>
   );
