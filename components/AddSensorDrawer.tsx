@@ -16,6 +16,7 @@ const interfaceIcons: { [key: string]: React.ReactNode } = {
     'i2c': <CpuChipIcon className="w-5 h-5 text-muted" />,
     'http': <HttpIcon className="w-5 h-5 text-muted" />,
     'virtual': <BrainIcon className="w-5 h-5 text-muted" />,
+    'openweather': <HttpIcon className="w-5 h-5 text-muted" />,
 };
 
 const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSave, stations, sensorTypes, sensorToEdit }) => {
@@ -86,6 +87,9 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
         } else if (interfaceType === 'virtual') {
             setInterfaceConfig('{\n  "source_camera_id": "cam_...",\n  "script": "image_analyzer.py"\n}');
             setParserConfig('{\n  "driver": "image_analyzer"\n}');
+        } else if (interfaceType === 'openweather') {
+            setInterfaceConfig('{} \n// Bu alan sunucu tarafından otomatik olarak doldurulacaktır.');
+            setParserConfig('{\n  "driver": "openweather"\n}');
         } else {
             setInterfaceConfig('{}');
             setParserConfig('{}');
@@ -188,6 +192,7 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
                                         <option value="i2c">I2C</option>
                                         <option value="http">HTTP</option>
                                         <option value="virtual">Yapay Zeka (Görüntü İşleme)</option>
+                                        <option value="openweather">OpenWeather API</option>
                                     </select>
                                 </div>
                             </div>

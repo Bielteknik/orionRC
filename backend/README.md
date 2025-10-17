@@ -21,6 +21,7 @@ This is the backend API for the ORION Observation Platform, built with Node.js, 
     Create a file named `.env` in this directory. Copy the contents of `.env.example` into it and fill in the required values.
     -   `PORT`: The port the server will run on (e.g., 8000).
     -   `DEVICE_AUTH_TOKEN`: A strong, secret token that your IoT agent will use to authenticate. **This must match the `token` in your agent's `config.json`**.
+    -   `OPENWEATHER_API_KEY`: (Optional) Your API key from OpenWeatherMap. This is required to use the OpenWeather virtual sensor for temperature and humidity data.
 
 3.  **Run in Development Mode:**
     This command uses `nodemon` to automatically restart the server when you make changes to the code.
@@ -65,7 +66,7 @@ Plesk makes deploying a Node.js application straightforward.
 
 5.  **Set Environment Variables:**
     -   In the Plesk Node.js interface, there is a section for "Environment Variables".
-    -   Add your variables from the `.env` file here (e.g., `PORT`, `DEVICE_AUTH_TOKEN`). Plesk will use its own mechanism for the port, but it's good practice to add it. The `DEVICE_AUTH_TOKEN` is crucial.
+    -   Add your variables from the `.env` file here (e.g., `PORT`, `DEVICE_AUTH_TOKEN`, `OPENWEATHER_API_KEY`). Plesk will use its own mechanism for the port, but it's good practice to add it. The `DEVICE_AUTH_TOKEN` is crucial.
 
 6.  **Connect Git Repository (Recommended):**
     -   Go to the "Git" icon in your subdomain's dashboard.
