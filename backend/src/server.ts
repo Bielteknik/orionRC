@@ -1,12 +1,10 @@
 
 
-
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs/promises';
-import { transformFileAsync } from '@babel/core';
 import { GoogleGenAI, Chat } from "@google/genai";
 import { openDb, db, migrate } from './database';
 import { DeviceConfig, SensorConfig, CameraConfig } from './types';
@@ -287,35 +285,41 @@ if (GEMINI_API_KEY) { ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY }); const SY
 apiRouter.post('/gemini-chat-stream', async (req: Request, res: Response) => { if (!chat) return res.status(503).json({ error: 'Gemini assistant is not configured on the server.' }); const { message } = req.body; if (!message) return res.status(400).json({ error: 'Message is required.' }); try { const stream = await chat.sendMessageStream({ message }); res.setHeader('Content-Type', 'text/plain; charset=utf-8'); res.setHeader('Transfer-Encoding', 'chunked'); for await (const chunk of stream) { res.write(chunk.text); } res.end(); } catch (error) { console.error('Error streaming from Gemini:', error); res.status(500).json({ error: 'Failed to get response from assistant.' }); } });
 
 // --- Frontend Serving ---
-const httpdocsPath = path.join(__dirname, '..', '..', 'httpdocs');
+// This path should point to the build output of the Vite frontend
+const frontendDistPath = path.join(__dirname, '..', '..', 'dist');
 const uploadsPath = path.join(__dirname, '..', '..', 'uploads');
 
+// Serve uploaded images
 app.use('/uploads', express.static(uploadsPath));
 
-app.use(async (req: Request, res: Response, next: NextFunction) => {
-  const filePath = path.join(httpdocsPath, req.path);
-  const possiblePaths = [ filePath, `${filePath}.ts`, `${filePath}.tsx` ];
-  let actualPath: string | null = null;
+// Serve static assets from the vite build folder
+app.use(express.static(frontendDistPath));
 
-  for (const p of possiblePaths) { try { await fs.access(p, fs.constants.F_OK); actualPath = p; break; } catch (e) { /* continue */ } }
-
-  if (actualPath && (actualPath.endsWith('.tsx') || actualPath.endsWith('.ts'))) {
-    try {
-      const result = await transformFileAsync(actualPath, { presets: ['@babel/preset-react', ['@babel/preset-typescript', { allowDeclareFields: true, allExtensions: true, isTSX: true }]], filename: actualPath, sourceMaps: 'inline' });
-      if (result?.code) { res.setHeader('Content-Type', 'application/javascript; charset=utf-8'); res.send(result.code); } else { res.sendStatus(500); }
-    } catch (err: any) {
-      console.error(`Babel transformation error for ${req.path}:\n`, err);
-      res.status(500).send(`<pre>Error transforming ${req.path}:\n${err.message}</pre>`);
+// All other non-API routes should serve the frontend's index.html
+app.get('*', (req: Request, res: Response) => {
+    if (!req.path.startsWith('/api/')) {
+        res.sendFile(path.join(frontendDistPath, 'index.html'));
+    } else {
+        res.status(404).json({ error: 'API endpoint not found.' });
     }
-  } else { next(); }
 });
-
-app.use(express.static(httpdocsPath));
-app.get('*', (req: Request, res: Response) => { res.sendFile(path.join(httpdocsPath, 'index.html')); });
 
 // --- Start Server ---
 const startServer = async () => {
     await fs.mkdir(uploadsPath, { recursive: true }); // Ensure uploads directory exists
+    
+    // Check if frontend has been built
+    try {
+        await fs.access(path.join(frontendDistPath, 'index.html'));
+    } catch (e) {
+        // In a development environment (like the one this code runs in), we don't want to crash the server.
+        // We'll just log a warning. For a true production build, you might exit.
+        console.warn('--- UYARI ---');
+        console.warn('Frontend build dosyaları bulunamadı. Lütfen ana dizinde `npm run build` komutunu çalıştırın veya Vite dev sunucusunu kullanın.');
+        console.warn('Beklenen Dizin:', frontendDistPath);
+        console.warn('-------------');
+    }
+
     await openDb();
     await migrate();
     app.listen(port, () => {
