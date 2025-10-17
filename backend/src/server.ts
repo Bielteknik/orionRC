@@ -5,8 +5,8 @@ import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs/promises';
 import { GoogleGenAI, Chat } from "@google/genai";
-import { openDb, db, migrate } from './database';
-import { DeviceConfig, SensorConfig, CameraConfig } from './types';
+import { openDb, db, migrate } from './database.js';
+import { DeviceConfig, SensorConfig, CameraConfig } from './types.js';
 import { fileURLToPath } from 'url';
 
 // Fix: Define __dirname for ES modules to resolve path errors.
