@@ -11,25 +11,40 @@ import {
     AgentState,
 } from './types.js';
 
-// --- Configuration ---
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:8000/api';
-const DEVICE_ID = process.env.DEVICE_ID || 'ejder3200-01'; // Default for local dev
-const AUTH_TOKEN = process.env.DEVICE_AUTH_TOKEN || 'EjderMeteo_Rpi_SecretKey_2025!';
+// --- Path Configuration ---
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const CONFIG_PATH = path.join(__dirname, '..', 'config.json');
+
+// --- Timers ---
 const CONFIG_POLL_INTERVAL = 60000; // 1 minute
 const SENSOR_READ_INTERVAL = 10000; // 10 seconds (for quick demo, real world would be >60s)
 const COMMAND_POLL_INTERVAL = 5000;  // 5 seconds
 
-// Fix: Define __dirname for ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Local config file structure
+interface LocalConfig {
+    server: { base_url: string };
+    device: { id: string; token: string };
+}
 
 class Agent {
     private state: AgentState = AgentState.INITIALIZING;
     private config: DeviceConfig | null = null;
     private driverInstances: Map<string, ISensorDriver> = new Map();
 
-    constructor() {
-        console.log(`🚀 ORION Agent Başlatılıyor... Cihaz ID: ${DEVICE_ID}`);
+    // Properties from local config
+    private apiBaseUrl: string = '';
+    private deviceId: string = '';
+    private authToken: string = '';
+
+    constructor(localConfig: LocalConfig) {
+        this.apiBaseUrl = `${localConfig.server.base_url}/api`;
+        this.deviceId = localConfig.device.id;
+        this.authToken = localConfig.device.token;
+
+        console.log(`🚀 ORION Agent Başlatılıyor...`);
+        console.log(`   - Sunucu: ${localConfig.server.base_url}`);
+        console.log(`   - Cihaz ID: ${this.deviceId}`);
         this.setState(AgentState.INITIALIZING);
     }
 
@@ -52,8 +67,8 @@ class Agent {
         console.log("🔄 Yapılandırma sunucudan alınıyor...");
         this.setState(AgentState.CONFIGURING);
         try {
-            const response = await axios.get<DeviceConfig>(`${API_BASE_URL}/config/${DEVICE_ID}`, {
-                headers: { 'Authorization': `Token ${AUTH_TOKEN}` },
+            const response = await axios.get<DeviceConfig>(`${this.apiBaseUrl}/config/${this.deviceId}`, {
+                headers: { 'Authorization': `Token ${this.authToken}` },
             });
             this.config = response.data;
             console.log(`✅ Yapılandırma alındı: ${this.config.sensors.length} sensör, ${this.config.cameras.length} kamera.`);
@@ -116,8 +131,8 @@ class Agent {
 
     private async sendReading(payload: ReadingPayload) {
         try {
-            await axios.post(`${API_BASE_URL}/submit-reading`, payload, {
-                headers: { 'Authorization': `Token ${AUTH_TOKEN}` },
+            await axios.post(`${this.apiBaseUrl}/submit-reading`, payload, {
+                headers: { 'Authorization': `Token ${this.authToken}` },
             });
             console.log(`     -> ✅ Değer sunucuya gönderildi (Sensör ID: ${payload.sensor})`);
         } catch (error) {
@@ -133,8 +148,8 @@ class Agent {
         if (this.state !== AgentState.ONLINE) return;
         
         try {
-            const response = await axios.get<AgentCommand[]>(`${API_BASE_URL}/commands/${DEVICE_ID}`, {
-                headers: { 'Authorization': `Token ${AUTH_TOKEN}` },
+            const response = await axios.get<AgentCommand[]>(`${this.apiBaseUrl}/commands/${this.deviceId}`, {
+                headers: { 'Authorization': `Token ${this.authToken}` },
             });
             const commands = response.data;
             if (commands.length > 0) {
@@ -175,8 +190,8 @@ class Agent {
     
     private async updateCommandStatus(commandId: number, status: 'complete' | 'fail') {
         try {
-            await axios.post(`${API_BASE_URL}/commands/${commandId}/${status}`, {}, {
-                 headers: { 'Authorization': `Token ${AUTH_TOKEN}` },
+            await axios.post(`${this.apiBaseUrl}/commands/${commandId}/${status}`, {}, {
+                 headers: { 'Authorization': `Token ${this.authToken}` },
             });
             console.log(`✅ Komut durumu güncellendi: ID ${commandId} -> ${status}`);
         } catch (error) {
@@ -194,7 +209,7 @@ class Agent {
         }
 
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const filename = `${timestamp}_${DEVICE_ID}_${camera_id}.jpg`;
+        const filename = `${timestamp}_${this.deviceId}_${camera_id}.jpg`;
         const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
         const filepath = path.join(UPLOADS_DIR, filename);
 
@@ -215,11 +230,11 @@ class Agent {
             const imageBuffer = await fs.readFile(filepath);
             const base64Image = imageBuffer.toString('base64');
             
-            await axios.post(`${API_BASE_URL}/cameras/${camera_id}/upload-photo`, {
+            await axios.post(`${this.apiBaseUrl}/cameras/${camera_id}/upload-photo`, {
                 image: base64Image,
                 filename: filename
             }, {
-                headers: { 'Authorization': `Token ${AUTH_TOKEN}` },
+                headers: { 'Authorization': `Token ${this.authToken}` },
             });
 
             console.log(`🚀 Fotoğraf sunucuya yüklendi: ${filename}`);
@@ -265,12 +280,12 @@ class Agent {
             // 4. (Optional) Upload the analyzed image for verification
             // This part is simplified. In reality, you'd save an actual image.
             const dummyImage = "dummy analysis image data";
-             await axios.post(`${API_BASE_URL}/analysis/upload-photo`, {
+             await axios.post(`${this.apiBaseUrl}/analysis/upload-photo`, {
                 cameraId: camera_id,
                 image: Buffer.from(dummyImage).toString('base64'),
                 filename: filename
             }, {
-                headers: { 'Authorization': `Token ${AUTH_TOKEN}` },
+                headers: { 'Authorization': `Token ${this.authToken}` },
             });
             console.log(`   -> Analiz görüntüsü sunucuya yüklendi: ${filename}`);
             
@@ -284,9 +299,27 @@ class Agent {
 }
 
 
-// --- Agent Başlatma ---
-const agent = new Agent();
-agent.start().catch(error => {
-    console.error("Agent başlatılırken kritik bir hata oluştu:", error);
-    process.exit(1);
-});
+// --- Agent Startup ---
+async function main() {
+    try {
+        console.log(`Yerel yapılandırma okunuyor: ${CONFIG_PATH}`);
+        const configFile = await fs.readFile(CONFIG_PATH, 'utf-8');
+        const localConfig: LocalConfig = JSON.parse(configFile);
+
+        if (!localConfig.server?.base_url || !localConfig.device?.id || !localConfig.device?.token) {
+            throw new Error("config.json dosyasında 'server.base_url', 'device.id', ve 'device.token' alanları zorunludur.");
+        }
+
+        const agent = new Agent(localConfig);
+        agent.start().catch(error => {
+            console.error("Agent çalışırken kritik bir hata oluştu:", error);
+            process.exit(1);
+        });
+
+    } catch (error) {
+        console.error("Agent başlatılamadı. config.json dosyası okunamadı veya geçersiz.", error);
+        process.exit(1);
+    }
+}
+
+main();
