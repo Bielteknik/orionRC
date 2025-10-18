@@ -411,7 +411,11 @@ class OrionAgent {
             return;
         }
 
-        const tempFilePath = path.join('/tmp', `orion_snow_analysis_${Date.now()}.png`);
+        const now = new Date();
+        const timestamp = now.toISOString().replace(/:/g, '-').replace(/\..+/, '');
+        const filename = `${timestamp}_${cameraConfig.name.replace(/\s+/g, '_')}_analysis.png`;
+        const tempFilePath = path.join('/tmp', filename);
+
         const ffmpegCommand = `ffmpeg -rtsp_transport tcp -i "${cameraConfig.rtsp_url}" -vframes 1 -y "${tempFilePath}"`;
         
         try {
@@ -420,6 +424,17 @@ class OrionAgent {
 
             const imageBuffer = await fs.readFile(tempFilePath);
             const base64Image = imageBuffer.toString('base64');
+
+            try {
+                logger.log(`Analiz görüntüsü sunucuya yükleniyor...`);
+                await axios.post(`${this.baseUrl}/api/analysis/upload-photo`, 
+                    { cameraId: camera_id, image: base64Image, filename },
+                    { headers: { 'Authorization': `Token ${this.token}`, 'Content-Type': 'application/json' } }
+                );
+                logger.log(`Analiz görüntüsü başarıyla yüklendi.`);
+            } catch (uploadError) {
+                logger.error(`Analiz görüntüsü yüklenemedi, ancak analize devam ediliyor: ${String(uploadError)}`);
+            }
 
             const imagePart = {
                 inlineData: { mimeType: 'image/png', data: base64Image },

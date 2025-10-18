@@ -197,6 +197,14 @@ const Analysis: React.FC = () => {
                             <p className="text-xs text-center text-muted mt-1">Gece Görünümü</p>
                         </div>
                     </div>
+                     <div className="mt-4 p-3 bg-secondary rounded-md border text-sm text-gray-600 space-y-2">
+                        <p>
+                            Yukarıdaki referans görüntüler, kar yüksekliğini ölçmek için kullanılan cetveli göstermektedir. Bu cetvel, 0'dan 240 cm'ye kadar 10 cm aralıklarla işaretlenmiştir. Yapay zeka, bu cetvel üzerindeki kar seviyesini analiz ederek kar yüksekliğini cm cinsinden tahmin eder.
+                        </p>
+                        <p>
+                            Yapay zeka analizleri, Google Gemini API kullanılarak yapılır ve bu servis ücrete tabidir. Detaylı ücretlendirme bilgisi için <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-accent font-semibold hover:underline">ai.google.dev/gemini-api/docs/billing</a> adresini ziyaret edebilirsiniz.
+                        </p>
+                    </div>
                 </Card>
             </div>
         </div>
