@@ -433,10 +433,13 @@ class OrionAgent {
                 contents: { parts: [imagePart, { text: prompt }] },
             });
 
-            const resultText = response.text.trim();
+            const resultText = response.text;
+            if (!resultText) {
+                throw new Error("Gemini'den boş yanıt alındı (response.text is undefined).");
+            }
             logger.log(`Gemini yanıtı alındı: ${resultText}`);
             
-            const resultJson = JSON.parse(resultText.replace(/```json/g, '').replace(/```/g, ''));
+            const resultJson = JSON.parse(resultText.trim().replace(/```json/g, '').replace(/```/g, ''));
             const snowDepth = resultJson.snow_depth_cm;
 
             if (typeof snowDepth === 'number') {
