@@ -126,7 +126,7 @@ export async function migrate() {
     const countResult = await db.get("SELECT COUNT(*) as count FROM sensor_types");
     if (countResult.count === 0) {
         console.log('Seeding default sensor types...');
-        const defaultSensorTypes = ['Sıcaklık', 'Nem', 'Rüzgar Hızı', 'Basınç', 'Yağış', 'UV İndeksi', 'Rüzgar Yönü', 'Mesafe', 'Ağırlık'];
+        const defaultSensorTypes = ['Sıcaklık', 'Nem', 'Rüzgar Hızı', 'Basınç', 'Yağış', 'UV İndeksi', 'Rüzgar Yönü', 'Mesafe', 'Ağırlık', 'Kar Yüksekliği'];
         const existingTypes = await db.all("SELECT name FROM sensor_types");
         const existingTypeNames = new Set(existingTypes.map(t => t.name));
         const typesToAdd = defaultSensorTypes.filter(t => !existingTypeNames.has(t));

@@ -8,6 +8,7 @@ import Sensors from './pages/Sensors.tsx';
 import Cameras from './pages/Cameras.tsx';
 import Definitions from './pages/Definitions.tsx';
 import Reports from './pages/Reports.tsx';
+import Analysis from './pages/Analysis.tsx';
 import StationDetail from './pages/StationDetail.tsx';
 import CameraDetail from './pages/CameraDetail.tsx';
 import { ThemeProvider } from './components/ThemeContext.tsx';
@@ -80,6 +81,8 @@ const App: React.FC = () => {
         return <Definitions />;
       case Page.Reports:
         return <Reports />;
+       case Page.Analysis:
+        return <Analysis />;
       case Page.Notifications:
         return <Notifications notifications={notifications} setNotifications={setNotifications} onRefresh={fetchNotifications} />;
       default:

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Page } from '../../types.ts';
-import { DashboardIcon, StationIcon, SensorIcon, CameraIcon, DefinitionsIcon, ReportsIcon, CloudIcon } from '../icons/Icons.tsx';
+import { DashboardIcon, StationIcon, SensorIcon, CameraIcon, DefinitionsIcon, ReportsIcon, CloudIcon, BrainIcon } from '../icons/Icons.tsx';
 
 interface SidebarProps {
   currentPage: Page;
@@ -13,6 +13,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setCurrentPage }) => {
     { page: Page.Stations, label: 'İstasyon', icon: <StationIcon /> },
     { page: Page.Sensors, label: 'Sensör', icon: <SensorIcon /> },
     { page: Page.Cameras, label: 'Kamera', icon: <CameraIcon /> },
+    { page: Page.Analysis, label: 'Analiz', icon: <BrainIcon /> },
     { page: Page.Definitions, label: 'Tanımlar', icon: <DefinitionsIcon /> },
     { page: Page.Reports, label: 'Raporlar', icon: <ReportsIcon /> },
   ];

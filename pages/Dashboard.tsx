@@ -1,32 +1,18 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { AreaChart, Area, BarChart, Bar, ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Trend, Station, WidgetConfig, Sensor } from '../types.ts';
+import React, { useState, useEffect, useMemo } from 'react';
+import { AreaChart, Area, ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { Station, Sensor } from '../types.ts';
 import Card from '../components/common/Card.tsx';
 import FullMap from '../components/common/FullMap.tsx';
-import AddWidgetModal from '../components/AddWidgetModal.tsx';
-import WindRoseChart from '../components/WindRoseChart.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
-import ChartSettingsModal, { ChartStyle } from '../components/ChartSettingsModal.tsx';
 import { useTheme } from '../components/ThemeContext.tsx';
-import { TemperatureIcon, HumidityIcon, WindSockIcon, GaugeIcon, TrendUpIcon, TrendDownIcon, TrendStableIcon, PaletteIcon, ChartBarIcon, MapIcon, AddIcon, DeleteIcon, CalendarIcon, ExclamationIcon, ReportsIcon } from '../components/icons/Icons.tsx';
+import { ChartBarIcon, MapIcon, ExclamationIcon, ReportsIcon, CalendarIcon, BrainIcon } from '../components/icons/Icons.tsx';
 import { getStations, getSensors, getReadingsHistory } from '../services/apiService.ts';
 import MultiSelectDropdown from '../components/common/MultiSelectDropdown.tsx';
 import Reports from './Reports.tsx';
-
+import Analysis from './Analysis.tsx';
 
 // Constants & Defaults
 const DEFAULT_COLORS = ['#E95420', '#77216F', '#2dd4bf', '#c084fc', '#f59e0b', '#10b981', '#ef4444', '#3b82f6'];
-const unitMap: {[key: string]: string} = { 'Sıcaklık': '°C', 'Nem': '%', 'Rüzgar Hızı': 'km/h', 'Basınç': 'hPa', 'Yağış': 'mm', 'UV İndeksi': '', 'Rüzgar Yönü': '°' };
-
-const INITIAL_CHART_STYLES: Record<string, ChartStyle> = {};
-
-
-const DEFAULT_WIDGETS: WidgetConfig[] = [
-    { id: 'chart-temp-scatter', type: 'temperatureScatter', config: {}, gridArea: '1 / 1 / 2 / 3' },
-    { id: 'chart-hum-area', type: 'humidityArea', config: {}, gridArea: '1 / 3 / 2 / 5' },
-    { id: 'chart-wind-bar', type: 'windSpeedBar', config: {}, gridArea: '2 / 1 / 3 / 3' },
-    { id: 'chart-multi-station', type: 'multiStationCompare', config: {}, gridArea: '2 / 3 / 3 / 5' },
-];
 
 const getPastDateString = (daysAgo: number) => {
     const date = new Date();
@@ -34,30 +20,16 @@ const getPastDateString = (daysAgo: number) => {
     return date.toISOString().split('T')[0];
 };
 
-// --- WIDGET COMPONENTS ---
+// --- CHART COMPONENTS (NOW 'DUMB' AND RECEIVE DATA AS PROPS) ---
 
-const TemperatureScatterChart: React.FC<{ stations: Station[], dateRange: { start: string, end: string } }> = ({ stations, dateRange }) => {
-    const [data, setData] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+const TemperatureScatterChart: React.FC<{ data: any[], stations: Station[], isLoading: boolean }> = ({ data, stations, isLoading }) => {
     const { theme } = useTheme();
     const tickColor = theme === 'dark' ? '#9CA3AF' : '#6B7281';
-
-    useEffect(() => {
-        if (stations.length === 0) { setData([]); return; }
-        setIsLoading(true);
-        getReadingsHistory({ stationIds: stations.map(s => s.id), sensorTypes: ['Sıcaklık'], start: dateRange.start, end: dateRange.end })
-            .then(history => {
-                const chartData = history.map(d => ({ ...d, time: new Date(d.timestamp).getTime() }));
-                setData(chartData);
-            })
-            .catch(err => console.error(err))
-            .finally(() => setIsLoading(false));
-    }, [stations, dateRange]);
 
     return (
         <div className="h-full p-4 flex flex-col">
             <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">Sıcaklık Trendleri</h3>
-            <p className="text-xs text-muted mb-2 -mt-2">Son 24 saatlik sıcaklık değişimleri</p>
+            <p className="text-xs text-muted mb-2 -mt-2">Seçilen periyottaki sıcaklık değişimleri</p>
             {isLoading ? <Skeleton className="w-full h-full"/> : 
             <ResponsiveContainer width="100%" height="100%">
                 <ScatterChart margin={{ top: 5, right: 20, left: -20, bottom: 20 }}>
@@ -74,28 +46,9 @@ const TemperatureScatterChart: React.FC<{ stations: Station[], dateRange: { star
     );
 };
 
-const HumidityAreaChart: React.FC<{ stations: Station[], dateRange: { start: string, end: string } }> = ({ stations, dateRange }) => {
-    const [data, setData] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+const HumidityAreaChart: React.FC<{ data: any[], stations: Station[], isLoading: boolean }> = ({ data, stations, isLoading }) => {
     const { theme } = useTheme();
     const tickColor = theme === 'dark' ? '#9CA3AF' : '#6B7281';
-
-    useEffect(() => {
-        if (stations.length === 0) { setData([]); return; }
-        setIsLoading(true);
-        getReadingsHistory({ stationIds: stations.map(s => s.id), sensorTypes: ['Nem'], start: dateRange.start, end: dateRange.end })
-            .then(history => {
-                const groupedByTime: { [key: string]: any } = {};
-                history.forEach(r => {
-                    const time = new Date(r.timestamp).toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'});
-                    if (!groupedByTime[time]) groupedByTime[time] = { time };
-                    groupedByTime[time][r.stationName] = r.value;
-                });
-                setData(Object.values(groupedByTime));
-            })
-            .catch(err => console.error(err))
-            .finally(() => setIsLoading(false));
-    }, [stations, dateRange]);
 
     return (
         <div className="h-full p-4 flex flex-col">
@@ -126,7 +79,7 @@ const WindSpeedBarChart: React.FC<{ stations: Station[], sensors: Sensor[] }> = 
             const windSensor = sensors.find(s => s.stationId === station.id && s.type === 'Rüzgar Hızı');
             return {
                 name: station.name,
-                'Rüzgar Hızı': windSensor ? windSensor.value : 0
+                'Rüzgar Hızı': windSensor ? (typeof windSensor.value === 'number' ? windSensor.value : 0) : 0
             };
         });
     }, [stations, sensors]);
@@ -149,22 +102,9 @@ const WindSpeedBarChart: React.FC<{ stations: Station[], sensors: Sensor[] }> = 
 };
 
 
-const MultiStationComparisonChart: React.FC<{ stations: Station[], dateRange: { start: string, end: string } }> = ({ stations, dateRange }) => {
-     const [data, setData] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+const MultiStationComparisonChart: React.FC<{ data: any[], isLoading: boolean }> = ({ data, isLoading }) => {
     const { theme } = useTheme();
     const tickColor = theme === 'dark' ? '#9CA3AF' : '#6B7281';
-
-    useEffect(() => {
-        if (stations.length === 0) { setData([]); return; }
-        setIsLoading(true);
-        getReadingsHistory({ stationIds: stations.map(s => s.id), sensorTypes: ['Sıcaklık'], start: dateRange.start, end: dateRange.end })
-            .then(history => {
-                setData(history);
-            })
-            .catch(err => console.error(err))
-            .finally(() => setIsLoading(false));
-    }, [stations, dateRange]);
 
     return (
          <div className="h-full p-4 flex flex-col">
@@ -192,24 +132,21 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
     const [stations, setStations] = useState<Station[]>([]);
     const [sensors, setSensors] = useState<Sensor[]>([]);
     
-    const [activeTab, setActiveTab] = useState<'analytics' | 'map' | 'reports'>('analytics');
-    const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-    const [isAddWidgetModalOpen, setIsAddWidgetModalOpen] = useState(false);
-    const [widgets, setWidgets] = useState<WidgetConfig[]>([]);
-    const draggedWidgetId = useRef<string | null>(null);
+    const [activeTab, setActiveTab] = useState<'analytics' | 'reports' | 'analysis' | 'map'>('analytics');
 
+    // Filter states
     const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
     const [dateRange, setDateRange] = useState({ start: getPastDateString(1), end: getPastDateString(0) });
     
-    const allSensorTypes = useMemo(() => [...new Set(sensors.map(s => s.type))], [sensors]);
-    const stationOptions = useMemo(() => stations.map(s => ({ value: s.id, label: s.name })), [stations]);
+    // Chart data states
+    const [isChartLoading, setIsChartLoading] = useState(false);
+    const [tempData, setTempData] = useState<any[]>([]);
+    const [humidityData, setHumidityData] = useState<any[]>([]);
     
-    const filteredStations = useMemo(() => 
-        stations.filter(s => selectedStationIds.length === 0 || selectedStationIds.includes(s.id)),
-        [selectedStationIds, stations]
-    );
+    const stationOptions = useMemo(() => stations.map(s => ({ value: s.id, label: s.name })), [stations]);
+    const filteredStations = useMemo(() => stations.filter(s => selectedStationIds.length === 0 || selectedStationIds.includes(s.id)), [selectedStationIds, stations]);
 
-    // Data fetching logic
+    // Initial data fetching for stations and sensors
     useEffect(() => {
         const fetchInitialData = async () => {
             try {
@@ -218,19 +155,55 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
                 const [stationsData, sensorsData] = await Promise.all([getStations(), getSensors()]);
                 setStations(stationsData);
                 setSensors(sensorsData);
+                // Select all stations by default
                 setSelectedStationIds(stationsData.map(s => s.id));
             } catch (err) {
                 setError('Pano verileri yüklenirken bir hata oluştu.');
                 console.error(err);
             } finally {
-                setWidgets(DEFAULT_WIDGETS); // Always set default widgets as per new design
                 setIsLoading(false);
             }
         };
-
         fetchInitialData();
     }, []);
 
+    // Effect to fetch and process chart data when filters change
+    useEffect(() => {
+        if (selectedStationIds.length === 0) {
+            setTempData([]);
+            setHumidityData([]);
+            return;
+        }
+
+        const fetchChartData = async () => {
+            setIsChartLoading(true);
+            try {
+                const [tempHistory, humidityHistory] = await Promise.all([
+                    getReadingsHistory({ stationIds: selectedStationIds, sensorTypes: ['Sıcaklık'], start: dateRange.start, end: dateRange.end }),
+                    getReadingsHistory({ stationIds: selectedStationIds, sensorTypes: ['Nem'], start: dateRange.start, end: dateRange.end })
+                ]);
+
+                // Process temperature data for scatter chart
+                setTempData(tempHistory.map(d => ({ ...d, time: new Date(d.timestamp).getTime() })));
+
+                // Process humidity data for area chart
+                const groupedByTime: { [key: string]: any } = {};
+                humidityHistory.forEach(r => {
+                    const time = new Date(r.timestamp).toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'});
+                    if (!groupedByTime[time]) groupedByTime[time] = { time };
+                    groupedByTime[time][r.stationName] = r.value;
+                });
+                setHumidityData(Object.values(groupedByTime));
+
+            } catch (err) {
+                console.error("Failed to fetch chart history:", err);
+            } finally {
+                setIsChartLoading(false);
+            }
+        };
+
+        fetchChartData();
+    }, [selectedStationIds, dateRange]);
     
     return (
         <div className="flex flex-col h-full">
@@ -238,6 +211,7 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
                 <nav className="-mb-px flex space-x-8">
                     <button onClick={() => setActiveTab('analytics')} className={`flex items-center gap-2 whitespace-nowrap py-2 px-1 border-b-2 font-semibold text-sm transition-colors ${activeTab === 'analytics' ? 'border-accent text-accent' : 'border-transparent text-muted dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'}`}><ChartBarIcon className="w-5 h-5" /><span>Analitik</span></button>
                     <button onClick={() => setActiveTab('reports')} className={`flex items-center gap-2 whitespace-nowrap py-2 px-1 border-b-2 font-semibold text-sm transition-colors ${activeTab === 'reports' ? 'border-accent text-accent' : 'border-transparent text-muted dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'}`}><ReportsIcon className="w-5 h-5" /><span>Raporlar</span></button>
+                    <button onClick={() => setActiveTab('analysis')} className={`flex items-center gap-2 whitespace-nowrap py-2 px-1 border-b-2 font-semibold text-sm transition-colors ${activeTab === 'analysis' ? 'border-accent text-accent' : 'border-transparent text-muted dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'}`}><BrainIcon className="w-5 h-5" /><span>Analiz</span></button>
                     <button onClick={() => setActiveTab('map')} className={`flex items-center gap-2 whitespace-nowrap py-2 px-1 border-b-2 font-semibold text-sm transition-colors ${activeTab === 'map' ? 'border-accent text-accent' : 'border-transparent text-muted dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'}`}><MapIcon className="w-5 h-5" /><span>İstasyon Haritası</span></button>
                 </nav>
             </div>
@@ -272,16 +246,22 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
                         </div>
                     ) : error ? null : (
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 auto-rows-[minmax(300px,_auto)]">
-                           {widgets.map(widget => (
-                                <Card key={widget.id} className="p-0" style={{ gridArea: widget.gridArea }}>
-                                    {widget.type === 'temperatureScatter' && <TemperatureScatterChart stations={filteredStations} dateRange={dateRange} />}
-                                    {widget.type === 'humidityArea' && <HumidityAreaChart stations={filteredStations} dateRange={dateRange} />}
-                                    {widget.type === 'windSpeedBar' && <WindSpeedBarChart stations={filteredStations} sensors={sensors} />}
-                                    {widget.type === 'multiStationCompare' && <MultiStationComparisonChart stations={filteredStations} dateRange={dateRange} />}
-                                </Card>
-                           ))}
+                            <Card className="p-0" style={{ gridArea: '1 / 1 / 2 / 3' }}><TemperatureScatterChart data={tempData} stations={filteredStations} isLoading={isChartLoading} /></Card>
+                            <Card className="p-0" style={{ gridArea: '1 / 3 / 2 / 5' }}><HumidityAreaChart data={humidityData} stations={filteredStations} isLoading={isChartLoading} /></Card>
+                            <Card className="p-0" style={{ gridArea: '2 / 1 / 3 / 3' }}><WindSpeedBarChart stations={filteredStations} sensors={sensors} /></Card>
+                            <Card className="p-0" style={{ gridArea: '2 / 3 / 3 / 5' }}><MultiStationComparisonChart data={tempData} isLoading={isChartLoading} /></Card>
                         </div>
                     )}
+                </div>
+            )}
+            {activeTab === 'reports' && (
+                 <div className="overflow-y-auto pt-4">
+                    <Reports />
+                </div>
+            )}
+            {activeTab === 'analysis' && (
+                 <div className="overflow-y-auto pt-4">
+                    <Analysis />
                 </div>
             )}
             {activeTab === 'map' && (
@@ -293,11 +273,6 @@ const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }
                             <FullMap stations={stations} onViewStationDetails={onViewStationDetails} />
                         </div>
                     )}
-                </div>
-            )}
-            {activeTab === 'reports' && (
-                 <div className="overflow-y-auto pt-4">
-                    <Reports />
                 </div>
             )}
         </div>

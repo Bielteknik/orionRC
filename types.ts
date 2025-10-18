@@ -5,6 +5,7 @@ export enum Page {
   Cameras = 'Cameras',
   Definitions = 'Definitions',
   Reports = 'Reports',
+  Analysis = 'Analysis',
   Notifications = 'Notifications',
 }
 

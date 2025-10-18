@@ -75,6 +75,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, notifications, onMarkAllNo
     [Page.Cameras]: 'Kamera İzleme',
     [Page.Definitions]: 'Sistem Tanımları',
     [Page.Reports]: 'Raporlar',
+    [Page.Analysis]: 'Yapay Zeka Analizi',
     [Page.Notifications]: 'Bildirimler',
   };
 

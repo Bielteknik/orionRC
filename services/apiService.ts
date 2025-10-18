@@ -37,6 +37,9 @@ export const addCamera = (data: any): Promise<Camera> => apiClient.post('/camera
 export const deleteCamera = (id: string): Promise<void> => apiClient.delete(`/cameras/${id}`).then(res => res.data).catch(e => handleError(e, 'deleting camera'));
 export const captureCameraImage = (id: string): Promise<void> => apiClient.post(`/cameras/${id}/capture`).then(res => res.data).catch(e => handleError(e, 'capturing camera image'));
 
+// Analysis
+export const analyzeSnowDepth = (cameraId: string, virtualSensorId: string): Promise<void> => apiClient.post('/analysis/snow-depth', { cameraId, virtualSensorId }).then(res => res.data).catch(e => handleError(e, 'analyzing snow depth'));
+
 
 // Readings
 export const getReadings = (): Promise<any[]> => apiClient.get('/readings').then(res => res.data).catch(e => handleError(e, 'fetching readings'));

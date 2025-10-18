@@ -1,6 +1,3 @@
-
-
-
 import axios from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
@@ -9,6 +6,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import sqlite3 from 'sqlite3';
 import { open, Database } from 'sqlite';
+import { GoogleGenAI } from "@google/genai";
 import { DeviceConfig, ReadingPayload, AgentState, AgentCommand, ISensorDriver, SensorConfig, CameraConfig } from './types.js';
 
 const execAsync = promisify(exec);
@@ -133,9 +131,15 @@ class OrionAgent {
     private deviceConfig: DeviceConfig | null = null;
     private driverManager: DriverManager = new DriverManager();
     private runInterval: number = 10000; // 10 saniye
+    private geminiAI: GoogleGenAI | null = null;
 
     constructor(private configPath: string = 'config.json') {
         this.setupGracefulShutdown();
+        if (process.env.API_KEY) {
+            this.geminiAI = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        } else {
+            logger.warn('GEMINI_API_KEY ortam değişkeni ayarlanmamış. Yapay zeka analiz özellikleri devre dışı kalacak.');
+        }
     }
 
     private setState(newState: AgentState) {
@@ -197,8 +201,8 @@ class OrionAgent {
         }
     }
     
-    private async _readAllPhysicalSensors(): Promise<Map<number, Record<string, any>>> {
-        const readings = new Map<number, Record<string, any>>();
+    private async _readAllPhysicalSensors(): Promise<Map<string, Record<string, any>>> {
+        const readings = new Map<string, Record<string, any>>();
         if (!this.deviceConfig?.sensors) {
             logger.warn("Cihaz yapılandırmasında sensör bulunmadığı için sensör okuma atlanıyor.");
             return readings;
@@ -232,8 +236,8 @@ class OrionAgent {
         return readings;
     }
 
-    private async _readVirtualImageSensors(): Promise<Map<number, Record<string, any>>> {
-        const readings = new Map<number, Record<string, any>>();
+    private async _readVirtualImageSensors(): Promise<Map<string, Record<string, any>>> {
+        const readings = new Map<string, Record<string, any>>();
         if (!this.deviceConfig?.sensors) {
             return readings;
         }
@@ -389,6 +393,67 @@ class OrionAgent {
         }
     }
 
+    private async _handleSnowDepthAnalysisCommand(command: AgentCommand): Promise<void> {
+        const { camera_id, virtual_sensor_id } = command.payload;
+        if (!this.geminiAI) {
+            logger.error("Gemini AI başlatılmadığı için kar yüksekliği analizi yapılamıyor.");
+            return;
+        }
+
+        const cameraConfig = this.deviceConfig?.cameras.find((c: CameraConfig) => c.id === camera_id);
+        if (!cameraConfig) {
+            logger.error(`Analiz komutu başarısız: Kamera ID '${camera_id}' bulunamadı.`);
+            return;
+        }
+
+        const tempFilePath = path.join('/tmp', `orion_snow_analysis_${Date.now()}.png`);
+        const ffmpegCommand = `ffmpeg -rtsp_transport tcp -i "${cameraConfig.rtsp_url}" -vframes 1 -y "${tempFilePath}"`;
+        
+        try {
+            logger.log(`Kar analizi için görüntü yakalanıyor...`);
+            await execAsync(ffmpegCommand);
+
+            const imageBuffer = await fs.readFile(tempFilePath);
+            const base64Image = imageBuffer.toString('base64');
+
+            const imagePart = {
+                inlineData: { mimeType: 'image/png', data: base64Image },
+            };
+            
+            const prompt = `Verilen görüntüyü analiz et. Görüntüde 0'dan 240'a kadar santimetre (cm) cinsinden işaretlenmiş bir kar ölçüm cetveli bulunmaktadır. Karla kaplı olan en yüksek sayıyı tespit et. Cevabını SADECE '{"snow_depth_cm": SAYI}' formatında bir JSON nesnesi olarak ver. Örneğin, kar 25 cm'yi kaplıyorsa '{"snow_depth_cm": 25}' şeklinde yanıt ver. Eğer hiç kar yoksa veya cetvel tamamen temizse 0 değerini kullan.`;
+
+            logger.log(`Görüntü Gemini'ye gönderiliyor...`);
+            const response = await this.geminiAI.models.generateContent({
+                model: 'gemini-flash-latest',
+                contents: { parts: [imagePart, { text: prompt }] },
+            });
+
+            const resultText = response.text.trim();
+            logger.log(`Gemini yanıtı alındı: ${resultText}`);
+            
+            const resultJson = JSON.parse(resultText.replace(/```json/g, '').replace(/```/g, ''));
+            const snowDepth = resultJson.snow_depth_cm;
+
+            if (typeof snowDepth === 'number') {
+                logger.log(`Tespit edilen kar yüksekliği: ${snowDepth} cm`);
+                const payload: ReadingPayload = { sensor: virtual_sensor_id, value: { snow_depth_cm: snowDepth } };
+                const success = await this._sendDataToServer(payload);
+                if (!success) {
+                    await this._queueDataLocally(payload);
+                }
+            } else {
+                 throw new Error("Gemini'den beklenen formatta yanıt alınamadı.");
+            }
+             await axios.post(`${this.baseUrl}/api/commands/${command.id}/complete`, {}, { headers: { 'Authorization': `Token ${this.token}` } });
+
+        } catch (error) {
+             logger.error(`Kar yüksekliği analizi hatası: ${String(error)}`);
+             await axios.post(`${this.baseUrl}/api/commands/${command.id}/fail`, {}, { headers: { 'Authorization': `Token ${this.token}` } });
+        } finally {
+            try { await fs.unlink(tempFilePath); } catch {}
+        }
+    }
+
     private async _processCommands(): Promise<void> {
         if (this.state === AgentState.OFFLINE) return;
         try {
@@ -403,6 +468,9 @@ class OrionAgent {
                     switch (command.command_type) {
                         case 'CAPTURE_IMAGE':
                             await this._handleCaptureImageCommand(command);
+                            break;
+                        case 'ANALYZE_SNOW_DEPTH':
+                            await this._handleSnowDepthAnalysisCommand(command);
                             break;
                         default:
                             logger.warn(`Bilinmeyen komut tipi: ${command.command_type}`);

@@ -6,7 +6,7 @@ export interface DeviceConfig {
 
 // Tek bir sensörün yapılandırması
 export interface SensorConfig {
-    id: number;
+    id: string;
     name: string;
     is_active: boolean;
     interface: 'i2c' | 'serial' | 'virtual' | 'openweather' | 'http';
@@ -26,10 +26,10 @@ export interface CameraConfig {
 // Sunucudan gelen komut
 export interface AgentCommand {
     id: number;
-    command_type: 'CAPTURE_IMAGE' | string;
+    command_type: 'CAPTURE_IMAGE' | 'ANALYZE_SNOW_DEPTH' | string;
     payload: {
         camera_id: string;
-        // Diğer payload verileri
+        virtual_sensor_id?: string; // For analysis commands to report to
     };
 }
 
@@ -40,7 +40,7 @@ export interface ISensorDriver {
 
 // Sunucuya gönderilecek okuma verisi
 export interface ReadingPayload {
-    sensor: number;
+    sensor: string;
     value: Record<string, any>;
 }
 
