@@ -8,6 +8,7 @@ export interface DeviceConfig {
 export interface SensorConfig {
     id: string;
     name: string;
+    type: string;
     is_active: boolean;
     interface: 'i2c' | 'serial' | 'virtual' | 'openweather' | 'http';
     parser_config: {

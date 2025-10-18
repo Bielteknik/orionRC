@@ -169,6 +169,7 @@ apiRouter.get('/config/:deviceId', authenticateDevice, async (req: express.Reque
             return { 
                 id: s.id, 
                 name: s.name, 
+                type: s.type,
                 is_active: !!s.is_active, 
                 interface: s.interface, 
                 parser_config: parserConfig, 

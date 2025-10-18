@@ -2,6 +2,7 @@ import axios from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { GoogleGenAI } from "@google/genai";
 import {
     DeviceConfig,
     SensorConfig,
@@ -42,9 +43,7 @@ class Agent {
         this.deviceId = localConfig.device.id;
         this.authToken = localConfig.device.token;
 
-        console.log(`🚀 ORION Agent Başlatılıyor...`);
-        console.log(`   - Sunucu: ${localConfig.server.base_url}`);
-        console.log(`   - Cihaz ID: ${this.deviceId}`);
+        console.log(`🚀 ORION Agent Başlatılıyor... Cihaz ID: ${this.deviceId}`);
         this.setState(AgentState.INITIALIZING);
     }
 
@@ -91,6 +90,12 @@ class Agent {
         console.log("🌡️ Sensörler okunuyor...");
         for (const sensorConfig of this.config.sensors) {
             if (!sensorConfig.is_active) continue;
+
+            // Skip virtual sensors or specific AI-driven sensor types in the main reading loop.
+            // These are triggered by commands, not polling.
+            if (sensorConfig.interface === 'virtual' || sensorConfig.type === 'Kar Yüksekliği') {
+                continue;
+            }
 
             console.log(`   - ${sensorConfig.name} (ID: ${sensorConfig.id})`);
             try {
@@ -159,7 +164,6 @@ class Agent {
                 }
             }
         } catch (error) {
-            // It's normal to get 404 or empty responses, so we don't log errors unless it's a server failure.
             if (axios.isAxiosError(error) && error.response?.status !== 404) {
                  console.error(`Komutlar kontrol edilirken hata: ${error.message}`);
             }
@@ -256,46 +260,104 @@ class Agent {
             console.error('Kar derinliği analizi için virtual_sensor_id gerekli.');
             return false;
         }
+        const cameraConfig = this.config?.cameras.find(c => c.id === camera_id);
+        if (!cameraConfig) {
+            console.error(`Analiz için kamera bulunamadı: ${camera_id}`);
+            return false;
+        }
+        
+        if (!process.env.API_KEY) {
+            console.error('HATA: Gemini API anahtarı (API_KEY) ortam değişkenlerinde ayarlanmamış. Analiz yapılamıyor.');
+            return false;
+        }
 
         console.log(`❄️  Kar derinliği analizi başlatılıyor... Kamera: ${camera_id}`);
-        // Here you would run your Python script for image analysis.
-        // We'll mock the result.
         
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `ANALYSIS_${timestamp}_${camera_id}.jpg`;
+        const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
+        const filepath = path.join(UPLOADS_DIR, filename);
+
         try {
-            // 1. Capture an image (reuse capture logic, maybe without uploading)
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const filename = `ANALYSIS_${timestamp}_${camera_id}.jpg`;
-            // In a real scenario, you'd capture a real image here.
+            // 1. Capture image
+            await fs.mkdir(UPLOADS_DIR, { recursive: true });
+            // MOCK: In a real scenario, use ffmpeg or similar
+            await fs.writeFile(filepath, "dummy image data for analysis");
+            console.log(`   -> Analiz için mock görüntü kaydedildi: ${filepath}`);
+
+            // 2. Read image to base64
+            const imageBuffer = await fs.readFile(filepath);
+            const base64Image = imageBuffer.toString('base64');
             
-            // 2. Mock analysis result
-            const mockSnowDepth = parseFloat((Math.random() * 50 + 5).toFixed(1)); // Random depth between 5 and 55 cm
-            console.log(`   -> Mock Analiz Sonucu: ${mockSnowDepth} cm`);
+            // 3. Call Gemini API
+            console.log('   -> Gemini API ile analiz ediliyor...');
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const imagePart = {
+                inlineData: {
+                    mimeType: 'image/jpeg',
+                    data: base64Image,
+                },
+            };
+            const textPart = {
+                text: "Bu görüntüdeki kar ölçüm cetveline göre karla kaplı en yüksek sayısal değer nedir? Cevabını sadece `{\"snow_depth_cm\": SAYI}` formatında bir JSON olarak ver.",
+            };
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash-image',
+                contents: { parts: [imagePart, textPart] },
+            });
             
-            // 3. Send the result as if it's a sensor reading
+            if (!response.text) {
+                console.error('   -> HATA: Gemini API boş yanıt döndü.');
+                return false;
+            }
+
+            const resultText = response.text.trim();
+            console.log(`   -> Gemini Yanıtı: ${resultText}`);
+
+            // 4. Parse response and send reading
+            const resultJson = JSON.parse(resultText.replace(/```json/g, '').replace(/```/g, ''));
+            const snowDepth = resultJson.snow_depth_cm;
+
+            if (typeof snowDepth !== 'number') {
+                console.error('   -> HATA: Gemini yanıtından sayısal bir kar yüksekliği değeri alınamadı.');
+                return false;
+            }
+            
+            console.log(`   -> Analiz Sonucu: ${snowDepth} cm`);
+            
             await this.sendReading({
                 sensor: virtual_sensor_id,
-                value: { snow_depth_cm: mockSnowDepth }
+                value: { snow_depth_cm: snowDepth }
             });
 
-            // 4. (Optional) Upload the analyzed image for verification
-            // This part is simplified. In reality, you'd save an actual image.
-            const dummyImage = "dummy analysis image data";
-             await axios.post(`${this.apiBaseUrl}/analysis/upload-photo`, {
+            // 5. Upload analyzed image to server for verification
+            await axios.post(`${this.apiBaseUrl}/analysis/upload-photo`, {
                 cameraId: camera_id,
-                image: Buffer.from(dummyImage).toString('base64'),
+                image: base64Image,
                 filename: filename
             }, {
                 headers: { 'Authorization': `Token ${this.authToken}` },
             });
             console.log(`   -> Analiz görüntüsü sunucuya yüklendi: ${filename}`);
-            
+
             return true;
+
         } catch (error) {
             console.error(`HATA: Kar derinliği analizi başarısız oldu (Kamera: ${camera_id})`, error);
             return false;
+        } finally {
+            // Clean up temp file
+            try {
+                await fs.unlink(filepath);
+            } catch (unlinkError: any) {
+                // Ignore error if file doesn't exist, but log others
+                if (unlinkError.code !== 'ENOENT') {
+                    console.warn(`Geçici analiz dosyası silinemedi: ${filepath}`, unlinkError);
+                }
+            }
         }
     }
-
 }
 
 
