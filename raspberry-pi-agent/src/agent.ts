@@ -36,6 +36,7 @@ class Agent {
     private state: AgentState = AgentState.INITIALIZING;
     private config: DeviceConfig | null = null;
     private driverInstances: Map<string, ISensorDriver> = new Map();
+    // Use deviceKey for lastReadTimes to handle shared hardware
     private lastReadTimes: Map<string, number> = new Map();
     private globalReadFrequencySeconds?: number;
 
@@ -89,55 +90,97 @@ class Agent {
         }
     }
 
+    // --- SENSOR PROCESSING REFACTORED ---
+
+    private getDeviceKey(sensorConfig: SensorConfig): string | null {
+        switch (sensorConfig.interface) {
+            case 'i2c':
+                return `i2c-${sensorConfig.config.bus}-${sensorConfig.config.address}`;
+            case 'serial':
+                return `serial-${sensorConfig.config.port}`;
+            case 'openweather':
+                return `openweather-${sensorConfig.id}`; // Each OpenWeather sensor is a unique API call
+            default:
+                return null; // Virtual sensors don't have a physical device key
+        }
+    }
+
+    private getEffectiveFrequency(sensorConfig: SensorConfig): number {
+        return (this.globalReadFrequencySeconds && this.globalReadFrequencySeconds > 0)
+            ? this.globalReadFrequencySeconds
+            : sensorConfig.read_frequency || 300;
+    }
+
     private async processSensors() {
         if (this.state !== AgentState.ONLINE || !this.config) {
             return;
         }
 
         const now = Date.now();
-        const sensorsToRead: SensorConfig[] = [];
+        const devicesToRead = new Map<string, { driverName: string; config: any; sensors: SensorConfig[] }>();
 
+        // 1. Group active sensors by their physical device key
         for (const sensorConfig of this.config.sensors) {
             if (!sensorConfig.is_active || sensorConfig.interface === 'virtual' || sensorConfig.type === 'Kar Yüksekliği') {
                 continue;
             }
 
-            const lastRead = this.lastReadTimes.get(sensorConfig.id) || 0;
-            const individualFrequencySeconds = sensorConfig.read_frequency || 300;
+            const deviceKey = this.getDeviceKey(sensorConfig);
+            if (!deviceKey) continue;
+
+            // Check if this physical device is due for a read
+            const lastRead = this.lastReadTimes.get(deviceKey) || 0;
+            const readFrequency = this.getEffectiveFrequency(sensorConfig);
             
-            const effectiveFrequencySeconds = (this.globalReadFrequencySeconds && this.globalReadFrequencySeconds > 0)
-                ? this.globalReadFrequencySeconds
-                : individualFrequencySeconds;
-            
-            if (now - lastRead >= effectiveFrequencySeconds * 1000) {
-                sensorsToRead.push(sensorConfig);
-                this.lastReadTimes.set(sensorConfig.id, now); // Mark as "reading" to prevent re-triggering
+            if (now - lastRead >= readFrequency * 1000) {
+                if (!devicesToRead.has(deviceKey)) {
+                    // This device needs to be read. Mark it and store its info.
+                    devicesToRead.set(deviceKey, {
+                        driverName: sensorConfig.parser_config.driver,
+                        config: sensorConfig.config,
+                        sensors: [],
+                    });
+                     // Mark as "reading" immediately to prevent re-triggering in the next second
+                    this.lastReadTimes.set(deviceKey, now);
+                }
+                // Add this sensor to the list of logical sensors that depend on this physical read
+                devicesToRead.get(deviceKey)!.sensors.push(sensorConfig);
             }
         }
         
-        if (sensorsToRead.length > 0) {
-            console.log(`🌡️ Okunacak ${sensorsToRead.length} sensör bulundu...`);
-            await Promise.all(sensorsToRead.map(async (sensorConfig) => {
-                console.log(`   - Okunuyor: ${sensorConfig.name} (ID: ${sensorConfig.id})`);
-                try {
-                    const driver = await this.loadDriver(sensorConfig.parser_config.driver);
-                    if (!driver) {
-                        console.error(`     -> HATA: Sürücü bulunamadı: ${sensorConfig.parser_config.driver}`);
-                        return;
-                    }
-                    const reading = await driver.read(sensorConfig.config);
-                    if (reading) {
-                        console.log(`     -> Okunan Değer:`, reading);
-                        await this.sendReading({ sensor: sensorConfig.id, value: reading });
-                    } else {
-                        console.warn(`     -> UYARI: ${sensorConfig.name} sensöründen veri okunamadı (null döndü).`);
-                    }
-                } catch (error) {
-                    console.error(`     -> HATA: ${sensorConfig.name} sensörü okunurken hata oluştu:`, error);
+        if (devicesToRead.size === 0) {
+            return;
+        }
+
+        // 2. Execute reads for each unique physical device
+        console.log(`🌡️ Okunacak ${devicesToRead.size} fiziksel cihaz bulundu...`);
+        for (const [deviceKey, deviceInfo] of devicesToRead.entries()) {
+            console.log(`   - Okunuyor: ${deviceKey} (${deviceInfo.sensors.map(s => s.name).join(', ')})`);
+            try {
+                const driver = await this.loadDriver(deviceInfo.driverName);
+                if (!driver) {
+                    console.error(`     -> HATA: Sürücü bulunamadı: ${deviceInfo.driverName}`);
+                    continue;
                 }
-            }));
+
+                const reading = await driver.read(deviceInfo.config);
+                if (reading) {
+                    console.log(`     -> Okunan Ham Değer:`, reading);
+                    
+                    // 3. Distribute the reading to all associated logical sensors
+                    for (const sensor of deviceInfo.sensors) {
+                        await this.sendReading({ sensor: sensor.id, value: reading });
+                    }
+
+                } else {
+                    console.warn(`     -> UYARI: ${deviceKey} cihazından veri okunamadı (null döndü).`);
+                }
+            } catch (error) {
+                console.error(`     -> HATA: ${deviceKey} cihazı okunurken hata oluştu:`, error);
+            }
         }
     }
+    // --- END REFACTOR ---
 
     private async loadDriver(driverName: string): Promise<ISensorDriver | null> {
         if (this.driverInstances.has(driverName)) {

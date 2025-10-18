@@ -249,12 +249,19 @@ apiRouter.post('/commands/:commandId/:status', authenticateDevice, async (req: e
 // STATIONS
 // Fix: Use namespaced express types to avoid conflicts
 apiRouter.get('/stations', async (req: express.Request, res: express.Response) => { 
+    // Fix: Explicitly alias columns to match frontend camelCase property names
     const rows = await db.all(`
         SELECT 
-            s.id, s.name, s.location, s.lat, s.lng, s.status, s.active_alerts, s.last_update, 
-            s.system_health, s.avg_battery, s.data_flow, s.active_sensor_count, s.online_camera_count,
-            (SELECT COUNT(*) FROM sensors WHERE station_id = s.id) as sensor_count,
-            (SELECT COUNT(*) FROM cameras WHERE station_id = s.id) as camera_count
+            s.id, s.name, s.location, s.lat, s.lng, s.status, 
+            s.active_alerts AS activeAlerts, 
+            s.last_update AS lastUpdate, 
+            s.system_health AS systemHealth, 
+            s.avg_battery AS avgBattery, 
+            s.data_flow AS dataFlow, 
+            s.active_sensor_count AS activeSensorCount, 
+            s.online_camera_count AS onlineCameraCount,
+            (SELECT COUNT(*) FROM sensors WHERE station_id = s.id) as sensorCount,
+            (SELECT COUNT(*) FROM cameras WHERE station_id = s.id) as cameraCount
         FROM stations s
     `); 
     res.json(rows.map(dbStationToApi)); 
@@ -485,7 +492,7 @@ apiRouter.get('/readings/history', async (req: express.Request, res: express.Res
     const stationIdList = (stationIds as string).split(',');
     const sensorTypeList = (sensorTypes as string).split(',');
     
-    const queryParams: string[] = [...stationIdList, ...sensorTypeList];
+    const queryParams: (string|number)[] = [...stationIdList, ...sensorTypeList];
     let query = `SELECT r.value, r.timestamp, s.station_id, st.name as station_name, s.type as sensor_type 
                  FROM readings r 
                  JOIN sensors s ON r.sensor_id = s.id 
@@ -498,8 +505,11 @@ apiRouter.get('/readings/history', async (req: express.Request, res: express.Res
         queryParams.push(start as string);
     }
     if (end) {
+        // Fix: Ensure the end date includes the entire day
+        const endDate = new Date(end as string);
+        endDate.setUTCHours(23, 59, 59, 999);
         query += ` AND r.timestamp <= ?`;
-        queryParams.push(`${end as string}T23:59:59.999Z`);
+        queryParams.push(endDate.toISOString());
     }
     query += ` ORDER BY r.timestamp ASC`;
 

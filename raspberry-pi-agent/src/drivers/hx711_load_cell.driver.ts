@@ -74,7 +74,7 @@ export default class Hx711Driver implements ISensorDriver {
                 }
 
                 if (readAttempts >= maxAttempts) {
-                    console.warn(`     -> UYARI (HX711): ${maxAttempts} denemede geçerli veri formatı ('= ...') bulunamadı.`);
+                    console.warn(`     -> UYARI (HX711): ${maxAttempts} denemede geçerli veri formatı ('= 12.34' gibi) bulunamadı.`);
                     cleanupAndResolve(null);
                 }
             };
@@ -88,7 +88,7 @@ export default class Hx711Driver implements ISensorDriver {
 
             // 7 saniye sonra işlem zaman aşımına uğrayacak
             timeout = setTimeout(() => {
-                console.warn(`     -> UYARI (HX711): Veri okuma ${port} portunda zaman aşımına uğradı.`);
+                console.warn(`     -> UYARI (HX711): Veri okuma ${port} portunda zaman aşımına uğradı. Beklenen format: '= 12.34'`);
                 cleanupAndResolve(null);
             }, 7000);
 
