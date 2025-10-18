@@ -36,7 +36,6 @@ class Agent {
     private state: AgentState = AgentState.INITIALIZING;
     private config: DeviceConfig | null = null;
     private driverInstances: Map<string, ISensorDriver> = new Map();
-    // Use sensor ID for lastReadTimes for sequential reading
     private lastReadTimes: Map<string, number> = new Map();
     private globalReadFrequencySeconds?: number;
 
@@ -104,41 +103,45 @@ class Agent {
         const now = Date.now();
         const activeSensors = this.config.sensors.filter(s => s.is_active && s.interface !== 'virtual' && s.type !== 'Kar Yüksekliği');
 
-        // Process sensors sequentially one-by-one to avoid any hardware bus conflicts.
+        // Sequentially iterate through each sensor. This is the main loop.
         for (const sensorConfig of activeSensors) {
             const lastRead = this.lastReadTimes.get(sensorConfig.id) || 0;
             const readFrequency = this.getEffectiveFrequency(sensorConfig);
 
             if (now - lastRead >= readFrequency * 1000) {
-                console.log(`   - Okuma zamanı geldi: ${sensorConfig.name} (ID: ${sensorConfig.id})`);
-                // Update time immediately to prevent re-triggering while async operation is in progress
+                // It's time to read this sensor.
+                console.log(`[OKUMA BAŞLADI] ${sensorConfig.name} (ID: ${sensorConfig.id})`);
+                
+                // Update time immediately to prevent re-triggering while the async read is in progress.
                 this.lastReadTimes.set(sensorConfig.id, now); 
 
                 try {
                     const driver = await this.loadDriver(sensorConfig.parser_config.driver);
                     if (!driver) {
-                        console.error(`     -> HATA: Sürücü bulunamadı: ${sensorConfig.parser_config.driver}`);
-                        continue; // Skip to next sensor in the loop
+                        console.error(`  -> HATA: Sürücü yüklenemedi: ${sensorConfig.parser_config.driver}`);
+                        // Continue to the next sensor in the loop
+                        continue;
                     }
 
-                    // Await the read operation to complete before moving to the next sensor
+                    // Await the read operation to FULLY COMPLETE before moving to the next sensor in the `for` loop.
+                    // This is the key to preventing hardware bus conflicts.
                     const reading = await driver.read(sensorConfig.config);
                     
                     if (reading !== null) {
-                        console.log(`     -> Okunan Değer:`, reading);
                         // The driver might return multiple values (e.g., temp and humidity).
                         // The `sendReading` function will handle the entire object.
                         await this.sendReading({ sensor: sensorConfig.id, value: reading });
                     } else {
-                        console.warn(`     -> UYARI: ${sensorConfig.name} sensöründen veri okunamadı (null döndü).`);
+                        console.warn(`  -> UYARI: ${sensorConfig.name} sensöründen veri okunamadı (sürücü null döndü).`);
                     }
+
                 } catch (error) {
-                    console.error(`     -> HATA: ${sensorConfig.name} sensörü okunurken hata oluştu:`, error);
+                    console.error(`  -> HATA: ${sensorConfig.name} sensörü işlenirken bir hata oluştu. Detaylar sürücü loglarında olabilir.`);
                 }
+                console.log(`[OKUMA BİTTİ] ${sensorConfig.name}`);
             }
         }
     }
-
 
     private async loadDriver(driverName: string): Promise<ISensorDriver | null> {
         if (this.driverInstances.has(driverName)) {
@@ -399,7 +402,7 @@ class Agent {
             return true; // Return true as it's not a failure, just not applicable.
         }
     
-        console.log(`⚡ Manuel okuma tetiklendi: ${sensorConfig.name}`);
+        console.log(`[MANUEL OKUMA BAŞLADI] ${sensorConfig.name}`);
     
         try {
             const driver = await this.loadDriver(sensorConfig.parser_config.driver);
@@ -409,15 +412,17 @@ class Agent {
             }
             const reading = await driver.read(sensorConfig.config);
             if (reading) {
-                console.log(`     -> Okunan Değer:`, reading);
                 await this.sendReading({ sensor: sensorConfig.id, value: reading });
+                console.log(`[MANUEL OKUMA BİTTİ] ${sensorConfig.name}`);
                 return true; // Success
             } else {
                 console.warn(`     -> UYARI: ${sensorConfig.name} sensöründen manuel okuma ile veri alınamadı.`);
+                console.log(`[MANUEL OKUMA BİTTİ] ${sensorConfig.name}`);
                 return false;
             }
         } catch (error) {
             console.error(`     -> HATA: ${sensorConfig.name} sensörü manuel okunurken hata oluştu:`, error);
+            console.log(`[MANUEL OKUMA BİTTİ] ${sensorConfig.name}`);
             return false;
         }
     }

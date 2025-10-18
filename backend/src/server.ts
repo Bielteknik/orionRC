@@ -246,22 +246,41 @@ apiRouter.post('/commands/:commandId/:status', authenticateDevice, async (req: e
 
 // --- Frontend Endpoints ---
 
+// AGENT STATUS
+const AGENT_OFFLINE_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes
+// Fix: Use namespaced express types to avoid conflicts
+apiRouter.get('/agent-status', async (req: express.Request, res: express.Response) => {
+    try {
+        const result = await db.get("SELECT MAX(last_update) as lastUpdate FROM stations");
+        const lastUpdate = result?.lastUpdate;
+        if (!lastUpdate) {
+            return res.json({ status: 'offline', lastUpdate: null });
+        }
+        const lastUpdateTime = new Date(lastUpdate).getTime();
+        const now = Date.now();
+        
+        if (now - lastUpdateTime > AGENT_OFFLINE_THRESHOLD_MS) {
+            return res.json({ status: 'offline', lastUpdate });
+        }
+        return res.json({ status: 'online', lastUpdate });
+
+    } catch (e) {
+        console.error("Error fetching agent status:", e);
+        res.status(500).json({ error: "Could not determine agent status." });
+    }
+});
+
+
 // STATIONS
 // Fix: Use namespaced express types to avoid conflicts
 apiRouter.get('/stations', async (req: express.Request, res: express.Response) => { 
     // Fix: Explicitly alias columns to match frontend camelCase property names
     const rows = await db.all(`
         SELECT 
-            s.id, s.name, s.location, s.lat, s.lng, s.status, 
-            s.active_alerts AS activeAlerts, 
-            s.last_update AS lastUpdate, 
-            s.system_health AS systemHealth, 
-            s.avg_battery AS avgBattery, 
-            s.data_flow AS dataFlow, 
-            s.active_sensor_count AS activeSensorCount, 
-            s.online_camera_count AS onlineCameraCount,
+            s.*,
             (SELECT COUNT(*) FROM sensors WHERE station_id = s.id) as sensorCount,
-            (SELECT COUNT(*) FROM cameras WHERE station_id = s.id) as cameraCount
+            (SELECT COUNT(*) FROM cameras WHERE station_id = s.id) as cameraCount,
+            (SELECT MAX(last_update) FROM sensors WHERE station_id = s.id) as lastUpdate
         FROM stations s
     `); 
     res.json(rows.map(dbStationToApi)); 
@@ -520,16 +539,24 @@ apiRouter.get('/readings/history', async (req: express.Request, res: express.Res
             const readingValue = JSON.parse(r.value);
             let finalValue: number | null = null;
 
-            // Try to find value using the specific key for the sensor type
-            const valueKey = SENSOR_TYPE_TO_VALUE_KEY[r.sensor_type];
-            if (valueKey && typeof readingValue[valueKey] === 'number') {
-                finalValue = readingValue[valueKey];
-            } else {
-                // Fallback: find the first numeric value in the object
-                const numericValue = Object.values(readingValue).find(v => typeof v === 'number');
-                if (typeof numericValue === 'number') {
-                    finalValue = numericValue;
+            // This handles cases like `{"temperature": 20, "humidity": 50}`
+            if (typeof readingValue === 'object' && readingValue !== null) {
+                const valueKey = SENSOR_TYPE_TO_VALUE_KEY[r.sensor_type];
+                // If we have a specific key for this sensor type, use it.
+                if (valueKey && typeof readingValue[valueKey] === 'number') {
+                    finalValue = readingValue[valueKey];
+                } 
+                // If not, try to find the first numeric value as a fallback.
+                else {
+                    const numericValue = Object.values(readingValue).find(v => typeof v === 'number');
+                    if (typeof numericValue === 'number') {
+                        finalValue = numericValue;
+                    }
                 }
+            } 
+            // This handles legacy data that might be just a number, e.g. JSON.parse('"25"') -> 25
+            else if (typeof readingValue === 'number') {
+                finalValue = readingValue;
             }
 
             if (finalValue === null) return null;

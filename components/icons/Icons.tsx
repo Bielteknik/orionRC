@@ -213,3 +213,9 @@ export const PaperAirplaneIcon: React.FC<IconProps> = (props) => (
 export const RefreshIcon: React.FC<IconProps> = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0011.664 0l3.181-3.183m-4.991-2.696L7.985 5.985m11.664 0l-3.181 3.183m0 0L7.985 5.985" /></svg>
 );
+
+export const RaspberryPiIcon: React.FC<IconProps> = (props) => (
+    <svg fill="currentColor" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" {...props}>
+        <path d="M180,144H160V128h20a12,12,0,0,0,0-24H160V88h20a12,12,0,0,0,0-24H160V40a20,20,0,0,0-20-20H116a20,20,0,0,0-20,20V64H76a12,12,0,0,0,0,24H96V104H76a12,12,0,0,0,0,24H96v16H76a12,12,0,0,0,0,24H96v16H40a20,20,0,0,0-20,20v24a20,20,0,0,0,20,20H216a20,20,0,0,0,20-20V184a20,20,0,0,0-20-20H180V144ZM116,40h24V164H116Z"/>
+    </svg>
+);

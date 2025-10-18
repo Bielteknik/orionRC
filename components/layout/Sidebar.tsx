@@ -41,6 +41,15 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setCurrentPage }) => {
         ))}
       </nav>
       <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-center space-x-2 mb-4">
+           <div className="relative">
+              <span className="flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-success"></span>
+              </span>
+           </div>
+           <span className="text-xs font-medium text-success">Sistem Durumu: Normal</span>
+         </div>
         <p className="text-xs text-muted dark:text-gray-400 text-center">© 2024 ORION Platformu</p>
       </div>
     </div>

@@ -14,13 +14,15 @@ import CameraDetail from './pages/CameraDetail.tsx';
 import { ThemeProvider } from './components/ThemeContext.tsx';
 import Notifications from './pages/Notifications.tsx';
 import GeminiAssistant from './components/GeminiAssistant.tsx';
-import { getNotifications, markAllNotificationsAsRead } from './services/apiService.ts';
+import { getNotifications, markAllNotificationsAsRead, getAgentStatus } from './services/apiService.ts';
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.Dashboard);
   const [viewingStationId, setViewingStationId] = useState<string | null>(null);
   const [viewingCameraId, setViewingCameraId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [agentStatus, setAgentStatus] = useState<{ status: string; lastUpdate: string | null }>({ status: 'offline', lastUpdate: null });
+
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -31,11 +33,27 @@ const App: React.FC = () => {
     }
   }, []);
 
+  const fetchAgentStatus = useCallback(async () => {
+    try {
+        const status = await getAgentStatus();
+        setAgentStatus(status);
+    } catch (error) {
+        console.error("Failed to fetch agent status:", error);
+        // Keep the old status on error to prevent flickering
+    }
+  }, []);
+
+
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 20000); // Poll for new notifications every 20 seconds
-    return () => clearInterval(interval);
-  }, [fetchNotifications]);
+    fetchAgentStatus();
+    const notificationInterval = setInterval(fetchNotifications, 20000); 
+    const agentStatusInterval = setInterval(fetchAgentStatus, 15000);
+    return () => {
+      clearInterval(notificationInterval);
+      clearInterval(agentStatusInterval);
+    }
+  }, [fetchNotifications, fetchAgentStatus]);
 
   const handleMarkAllAsRead = async () => {
     try {
@@ -100,6 +118,7 @@ const App: React.FC = () => {
               notifications={notifications}
               onMarkAllNotificationsAsRead={handleMarkAllAsRead}
               onViewAllNotifications={handleViewAllNotifications}
+              agentStatus={agentStatus}
           />
           <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-6 lg:p-8">
             {renderPage()}

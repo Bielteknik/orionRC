@@ -17,6 +17,9 @@ const handleError = (error: any, context: string): Promise<never> => {
     throw new Error(message);
 };
 
+// Agent Status
+export const getAgentStatus = (): Promise<{ status: string; lastUpdate: string | null }> => apiClient.get('/agent-status').then(res => res.data).catch(e => handleError(e, 'fetching agent status'));
+
 // Stations
 export const getStations = (): Promise<Station[]> => apiClient.get('/stations').then(res => res.data).catch(e => handleError(e, 'fetching stations'));
 export const addStation = (data: any): Promise<Station> => apiClient.post('/stations', data).then(res => res.data).catch(e => handleError(e, 'adding station'));

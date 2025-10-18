@@ -90,15 +90,17 @@ export default class Sht3xDriver implements ISensorDriver {
                 const temperature = -45 + 175 * (rawTemp / 65535);
                 const humidity = 100 * (rawHumidity / 65535);
 
-                // Success, return data and exit the loop
-                return {
+                const result = {
                     temperature: parseFloat(temperature.toFixed(2)),
                     humidity: parseFloat(humidity.toFixed(2))
                 };
+                
+                console.log(`     -> Okunan Değer:`, result);
+                return result;
 
             } catch (error) {
                  if (attempt === maxRetries) {
-                    console.error(`     -> HATA (SHT3x): I2C bus üzerinden okuma yapılamadı.`, error);
+                    console.error(`     -> HATA (SHT3x): Maksimum deneme sayısına ulaşıldıktan sonra I2C bus (${busNumber}) üzerinden 0x${address.toString(16)} adresli cihaza erişilemedi.`, error);
                     return null;
                 }
                  await new Promise(resolve => setTimeout(resolve, 100)); // Wait before retrying on error

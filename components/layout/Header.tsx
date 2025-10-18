@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Page, Notification, Severity } from '../../types.ts';
-import { BellIcon, ExclamationIcon } from '../icons/Icons.tsx';
+import { BellIcon, ExclamationIcon, RaspberryPiIcon } from '../icons/Icons.tsx';
 
 
 interface NotificationPopoverProps {
@@ -39,7 +39,7 @@ const NotificationPopover: React.FC<NotificationPopoverProps> = ({ notifications
                                 <p className="text-xs text-muted dark:text-gray-400 mt-0.5">
                                     {notification.stationName} - {notification.sensorName} ({notification.triggeredValue})
                                 </p>
-                                <p className="text-xs text-muted dark:text-gray-400 mt-1">{notification.timestamp}</p>
+                                <p className="text-xs text-muted dark:text-gray-400 mt-1">{new Date(notification.timestamp).toLocaleString('tr-TR')}</p>
                             </div>
                         </div>
                     ))
@@ -62,9 +62,10 @@ interface HeaderProps {
   notifications: Notification[];
   onMarkAllNotificationsAsRead: () => void;
   onViewAllNotifications: () => void;
+  agentStatus: { status: string; lastUpdate: string | null };
 }
 
-const Header: React.FC<HeaderProps> = ({ currentPage, notifications, onMarkAllNotificationsAsRead, onViewAllNotifications }) => {
+const Header: React.FC<HeaderProps> = ({ currentPage, notifications, onMarkAllNotificationsAsRead, onViewAllNotifications, agentStatus }) => {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
 
@@ -96,18 +97,41 @@ const Header: React.FC<HeaderProps> = ({ currentPage, notifications, onMarkAllNo
     onViewAllNotifications();
   }
 
+  const formatTimeAgo = (isoString: string | null): string => {
+    if (!isoString) return 'hiçbir zaman';
+    const date = new Date(isoString);
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    if (seconds < 60) return `${seconds} sn önce`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} dk önce`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} sa önce`;
+    const days = Math.floor(hours / 24);
+    return `${days} gün önce`;
+  };
+
+  const isAgentOnline = agentStatus.status === 'online';
+  const agentTooltip = isAgentOnline 
+    ? `Agent Çevrimiçi | Son Sinyal: ${formatTimeAgo(agentStatus.lastUpdate)}`
+    : `Agent Çevrimdışı | Son Sinyal: ${formatTimeAgo(agentStatus.lastUpdate)}`;
+
+
   return (
     <header className="flex-shrink-0 bg-primary dark:bg-gray-800 h-20 flex items-center justify-between px-8 border-b border-gray-200 dark:border-gray-700">
       <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{pageTitles[currentPage]}</h1>
-      <div className="flex items-center space-x-4">
-         <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-6">
+         <div 
+            className="flex items-center space-x-2 cursor-default"
+            title={agentTooltip}
+        >
            <div className="relative">
-              <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-success"></span>
-              </span>
+              {isAgentOnline && <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-ubuntu-orange opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-ubuntu-orange"></span></span>}
+              <RaspberryPiIcon className={`w-6 h-6 ${isAgentOnline ? 'text-ubuntu-purple' : 'text-muted'}`} />
            </div>
-           <span className="text-sm font-medium text-success">Sistem Durumu: Normal</span>
+           <span className={`text-sm font-semibold ${isAgentOnline ? 'text-gray-800' : 'text-muted'}`}>
+                {isAgentOnline ? 'Agent Çevrimiçi' : 'Agent Çevrimdışı'}
+           </span>
          </div>
 
          <div className="relative" ref={notificationsRef}>
@@ -126,9 +150,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, notifications, onMarkAllNo
             {isNotificationsOpen && (
                 <NotificationPopover
                     notifications={notifications}
-                    onMarkAllAsRead={() => {
-                        onMarkAllNotificationsAsRead();
-                    }}
+                    onMarkAllAsRead={onMarkAllNotificationsAsRead}
                     onViewAll={handleViewAll}
                     onClose={() => setIsNotificationsOpen(false)}
                 />
