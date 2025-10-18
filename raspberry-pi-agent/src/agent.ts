@@ -36,7 +36,7 @@ class Agent {
     private state: AgentState = AgentState.INITIALIZING;
     private config: DeviceConfig | null = null;
     private driverInstances: Map<string, ISensorDriver> = new Map();
-    // Use deviceKey for lastReadTimes to handle shared hardware
+    // Use sensor ID for lastReadTimes for sequential reading
     private lastReadTimes: Map<string, number> = new Map();
     private globalReadFrequencySeconds?: number;
 
@@ -90,21 +90,6 @@ class Agent {
         }
     }
 
-    // --- SENSOR PROCESSING REFACTORED ---
-
-    private getDeviceKey(sensorConfig: SensorConfig): string | null {
-        switch (sensorConfig.interface) {
-            case 'i2c':
-                return `i2c-${sensorConfig.config.bus}-${sensorConfig.config.address}`;
-            case 'serial':
-                return `serial-${sensorConfig.config.port}`;
-            case 'openweather':
-                return `openweather-${sensorConfig.id}`; // Each OpenWeather sensor is a unique API call
-            default:
-                return null; // Virtual sensors don't have a physical device key
-        }
-    }
-
     private getEffectiveFrequency(sensorConfig: SensorConfig): number {
         return (this.globalReadFrequencySeconds && this.globalReadFrequencySeconds > 0)
             ? this.globalReadFrequencySeconds
@@ -117,70 +102,43 @@ class Agent {
         }
 
         const now = Date.now();
-        const devicesToRead = new Map<string, { driverName: string; config: any; sensors: SensorConfig[] }>();
+        const activeSensors = this.config.sensors.filter(s => s.is_active && s.interface !== 'virtual' && s.type !== 'Kar Yüksekliği');
 
-        // 1. Group active sensors by their physical device key
-        for (const sensorConfig of this.config.sensors) {
-            if (!sensorConfig.is_active || sensorConfig.interface === 'virtual' || sensorConfig.type === 'Kar Yüksekliği') {
-                continue;
-            }
-
-            const deviceKey = this.getDeviceKey(sensorConfig);
-            if (!deviceKey) continue;
-
-            // Check if this physical device is due for a read
-            const lastRead = this.lastReadTimes.get(deviceKey) || 0;
+        // Process sensors sequentially one-by-one to avoid any hardware bus conflicts.
+        for (const sensorConfig of activeSensors) {
+            const lastRead = this.lastReadTimes.get(sensorConfig.id) || 0;
             const readFrequency = this.getEffectiveFrequency(sensorConfig);
-            
+
             if (now - lastRead >= readFrequency * 1000) {
-                if (!devicesToRead.has(deviceKey)) {
-                    // This device needs to be read. Mark it and store its info.
-                    devicesToRead.set(deviceKey, {
-                        driverName: sensorConfig.parser_config.driver,
-                        config: sensorConfig.config,
-                        sensors: [],
-                    });
-                     // Mark as "reading" immediately to prevent re-triggering in the next second
-                    this.lastReadTimes.set(deviceKey, now);
-                }
-                // Add this sensor to the list of logical sensors that depend on this physical read
-                devicesToRead.get(deviceKey)!.sensors.push(sensorConfig);
-            }
-        }
-        
-        if (devicesToRead.size === 0) {
-            return;
-        }
+                console.log(`   - Okuma zamanı geldi: ${sensorConfig.name} (ID: ${sensorConfig.id})`);
+                // Update time immediately to prevent re-triggering while async operation is in progress
+                this.lastReadTimes.set(sensorConfig.id, now); 
 
-        // 2. Execute reads for each unique physical device
-        console.log(`🌡️ Okunacak ${devicesToRead.size} fiziksel cihaz bulundu...`);
-        for (const [deviceKey, deviceInfo] of devicesToRead.entries()) {
-            console.log(`   - Okunuyor: ${deviceKey} (${deviceInfo.sensors.map(s => s.name).join(', ')})`);
-            try {
-                const driver = await this.loadDriver(deviceInfo.driverName);
-                if (!driver) {
-                    console.error(`     -> HATA: Sürücü bulunamadı: ${deviceInfo.driverName}`);
-                    continue;
-                }
-
-                const reading = await driver.read(deviceInfo.config);
-                if (reading) {
-                    console.log(`     -> Okunan Ham Değer:`, reading);
-                    
-                    // 3. Distribute the reading to all associated logical sensors
-                    for (const sensor of deviceInfo.sensors) {
-                        await this.sendReading({ sensor: sensor.id, value: reading });
+                try {
+                    const driver = await this.loadDriver(sensorConfig.parser_config.driver);
+                    if (!driver) {
+                        console.error(`     -> HATA: Sürücü bulunamadı: ${sensorConfig.parser_config.driver}`);
+                        continue; // Skip to next sensor in the loop
                     }
 
-                } else {
-                    console.warn(`     -> UYARI: ${deviceKey} cihazından veri okunamadı (null döndü).`);
+                    // Await the read operation to complete before moving to the next sensor
+                    const reading = await driver.read(sensorConfig.config);
+                    
+                    if (reading !== null) {
+                        console.log(`     -> Okunan Değer:`, reading);
+                        // The driver might return multiple values (e.g., temp and humidity).
+                        // The `sendReading` function will handle the entire object.
+                        await this.sendReading({ sensor: sensorConfig.id, value: reading });
+                    } else {
+                        console.warn(`     -> UYARI: ${sensorConfig.name} sensöründen veri okunamadı (null döndü).`);
+                    }
+                } catch (error) {
+                    console.error(`     -> HATA: ${sensorConfig.name} sensörü okunurken hata oluştu:`, error);
                 }
-            } catch (error) {
-                console.error(`     -> HATA: ${deviceKey} cihazı okunurken hata oluştu:`, error);
             }
         }
     }
-    // --- END REFACTOR ---
+
 
     private async loadDriver(driverName: string): Promise<ISensorDriver | null> {
         if (this.driverInstances.has(driverName)) {
@@ -241,13 +199,25 @@ class Agent {
         try {
             switch (command.command_type) {
                 case 'CAPTURE_IMAGE':
-                    success = await this.captureImage(command);
+                    if (!command.payload?.camera_id) {
+                        console.error("Capture image command is missing 'camera_id' in payload.");
+                        break;
+                    }
+                    success = await this.captureImage(command.payload.camera_id);
                     break;
                 case 'ANALYZE_SNOW_DEPTH':
-                    success = await this.analyzeSnowDepth(command);
+                     if (!command.payload?.camera_id || !command.payload?.virtual_sensor_id) {
+                        console.error("Analyze snow depth command is missing 'camera_id' or 'virtual_sensor_id'.");
+                        break;
+                    }
+                    success = await this.analyzeSnowDepth(command.payload.camera_id, command.payload.virtual_sensor_id);
                     break;
                 case 'FORCE_READ_SENSOR':
-                    success = await this.forceReadSensor(command);
+                    if (!command.payload?.sensor_id) {
+                        console.error("Force read command is missing 'sensor_id'.");
+                        break;
+                    }
+                    success = await this.forceReadSensor(command.payload.sensor_id);
                     break;
                 default:
                     console.warn(`Bilinmeyen komut tipi: ${command.command_type}`);
@@ -271,22 +241,16 @@ class Agent {
         }
     }
 
-    private async captureImage(command: AgentCommand): Promise<boolean> {
-        const { camera_id } = command.payload;
-        if (!camera_id) {
-            console.error("Capture image command is missing 'camera_id' in payload.");
-            return false;
-        }
-
-        const cameraConfig = this.config?.cameras.find(c => c.id === camera_id);
+    private async captureImage(cameraId: string): Promise<boolean> {
+        const cameraConfig = this.config?.cameras.find(c => c.id === cameraId);
 
         if (!cameraConfig || !cameraConfig.rtsp_url) {
-            console.error(`Fotoğraf çekilemedi: Kamera (ID: ${camera_id}) yapılandırmada bulunamadı veya RTSP URL'si eksik.`);
+            console.error(`Fotoğraf çekilemedi: Kamera (ID: ${cameraId}) yapılandırmada bulunamadı veya RTSP URL'si eksik.`);
             return false;
         }
 
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const filename = `${timestamp}_${this.deviceId}_${camera_id}.jpg`;
+        const filename = `${timestamp}_${this.deviceId}_${cameraId}.jpg`;
         const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
         const filepath = path.join(UPLOADS_DIR, filename);
 
@@ -295,25 +259,18 @@ class Agent {
         try {
             await fs.mkdir(UPLOADS_DIR, { recursive: true });
             
-            // Use ffmpeg to capture a single frame, resize it, and compress it as a JPEG.
-            // -i: input URL
-            // -vframes 1: capture only one frame
-            // -vf "scale=1280:-1": resize width to 1280px, height is automatic to keep aspect ratio
-            // -q:v 4: JPEG quality (2-5 is a good range, lower is better quality)
-            // -y: overwrite output file if it exists
             const ffmpegCommand = `ffmpeg -i "${cameraConfig.rtsp_url}" -vframes 1 -vf "scale=1280:-1" -q:v 4 -y "${filepath}"`;
             
             const { stdout, stderr } = await execAsync(ffmpegCommand);
-            if (stderr && !stderr.includes('frame=')) { // ffmpeg often logs info to stderr
+            if (stderr && !stderr.includes('frame=')) {
                 console.log(`FFMPEG Info: ${stderr}`);
             }
             console.log(`🖼️  Optimize edilmiş görüntü kaydedildi: ${filepath}`);
 
-            // Read the optimized file and send it as base64
             const imageBuffer = await fs.readFile(filepath);
             const base64Image = imageBuffer.toString('base64');
             
-            await axios.post(`${this.apiBaseUrl}/cameras/${camera_id}/upload-photo`, {
+            await axios.post(`${this.apiBaseUrl}/cameras/${cameraId}/upload-photo`, {
                 image: base64Image,
                 filename: filename
             }, {
@@ -322,30 +279,20 @@ class Agent {
 
             console.log(`🚀 Fotoğraf sunucuya yüklendi: ${filename}`);
             
-            // Clean up local file after upload
             await fs.unlink(filepath);
             
             return true;
 
         } catch (error) {
-            console.error(`HATA: Fotoğraf çekme veya yükleme başarısız oldu (Kamera: ${camera_id})`, error);
+            console.error(`HATA: Fotoğraf çekme veya yükleme başarısız oldu (Kamera: ${cameraId})`, error);
             return false;
         }
     }
 
-    private async analyzeSnowDepth(command: AgentCommand): Promise<boolean> {
-        const { camera_id, virtual_sensor_id } = command.payload;
-        if (!camera_id) {
-            console.error('Kar derinliği analizi için camera_id gerekli.');
-            return false;
-        }
-        if (!virtual_sensor_id) {
-            console.error('Kar derinliği analizi için virtual_sensor_id gerekli.');
-            return false;
-        }
-        const cameraConfig = this.config?.cameras.find(c => c.id === camera_id);
+    private async analyzeSnowDepth(cameraId: string, virtualSensorId: string): Promise<boolean> {
+        const cameraConfig = this.config?.cameras.find(c => c.id === cameraId);
         if (!cameraConfig || !cameraConfig.rtsp_url) {
-            console.error(`Analiz için kamera bulunamadı veya RTSP URL'si eksik: ${camera_id}`);
+            console.error(`Analiz için kamera bulunamadı veya RTSP URL'si eksik: ${cameraId}`);
             return false;
         }
         
@@ -354,10 +301,10 @@ class Agent {
             return false;
         }
 
-        console.log(`❄️  Kar derinliği analizi başlatılıyor... Kamera: ${camera_id}`);
+        console.log(`❄️  Kar derinliği analizi başlatılıyor... Kamera: ${cameraId}`);
         
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const filename = `ANALYSIS_${timestamp}_${camera_id}.jpg`;
+        const filename = `ANALYSIS_${timestamp}_${cameraId}.jpg`;
         const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
         const filepath = path.join(UPLOADS_DIR, filename);
 
@@ -410,13 +357,13 @@ class Agent {
             console.log(`   -> Analiz Sonucu: ${snowDepth} cm`);
             
             await this.sendReading({
-                sensor: virtual_sensor_id,
+                sensor: virtualSensorId,
                 value: { snow_depth_cm: snowDepth }
             });
 
             // 5. Upload analyzed image to server for verification
             await axios.post(`${this.apiBaseUrl}/analysis/upload-photo`, {
-                cameraId: camera_id,
+                cameraId: cameraId,
                 image: base64Image,
                 filename: filename
             }, {
@@ -427,14 +374,12 @@ class Agent {
             return true;
 
         } catch (error) {
-            console.error(`HATA: Kar derinliği analizi başarısız oldu (Kamera: ${camera_id})`, error);
+            console.error(`HATA: Kar derinliği analizi başarısız oldu (Kamera: ${cameraId})`, error);
             return false;
         } finally {
-            // Clean up temp file
             try {
                 await fs.unlink(filepath);
             } catch (unlinkError: any) {
-                // Ignore error if file doesn't exist, but log others
                 if (unlinkError.code !== 'ENOENT') {
                     console.warn(`Geçici analiz dosyası silinemedi: ${filepath}`, unlinkError);
                 }
@@ -442,16 +387,10 @@ class Agent {
         }
     }
 
-    private async forceReadSensor(command: AgentCommand): Promise<boolean> {
-        const { sensor_id } = command.payload;
-        if (!sensor_id) {
-            console.error("Force read komutu payload içinde 'sensor_id' içermiyor.");
-            return false;
-        }
-    
-        const sensorConfig = this.config?.sensors.find(s => s.id === sensor_id);
+    private async forceReadSensor(sensorId: string): Promise<boolean> {
+        const sensorConfig = this.config?.sensors.find(s => s.id === sensorId);
         if (!sensorConfig) {
-            console.error(`Manuel okuma başarısız: Sensör ID ${sensor_id} mevcut cihaz yapılandırmasında bulunamadı.`);
+            console.error(`Manuel okuma başarısız: Sensör ID ${sensorId} mevcut cihaz yapılandırmasında bulunamadı.`);
             return false;
         }
 
