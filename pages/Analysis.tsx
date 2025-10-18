@@ -4,6 +4,7 @@ import { getStations, getCameras, getSensors, analyzeSnowDepth } from '../servic
 import Card from '../components/common/Card.tsx';
 import { BrainIcon, ExclamationIcon } from '../components/icons/Icons.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
+import { SnowRulerDayIcon, SnowRulerNightIcon } from '../components/icons/RulerIcons.tsx';
 
 const Analysis: React.FC = () => {
     const [stations, setStations] = useState<Station[]>([]);
@@ -188,12 +189,12 @@ const Analysis: React.FC = () => {
                 <Card>
                     <h3 className="font-semibold text-lg mb-2">Referans Görüntüler</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <img src="https://storage.googleapis.com/maker-studio-project-media-prod/media/31332924/20240531_020138_0000.png" alt="Snow Ruler Day" className="rounded-md border"/>
+                        <div className="flex flex-col items-center">
+                            <SnowRulerDayIcon className="w-full h-auto max-w-[200px] mx-auto" />
                             <p className="text-xs text-center text-muted mt-1">Gündüz Görünümü</p>
                         </div>
-                        <div>
-                            <img src="https://storage.googleapis.com/maker-studio-project-media-prod/media/31332924/20240531_020142_0000.png" alt="Snow Ruler Night" className="rounded-md border"/>
+                        <div className="flex flex-col items-center">
+                           <SnowRulerNightIcon className="w-full h-auto max-w-[200px] mx-auto" />
                             <p className="text-xs text-center text-muted mt-1">Gece Görünümü</p>
                         </div>
                     </div>

@@ -291,8 +291,7 @@ class OrionAgent {
                 try {
                     await fs.unlink(tempFilePath);
                 } catch (unlinkError) {
-                    // Fix: Cannot find namespace 'NodeJS'. Cast to any to access code property.
-                    if ((unlinkError as any).code !== 'ENOENT') {
+                    if ((unlinkError as NodeJS.ErrnoException).code !== 'ENOENT') {
                         logger.warn(`Geçici resim dosyası silinemedi: ${tempFilePath}: ${String(unlinkError)}`);
                     }
                 }
@@ -443,9 +442,9 @@ class OrionAgent {
             const prompt = `Verilen görüntüyü analiz et. Görüntüde 0'dan 240'a kadar santimetre (cm) cinsinden işaretlenmiş bir kar ölçüm cetveli bulunmaktadır. Karla kaplı olan en yüksek sayıyı tespit et. Cevabını SADECE '{"snow_depth_cm": SAYI}' formatında bir JSON nesnesi olarak ver. Örneğin, kar 25 cm'yi kaplıyorsa '{"snow_depth_cm": 25}' şeklinde yanıt ver. Eğer hiç kar yoksa veya cetvel tamamen temizse 0 değerini kullan.`;
 
             logger.log(`Görüntü Gemini'ye gönderiliyor...`);
-            // Fix: Use gemini-2.5-flash for image analysis as per guidelines.
+            // Fix: Use gemini-2.5-flash-image for multimodal analysis as per guidelines.
             const response = await this.geminiAI.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-2.5-flash-image',
                 contents: { parts: [imagePart, { text: prompt }] },
             });
 
