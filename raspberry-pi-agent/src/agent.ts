@@ -399,6 +399,11 @@ class OrionAgent {
             logger.error("Gemini AI başlatılmadığı için kar yüksekliği analizi yapılamıyor.");
             return;
         }
+        
+        if (!virtual_sensor_id) {
+            logger.error(`Analiz komutu başarısız: Sanal sensör ID'si ('virtual_sensor_id') komutta belirtilmemiş.`);
+            return;
+        }
 
         const cameraConfig = this.deviceConfig?.cameras.find((c: CameraConfig) => c.id === camera_id);
         if (!cameraConfig) {
