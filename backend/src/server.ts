@@ -251,7 +251,8 @@ apiRouter.post('/commands/:commandId/:status', authenticateDevice, async (req: e
 apiRouter.get('/stations', async (req: express.Request, res: express.Response) => { 
     const rows = await db.all(`
         SELECT 
-            s.*, 
+            s.id, s.name, s.location, s.lat, s.lng, s.status, s.active_alerts, s.last_update, 
+            s.system_health, s.avg_battery, s.data_flow, s.active_sensor_count, s.online_camera_count,
             (SELECT COUNT(*) FROM sensors WHERE station_id = s.id) as sensor_count,
             (SELECT COUNT(*) FROM cameras WHERE station_id = s.id) as camera_count
         FROM stations s
@@ -480,9 +481,29 @@ apiRouter.get('/readings', async (req: express.Request, res: express.Response) =
 apiRouter.get('/readings/history', async (req: express.Request, res: express.Response) => {
     const { stationIds, sensorTypes, start, end } = req.query;
     if (!stationIds || !sensorTypes) return res.status(400).json({ error: 'stationIds and sensorTypes are required.' });
+    
     const stationIdList = (stationIds as string).split(',');
     const sensorTypeList = (sensorTypes as string).split(',');
-    const rows = await db.all(`SELECT r.value, r.timestamp, s.station_id, st.name as station_name, s.type as sensor_type FROM readings r JOIN sensors s ON r.sensor_id = s.id JOIN stations st ON s.station_id = st.id WHERE s.station_id IN (${stationIdList.map(() => '?').join(',')}) AND s.type IN (${sensorTypeList.map(() => '?').join(',')}) ${start ? `AND r.timestamp >= ?` : ''} ${end ? `AND r.timestamp <= ?` : ''} ORDER BY r.timestamp ASC`, ...stationIdList, ...sensorTypeList, ...(start ? [start as string] : []), ...(end ? [end as string] : []));
+    
+    const queryParams: string[] = [...stationIdList, ...sensorTypeList];
+    let query = `SELECT r.value, r.timestamp, s.station_id, st.name as station_name, s.type as sensor_type 
+                 FROM readings r 
+                 JOIN sensors s ON r.sensor_id = s.id 
+                 JOIN stations st ON s.station_id = st.id 
+                 WHERE s.station_id IN (${stationIdList.map(() => '?').join(',')}) 
+                 AND s.type IN (${sensorTypeList.map(() => '?').join(',')})`;
+
+    if (start) {
+        query += ` AND r.timestamp >= ?`;
+        queryParams.push(start as string);
+    }
+    if (end) {
+        query += ` AND r.timestamp <= ?`;
+        queryParams.push(`${end as string}T23:59:59.999Z`);
+    }
+    query += ` ORDER BY r.timestamp ASC`;
+
+    const rows = await db.all(query, ...queryParams);
     
     const formatted = rows.map(r => {
         try {

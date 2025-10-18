@@ -2,6 +2,8 @@ import axios from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { GoogleGenAI } from "@google/genai";
 import {
     DeviceConfig,
@@ -11,6 +13,8 @@ import {
     AgentCommand,
     AgentState,
 } from './types.js';
+
+const execAsync = promisify(exec);
 
 // --- Path Configuration ---
 const __filename = fileURLToPath(import.meta.url);
@@ -233,8 +237,8 @@ class Agent {
 
         const cameraConfig = this.config?.cameras.find(c => c.id === camera_id);
 
-        if (!cameraConfig) {
-            console.error(`Fotoğraf çekilemedi: Kamera ID'si ${camera_id} yapılandırmada bulunamadı.`);
+        if (!cameraConfig || !cameraConfig.rtsp_url) {
+            console.error(`Fotoğraf çekilemedi: Kamera (ID: ${camera_id}) yapılandırmada bulunamadı veya RTSP URL'si eksik.`);
             return false;
         }
 
@@ -243,20 +247,26 @@ class Agent {
         const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
         const filepath = path.join(UPLOADS_DIR, filename);
 
-        console.log(`📸 Fotoğraf çekiliyor: ${cameraConfig.name}...`);
+        console.log(`📸 Fotoğraf çekiliyor ve optimize ediliyor: ${cameraConfig.name}...`);
 
         try {
             await fs.mkdir(UPLOADS_DIR, { recursive: true });
             
-            // This is a mock capture. In a real scenario, you'd use a library
-            // like `node-webcam` or execute a command-line tool like `fswebcam` or `ffmpeg`.
-            // For example: `ffmpeg -i ${cameraConfig.rtsp_url} -vframes 1 ${filepath}`
+            // Use ffmpeg to capture a single frame, resize it, and compress it as a JPEG.
+            // -i: input URL
+            // -vframes 1: capture only one frame
+            // -vf "scale=1280:-1": resize width to 1280px, height is automatic to keep aspect ratio
+            // -q:v 4: JPEG quality (2-5 is a good range, lower is better quality)
+            // -y: overwrite output file if it exists
+            const ffmpegCommand = `ffmpeg -i "${cameraConfig.rtsp_url}" -vframes 1 -vf "scale=1280:-1" -q:v 4 -y "${filepath}"`;
             
-            // Mock implementation: create a dummy file.
-            await fs.writeFile(filepath, "dummy image data");
-            console.log(`🖼️  Mock görüntü kaydedildi: ${filepath}`);
+            const { stdout, stderr } = await execAsync(ffmpegCommand);
+            if (stderr && !stderr.includes('frame=')) { // ffmpeg often logs info to stderr
+                console.log(`FFMPEG Info: ${stderr}`);
+            }
+            console.log(`🖼️  Optimize edilmiş görüntü kaydedildi: ${filepath}`);
 
-            // Read the file and send it as base64
+            // Read the optimized file and send it as base64
             const imageBuffer = await fs.readFile(filepath);
             const base64Image = imageBuffer.toString('base64');
             
@@ -291,8 +301,8 @@ class Agent {
             return false;
         }
         const cameraConfig = this.config?.cameras.find(c => c.id === camera_id);
-        if (!cameraConfig) {
-            console.error(`Analiz için kamera bulunamadı: ${camera_id}`);
+        if (!cameraConfig || !cameraConfig.rtsp_url) {
+            console.error(`Analiz için kamera bulunamadı veya RTSP URL'si eksik: ${camera_id}`);
             return false;
         }
         
@@ -309,11 +319,11 @@ class Agent {
         const filepath = path.join(UPLOADS_DIR, filename);
 
         try {
-            // 1. Capture image
+            // 1. Capture and optimize image
             await fs.mkdir(UPLOADS_DIR, { recursive: true });
-            // MOCK: In a real scenario, use ffmpeg or similar
-            await fs.writeFile(filepath, "dummy image data for analysis");
-            console.log(`   -> Analiz için mock görüntü kaydedildi: ${filepath}`);
+            const ffmpegCommand = `ffmpeg -i "${cameraConfig.rtsp_url}" -vframes 1 -vf "scale=1280:-1" -q:v 4 -y "${filepath}"`;
+            await execAsync(ffmpegCommand);
+            console.log(`   -> Analiz için optimize edilmiş görüntü kaydedildi: ${filepath}`);
 
             // 2. Read image to base64
             const imageBuffer = await fs.readFile(filepath);
