@@ -1,18 +1,44 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Sensor, Station, SensorStatus } from '../types.ts';
 import Card from '../components/common/Card.tsx';
-import { AddIcon, SearchIcon, EditIcon, DeleteIcon, ExclamationIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, SensorIcon as GenericSensorIcon, BrainIcon } from '../components/icons/Icons.tsx';
+import { AddIcon, SearchIcon, EditIcon, DeleteIcon, ExclamationIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, SensorIcon as GenericSensorIcon, BrainIcon, RefreshIcon } from '../components/icons/Icons.tsx';
 import AddSensorDrawer from '../components/AddSensorDrawer.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
-import { getSensors, getStations, addSensor, updateSensor, deleteSensor, getDefinitions } from '../services/apiService.ts';
+import { getSensors, getStations, addSensor, updateSensor, deleteSensor, getDefinitions, forceReadSensor } from '../services/apiService.ts';
 import DeleteConfirmationModal from '../components/DeleteConfirmationModal.tsx';
+
+const formatTimeAgo = (isoString: string | undefined): string => {
+    if (!isoString) return 'Veri Yok';
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) { // Check for invalid date
+        return 'Veri Yok';
+    }
+
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (seconds < 10) return "az önce";
+    if (seconds < 60) return `${seconds} sn önce`;
+    
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} dk önce`;
+
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} sa önce`;
+
+    const days = Math.floor(hours / 24);
+    return `${days} gün önce`;
+};
+
 
 const SensorCard: React.FC<{
     sensor: Sensor;
     stationName: string;
     onEdit: (sensor: Sensor) => void;
     onDelete: (sensor: Sensor) => void;
-}> = ({ sensor, stationName, onEdit, onDelete }) => {
+    onForceRead: (sensor: Sensor) => void;
+    isReading: boolean;
+}> = ({ sensor, stationName, onEdit, onDelete, onForceRead, isReading }) => {
     const getSensorIcon = (sensor: Sensor) => {
         if (sensor.interface === 'virtual') {
             return <BrainIcon className="w-6 h-6 text-muted" />;
@@ -38,29 +64,44 @@ const SensorCard: React.FC<{
         : sensor.value;
 
     return (
-        <Card className="p-4 flex flex-col h-full">
-            <div className="flex justify-between items-start">
+        <Card className="p-3 flex flex-col h-full">
+            <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center space-x-3">
-                    <div className="bg-gray-100 p-2.5 rounded-lg">{getSensorIcon(sensor)}</div>
+                    <div className="bg-gray-100 p-2 rounded-lg">{getSensorIcon(sensor)}</div>
                     <div>
-                        <h3 className="font-semibold text-gray-900">{sensor.name}</h3>
-                        <p className="text-sm text-muted">{stationName || 'Atanmamış'}</p>
+                        <h3 className="font-semibold text-gray-900 text-base">{sensor.name}</h3>
+                        <p className="text-xs text-muted">{stationName || 'Atanmamış'}</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-1">
-                    <button onClick={() => onEdit(sensor)} className="p-2 text-muted hover:text-accent rounded-full hover:bg-accent/10 transition-colors"><EditIcon className="w-4 h-4" /></button>
-                    <button onClick={() => onDelete(sensor)} className="p-2 text-muted hover:text-danger rounded-full hover:bg-danger/10 transition-colors"><DeleteIcon className="w-4 h-4" /></button>
+                <div className="flex items-center gap-0">
+                    <button 
+                        onClick={() => onForceRead(sensor)} 
+                        className="p-1.5 text-muted hover:text-accent rounded-full hover:bg-accent/10 transition-colors disabled:cursor-not-allowed disabled:opacity-50" 
+                        title={sensor.interface === 'virtual' ? "Sanal sensörler manuel olarak tetiklenemez" : "Şimdi Oku"}
+                        disabled={isReading || sensor.interface === 'virtual'}
+                    >
+                        {isReading ? (
+                            <svg className="animate-spin h-4 w-4 text-accent" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        ) : (
+                            <RefreshIcon className="w-4 h-4" />
+                        )}
+                    </button>
+                    <button onClick={() => onEdit(sensor)} className="p-1.5 text-muted hover:text-accent rounded-full hover:bg-accent/10 transition-colors"><EditIcon className="w-4 h-4" /></button>
+                    <button onClick={() => onDelete(sensor)} className="p-1.5 text-muted hover:text-danger rounded-full hover:bg-danger/10 transition-colors"><DeleteIcon className="w-4 h-4" /></button>
                 </div>
             </div>
-            <div className="flex-grow text-center my-4">
-                <p className="text-4xl font-bold text-gray-900">{displayValue}<span className="text-xl text-muted ml-1">{sensor.unit || ''}</span></p>
-                <p className="text-sm text-gray-600">{sensor.type}</p>
+            <div className="flex-grow text-center my-2">
+                <p className="text-3xl font-bold text-gray-900">{displayValue}<span className="text-lg text-muted ml-1">{sensor.unit || ''}</span></p>
+                <p className="text-xs text-gray-600">{sensor.type}</p>
             </div>
-            <div className="flex justify-between items-center text-sm pt-3 border-t border-gray-200">
-                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${statusStyles[sensor.status]}`}>
+            <div className="flex justify-between items-center text-xs pt-2 border-t border-gray-200">
+                <span className={`px-2 py-0.5 font-semibold rounded-full ${statusStyles[sensor.status]}`}>
                     {sensor.status}
                 </span>
-                <span className="text-muted text-xs">Son gün.: {new Date(sensor.lastUpdate).toLocaleTimeString('tr-TR')}</span>
+                <span className="text-muted">{formatTimeAgo(sensor.lastUpdate)}</span>
             </div>
         </Card>
     );
@@ -79,10 +120,12 @@ const Sensors: React.FC = () => {
 
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [sensorToDelete, setSensorToDelete] = useState<Sensor | null>(null);
+    const [isReading, setIsReading] = useState<string | null>(null);
 
     const fetchData = useCallback(async () => {
         try {
-            setIsLoading(true);
+            // Don't set loading to true on refetch, only on initial load
+            if (sensors.length === 0) setIsLoading(true);
             setError(null);
             const [sensorsData, stationsData, definitionsData] = await Promise.all([getSensors(), getStations(), getDefinitions()]);
             setSensors(sensorsData);
@@ -94,7 +137,7 @@ const Sensors: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [sensors.length]);
 
     useEffect(() => {
         fetchData();
@@ -157,6 +200,26 @@ const Sensors: React.FC = () => {
         setSensorToEdit(null);
     }
 
+    const handleForceRead = async (sensor: Sensor) => {
+        if (!sensor.stationId) {
+            alert("Bu sensör bir istasyona atanmamış, okuma tetiklenemez.");
+            return;
+        }
+        setIsReading(sensor.id);
+        try {
+            await forceReadSensor(sensor.id);
+            setTimeout(() => {
+                setIsReading(null);
+                fetchData(); 
+            }, 3000); 
+        } catch (error) {
+            console.error("Failed to trigger sensor read:", error);
+            alert("Sensör okuma komutu gönderilemedi.");
+            setIsReading(null);
+        }
+    };
+
+
     return (
         <div className="space-y-6">
             <Card>
@@ -194,7 +257,7 @@ const Sensors: React.FC = () => {
 
             {isLoading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-64 rounded-xl" />)}
+                    {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-xl" />)}
                 </div>
             ) : error ? (
                 <Card>
@@ -205,7 +268,7 @@ const Sensors: React.FC = () => {
                 </Card>
             ) : (
                 <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {filteredSensors.map(sensor => (
                             <SensorCard
                                 key={sensor.id}
@@ -213,6 +276,8 @@ const Sensors: React.FC = () => {
                                 stationName={stationMap.get(sensor.stationId) || 'Atanmamış'}
                                 onEdit={handleOpenEdit}
                                 onDelete={handleDeleteSensor}
+                                onForceRead={handleForceRead}
+                                isReading={isReading === sensor.id}
                             />
                         ))}
                     </div>

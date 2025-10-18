@@ -19,8 +19,8 @@ const CONFIG_PATH = path.join(__dirname, '..', 'config.json');
 
 // --- Timers ---
 const CONFIG_POLL_INTERVAL = 60000; // 1 minute
-const SENSOR_READ_INTERVAL = 10000; // 10 seconds (for quick demo, real world would be >60s)
-const COMMAND_POLL_INTERVAL = 5000;  // 5 seconds
+const SENSOR_READ_INTERVAL = 1000;  // Check every second if a sensor needs to be read
+const COMMAND_POLL_INTERVAL = 5000; // 5 seconds
 
 // Local config file structure
 interface LocalConfig {
@@ -32,6 +32,8 @@ class Agent {
     private state: AgentState = AgentState.INITIALIZING;
     private config: DeviceConfig | null = null;
     private driverInstances: Map<string, ISensorDriver> = new Map();
+    private lastReadTimes: Map<string, number> = new Map();
+    private globalReadFrequencySeconds?: number;
 
     // Properties from local config
     private apiBaseUrl: string = '';
@@ -70,7 +72,8 @@ class Agent {
                 headers: { 'Authorization': `Token ${this.authToken}` },
             });
             this.config = response.data;
-            console.log(`✅ Yapılandırma alındı: ${this.config.sensors.length} sensör, ${this.config.cameras.length} kamera.`);
+            this.globalReadFrequencySeconds = this.config.global_read_frequency_seconds;
+            console.log(`✅ Yapılandırma alındı: ${this.config.sensors.length} sensör, ${this.config.cameras.length} kamera. Global frekans: ${this.globalReadFrequencySeconds || 'devre dışı'}`);
             this.setState(AgentState.ONLINE);
         } catch (error) {
             this.setState(AgentState.OFFLINE);
@@ -87,33 +90,48 @@ class Agent {
             return;
         }
 
-        console.log("🌡️ Sensörler okunuyor...");
-        for (const sensorConfig of this.config.sensors) {
-            if (!sensorConfig.is_active) continue;
+        const now = Date.now();
+        const sensorsToRead: SensorConfig[] = [];
 
-            // Skip virtual sensors or specific AI-driven sensor types in the main reading loop.
-            // These are triggered by commands, not polling.
-            if (sensorConfig.interface === 'virtual' || sensorConfig.type === 'Kar Yüksekliği') {
+        for (const sensorConfig of this.config.sensors) {
+            if (!sensorConfig.is_active || sensorConfig.interface === 'virtual' || sensorConfig.type === 'Kar Yüksekliği') {
                 continue;
             }
 
-            console.log(`   - ${sensorConfig.name} (ID: ${sensorConfig.id})`);
-            try {
-                const driver = await this.loadDriver(sensorConfig.parser_config.driver);
-                if (!driver) {
-                    console.error(`     -> HATA: Sürücü bulunamadı: ${sensorConfig.parser_config.driver}`);
-                    continue;
-                }
-                const reading = await driver.read(sensorConfig.config);
-                if (reading) {
-                    console.log(`     -> Okunan Değer:`, reading);
-                    await this.sendReading({ sensor: sensorConfig.id, value: reading });
-                } else {
-                    console.warn(`     -> UYARI: ${sensorConfig.name} sensöründen veri okunamadı (null döndü).`);
-                }
-            } catch (error) {
-                console.error(`     -> HATA: ${sensorConfig.name} sensörü okunurken hata oluştu:`, error);
+            const lastRead = this.lastReadTimes.get(sensorConfig.id) || 0;
+            const individualFrequencySeconds = sensorConfig.read_frequency || 300;
+            
+            const effectiveFrequencySeconds = (this.globalReadFrequencySeconds && this.globalReadFrequencySeconds > 0)
+                ? this.globalReadFrequencySeconds
+                : individualFrequencySeconds;
+            
+            if (now - lastRead >= effectiveFrequencySeconds * 1000) {
+                sensorsToRead.push(sensorConfig);
+                this.lastReadTimes.set(sensorConfig.id, now); // Mark as "reading" to prevent re-triggering
             }
+        }
+        
+        if (sensorsToRead.length > 0) {
+            console.log(`🌡️ Okunacak ${sensorsToRead.length} sensör bulundu...`);
+            await Promise.all(sensorsToRead.map(async (sensorConfig) => {
+                console.log(`   - Okunuyor: ${sensorConfig.name} (ID: ${sensorConfig.id})`);
+                try {
+                    const driver = await this.loadDriver(sensorConfig.parser_config.driver);
+                    if (!driver) {
+                        console.error(`     -> HATA: Sürücü bulunamadı: ${sensorConfig.parser_config.driver}`);
+                        return;
+                    }
+                    const reading = await driver.read(sensorConfig.config);
+                    if (reading) {
+                        console.log(`     -> Okunan Değer:`, reading);
+                        await this.sendReading({ sensor: sensorConfig.id, value: reading });
+                    } else {
+                        console.warn(`     -> UYARI: ${sensorConfig.name} sensöründen veri okunamadı (null döndü).`);
+                    }
+                } catch (error) {
+                    console.error(`     -> HATA: ${sensorConfig.name} sensörü okunurken hata oluştu:`, error);
+                }
+            }));
         }
     }
 
@@ -181,6 +199,9 @@ class Agent {
                 case 'ANALYZE_SNOW_DEPTH':
                     success = await this.analyzeSnowDepth(command);
                     break;
+                case 'FORCE_READ_SENSOR':
+                    success = await this.forceReadSensor(command);
+                    break;
                 default:
                     console.warn(`Bilinmeyen komut tipi: ${command.command_type}`);
                     break;
@@ -205,6 +226,11 @@ class Agent {
 
     private async captureImage(command: AgentCommand): Promise<boolean> {
         const { camera_id } = command.payload;
+        if (!camera_id) {
+            console.error("Capture image command is missing 'camera_id' in payload.");
+            return false;
+        }
+
         const cameraConfig = this.config?.cameras.find(c => c.id === camera_id);
 
         if (!cameraConfig) {
@@ -256,6 +282,10 @@ class Agent {
 
     private async analyzeSnowDepth(command: AgentCommand): Promise<boolean> {
         const { camera_id, virtual_sensor_id } = command.payload;
+        if (!camera_id) {
+            console.error('Kar derinliği analizi için camera_id gerekli.');
+            return false;
+        }
         if (!virtual_sensor_id) {
             console.error('Kar derinliği analizi için virtual_sensor_id gerekli.');
             return false;
@@ -358,6 +388,47 @@ class Agent {
             }
         }
     }
+
+    private async forceReadSensor(command: AgentCommand): Promise<boolean> {
+        const { sensor_id } = command.payload;
+        if (!sensor_id) {
+            console.error("Force read komutu payload içinde 'sensor_id' içermiyor.");
+            return false;
+        }
+    
+        const sensorConfig = this.config?.sensors.find(s => s.id === sensor_id);
+        if (!sensorConfig) {
+            console.error(`Manuel okuma başarısız: Sensör ID ${sensor_id} mevcut cihaz yapılandırmasında bulunamadı.`);
+            return false;
+        }
+
+        if (sensorConfig.interface === 'virtual') {
+            console.warn(`Manuel okuma atlandı: ${sensorConfig.name} bir sanal sensördür ve bu yöntemle tetiklenemez.`);
+            return true; // Return true as it's not a failure, just not applicable.
+        }
+    
+        console.log(`⚡ Manuel okuma tetiklendi: ${sensorConfig.name}`);
+    
+        try {
+            const driver = await this.loadDriver(sensorConfig.parser_config.driver);
+            if (!driver) {
+                console.error(`     -> HATA: Sürücü bulunamadı: ${sensorConfig.parser_config.driver}`);
+                return false;
+            }
+            const reading = await driver.read(sensorConfig.config);
+            if (reading) {
+                console.log(`     -> Okunan Değer:`, reading);
+                await this.sendReading({ sensor: sensorConfig.id, value: reading });
+                return true; // Success
+            } else {
+                console.warn(`     -> UYARI: ${sensorConfig.name} sensöründen manuel okuma ile veri alınamadı.`);
+                return false;
+            }
+        } catch (error) {
+            console.error(`     -> HATA: ${sensorConfig.name} sensörü manuel okunurken hata oluştu:`, error);
+            return false;
+        }
+    }
 }
 
 
@@ -375,12 +446,14 @@ async function main() {
         const agent = new Agent(localConfig);
         agent.start().catch(error => {
             console.error("Agent çalışırken kritik bir hata oluştu:", error);
-            process.exit(1);
+            // Fix: Cast process to 'any' to bypass TypeScript type error for 'exit'.
+            (process as any).exit(1);
         });
 
     } catch (error) {
         console.error("Agent başlatılamadı. config.json dosyası okunamadı veya geçersiz.", error);
-        process.exit(1);
+        // Fix: Cast process to 'any' to bypass TypeScript type error for 'exit'.
+        (process as any).exit(1);
     }
 }
 

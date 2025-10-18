@@ -29,6 +29,8 @@ export const getUnassignedSensors = (): Promise<Sensor[]> => apiClient.get('/sen
 export const addSensor = (data: any): Promise<Sensor> => apiClient.post('/sensors', data).then(res => res.data).catch(e => handleError(e, 'adding sensor'));
 export const updateSensor = (id: string, data: any): Promise<Sensor> => apiClient.put(`/sensors/${id}`, data).then(res => res.data).catch(e => handleError(e, 'updating sensor'));
 export const deleteSensor = (id: string): Promise<void> => apiClient.delete(`/sensors/${id}`).then(res => res.data).catch(e => handleError(e, 'deleting sensor'));
+export const forceReadSensor = (id: string): Promise<void> => apiClient.post(`/sensors/${id}/read`).then(res => res.data).catch(e => handleError(e, 'forcing sensor read'));
+
 
 // Cameras
 export const getCameras = (): Promise<Camera[]> => apiClient.get('/cameras').then(res => res.data).catch(e => handleError(e, 'fetching cameras'));
@@ -60,6 +62,9 @@ export const addDefinition = (type: string, data: { name: string }): Promise<any
 export const updateDefinition = (type: string, id: number, data: { name: string }): Promise<any> => apiClient.put(`/definitions/${type}/${id}`, data).then(res => res.data).catch(e => handleError(e, `updating ${type}`));
 export const deleteDefinition = (type: string, id: number): Promise<void> => apiClient.delete(`/definitions/${type}/${id}`).then(res => res.data).catch(e => handleError(e, `deleting ${type}`));
 export const getAlertRules = (): Promise<AlertRule[]> => apiClient.get('/alert-rules').then(res => res.data).catch(e => handleError(e, 'fetching alert rules'));
+export const getGlobalReadFrequency = (): Promise<{ value: string }> => apiClient.get('/settings/global_read_frequency').then(res => res.data).catch(e => handleError(e, 'getting global read frequency'));
+export const setGlobalReadFrequency = (value: string): Promise<void> => apiClient.put('/settings/global_read_frequency', { value }).then(res => res.data).catch(e => handleError(e, 'setting global read frequency'));
+
 
 // Reports
 export const getReports = (): Promise<Report[]> => apiClient.get('/reports').then(res => res.data).catch(e => handleError(e, 'fetching reports'));

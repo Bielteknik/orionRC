@@ -2,6 +2,7 @@
 export interface DeviceConfig {
     sensors: SensorConfig[];
     cameras: CameraConfig[];
+    global_read_frequency_seconds?: number;
 }
 
 // Tek bir sensörün yapılandırması
@@ -10,6 +11,7 @@ export interface SensorConfig {
     name: string;
     type: string;
     is_active: boolean;
+    read_frequency: number;
     interface: 'i2c' | 'serial' | 'virtual' | 'openweather' | 'http';
     parser_config: {
         driver: string;
@@ -27,10 +29,11 @@ export interface CameraConfig {
 // Sunucudan gelen komut
 export interface AgentCommand {
     id: number;
-    command_type: 'CAPTURE_IMAGE' | 'ANALYZE_SNOW_DEPTH' | string;
+    command_type: 'CAPTURE_IMAGE' | 'ANALYZE_SNOW_DEPTH' | 'FORCE_READ_SENSOR' | string;
     payload: {
-        camera_id: string;
-        virtual_sensor_id?: string; // For analysis commands to report to
+        camera_id?: string;
+        virtual_sensor_id?: string;
+        sensor_id?: string;
     };
 }
 

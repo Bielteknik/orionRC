@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Card from '../components/common/Card.tsx';
 import { AddIcon, EditIcon, DeleteIcon, StationIcon } from '../components/icons/Icons.tsx';
 import { AlertRule, Severity, AlertCondition, Station, Sensor } from '../types.ts';
-import { getStations, getSensors, getDefinitions, getAlertRules, addDefinition, updateDefinition, deleteDefinition } from '../services/apiService.ts';
+import { getStations, getSensors, getDefinitions, getAlertRules, addDefinition, updateDefinition, deleteDefinition, getGlobalReadFrequency, setGlobalReadFrequency } from '../services/apiService.ts';
 import DefinitionModal from '../components/DefinitionModal.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
 
@@ -127,6 +127,8 @@ const Definitions: React.FC = () => {
     const [stations, setStations] = useState<Station[]>([]);
     const [sensors, setSensors] = useState<Sensor[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [globalReadFrequency, setGlobalReadFrequencyState] = useState('0');
+    const [isSavingFreq, setIsSavingFreq] = useState(false);
 
     const [isDefModalOpen, setIsDefModalOpen] = useState(false);
     const [modalConfig, setModalConfig] = useState<{
@@ -138,11 +140,12 @@ const Definitions: React.FC = () => {
     const fetchData = useCallback(async () => {
         try {
             setIsLoading(true);
-            const [stationsData, sensorsData, defsData, rulesData] = await Promise.all([
+            const [stationsData, sensorsData, defsData, rulesData, freqData] = await Promise.all([
                 getStations(), 
                 getSensors(),
                 getDefinitions(),
-                getAlertRules()
+                getAlertRules(),
+                getGlobalReadFrequency()
             ]);
             setStations(stationsData);
             setSensors(sensorsData);
@@ -152,6 +155,7 @@ const Definitions: React.FC = () => {
                 cameraTypes: defsData.cameraTypes,
             });
             setAlertRules(rulesData);
+            setGlobalReadFrequencyState(freqData.value);
         } catch (err) {
             console.error("Error fetching data for definitions:", err);
         } finally {
@@ -210,6 +214,20 @@ const Definitions: React.FC = () => {
             }
         }
     };
+    
+    const handleSaveFrequency = async () => {
+        setIsSavingFreq(true);
+        try {
+            await setGlobalReadFrequency(globalReadFrequency);
+            alert("Global okuma sıklığı başarıyla kaydedildi.");
+        } catch (error) {
+            alert("Frekans ayarı kaydedilemedi.");
+            console.error(error);
+        } finally {
+            setIsSavingFreq(false);
+        }
+    };
+
 
     if (isLoading) {
         return (
@@ -245,6 +263,34 @@ const Definitions: React.FC = () => {
                 onEdit={(item) => handleOpenModal('camera_types', 'Kamera Tipini Düzenle', item)}
                 onDelete={(id) => handleDeleteDefinition('camera_types', id)}
             />
+            
+            <div className="lg:col-span-3">
+                <Card>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-4">Genel Ayarlar</h3>
+                    <div className="max-w-md space-y-2">
+                        <div>
+                            <label htmlFor="global-freq" className="block text-sm font-medium text-gray-700">Global Sensör Okuma Sıklığı</label>
+                            <div className="mt-1 flex items-center gap-2">
+                                <input 
+                                    type="number" 
+                                    id="global-freq" 
+                                    value={globalReadFrequency}
+                                    onChange={e => setGlobalReadFrequencyState(e.target.value)}
+                                    className="w-full bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
+                                />
+                                <span className="text-gray-600">dakika</span>
+                            </div>
+                            <p className="text-xs text-muted mt-1.5">Eğer "0" ise her sensör kendi okuma sıklığında çalışır. Diğer değerler tüm sensörler için geçerli olur.</p>
+                        </div>
+                         <button 
+                            onClick={handleSaveFrequency}
+                            disabled={isSavingFreq}
+                            className="px-4 py-2 bg-accent text-white rounded-lg hover:bg-orange-600 font-semibold disabled:bg-gray-400">
+                            {isSavingFreq ? 'Kaydediliyor...' : 'Kaydet'}
+                        </button>
+                    </div>
+                </Card>
+            </div>
 
             <div className="lg:col-span-3">
                 <Card>

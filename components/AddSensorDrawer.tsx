@@ -26,7 +26,7 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
     const [interfaceConfig, setInterfaceConfig] = useState('{}');
     const [parserConfig, setParserConfig] = useState('{}');
     const [sensorType, setSensorType] = useState('');
-    const [readFrequency, setReadFrequency] = useState('60');
+    const [readFrequency, setReadFrequency] = useState('300');
     const [isActive, setIsActive] = useState(true);
     const [error, setError] = useState('');
     
@@ -50,7 +50,7 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
         setInterfaceConfig('{\n  "port": "/dev/ttyMESAFE",\n  "baudrate": 9600\n}');
         setParserConfig('{\n  "driver": "dfrobot_ult"\n}');
         setSensorType(sensorTypes[0] || '');
-        setReadFrequency('60');
+        setReadFrequency('300');
         setIsActive(true);
         setError('');
         setInterfaceConfigError(null);
@@ -67,7 +67,7 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
                 setInterfaceType(sensorToEdit.interface || 'serial');
                 setInterfaceConfig(JSON.stringify(sensorToEdit.config, null, 2) || '{}');
                 setParserConfig(JSON.stringify(sensorToEdit.parser_config, null, 2) || '{}');
-                setReadFrequency(String(sensorToEdit.read_frequency || 60));
+                setReadFrequency(String(sensorToEdit.read_frequency || 300));
             } else {
                 resetState();
             }
@@ -137,7 +137,7 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
             parserConfig,
             interfaceConfig,
             type: sensorType,
-            readFrequency: parseInt(readFrequency, 10) || 60,
+            readFrequency: parseInt(readFrequency, 10) || 300,
             status: isActive ? SensorStatus.Active : SensorStatus.Inactive,
             isActive,
         });

@@ -118,9 +118,17 @@ export async function migrate() {
         CREATE TABLE IF NOT EXISTS camera_types ( id INTEGER PRIMARY KEY, name TEXT UNIQUE );
         CREATE TABLE IF NOT EXISTS reports ( id TEXT PRIMARY KEY, title TEXT, created_at TEXT, type TEXT, config TEXT );
         CREATE TABLE IF NOT EXISTS report_schedules ( id TEXT PRIMARY KEY, name TEXT, frequency TEXT, time TEXT, recipient TEXT, report_config TEXT, is_enabled BOOLEAN, last_run TEXT );
+        
+        CREATE TABLE IF NOT EXISTS global_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
     `;
 
     await db.exec(schema);
+
+    // Seed global settings
+    await db.run("INSERT OR IGNORE INTO global_settings (key, value) VALUES (?, ?)", 'global_read_frequency_minutes', '0');
 
     // Seed default sensor types if the table is empty.
     const countResult = await db.get("SELECT COUNT(*) as count FROM sensor_types");

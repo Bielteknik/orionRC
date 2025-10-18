@@ -88,7 +88,8 @@ app.use(async (req: express.Request, res: express.Response, next: express.NextFu
                 return res.send(result.code);
             }
         } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+            // Fix: Cast error to a generic object with a 'code' property to resolve NodeJS namespace conflict.
+            if ((error as { code: string }).code !== 'ENOENT') {
                  console.error(`Babel transpilation error for ${filePath}:`, error);
                  return res.status(500).send(`// Babel Error: ${(error as Error).message}`);
             }
@@ -148,6 +149,11 @@ apiRouter.get('/config/:deviceId', authenticateDevice, async (req: express.Reque
         const sensors = await db.all('SELECT * FROM sensors WHERE station_id = ? AND is_active = 1', deviceId);
         const cameras = await db.all('SELECT id, name, rtsp_url FROM cameras WHERE station_id = ?', deviceId);
         
+        // Fetch global setting
+        const globalFreqSetting = await db.get("SELECT value FROM global_settings WHERE key = 'global_read_frequency_minutes'");
+        const globalFreqMinutes = parseInt(globalFreqSetting?.value || '0', 10);
+        const global_read_frequency_seconds = globalFreqMinutes > 0 ? globalFreqMinutes * 60 : undefined;
+
         // Enrich sensor configs on the fly
         const sensorConfigs: SensorConfig[] = sensors.map(s => {
             const parserConfig = JSON.parse(s.parser_config || '{}');
@@ -170,6 +176,7 @@ apiRouter.get('/config/:deviceId', authenticateDevice, async (req: express.Reque
                 id: s.id, 
                 name: s.name, 
                 type: s.type,
+                read_frequency: s.read_frequency,
                 is_active: !!s.is_active, 
                 interface: s.interface, 
                 parser_config: parserConfig, 
@@ -180,7 +187,8 @@ apiRouter.get('/config/:deviceId', authenticateDevice, async (req: express.Reque
 
         const config: DeviceConfig = {
             sensors: sensorConfigs,
-            cameras: cameras.map(c => ({ id: c.id, name: c.name, rtsp_url: c.rtsp_url }) as CameraConfig)
+            cameras: cameras.map(c => ({ id: c.id, name: c.name, rtsp_url: c.rtsp_url }) as CameraConfig),
+            global_read_frequency_seconds: global_read_frequency_seconds
         };
         res.json(config);
     } catch (e) {
@@ -240,14 +248,23 @@ apiRouter.post('/commands/:commandId/:status', authenticateDevice, async (req: e
 
 // STATIONS
 // Fix: Use namespaced express types to avoid conflicts
-apiRouter.get('/stations', async (req: express.Request, res: express.Response) => { const rows = await db.all('SELECT * FROM stations'); res.json(rows.map(dbStationToApi)); });
+apiRouter.get('/stations', async (req: express.Request, res: express.Response) => { 
+    const rows = await db.all(`
+        SELECT 
+            s.*, 
+            (SELECT COUNT(*) FROM sensors WHERE station_id = s.id) as sensor_count,
+            (SELECT COUNT(*) FROM cameras WHERE station_id = s.id) as camera_count
+        FROM stations s
+    `); 
+    res.json(rows.map(dbStationToApi)); 
+});
 // Fix: Use namespaced express types to avoid conflicts
 apiRouter.post('/stations', async (req: express.Request, res: express.Response) => {
     const { id, name, location, locationCoords, selectedSensorIds, selectedCameraIds } = req.body;
     if (!id || !id.trim()) return res.status(400).json({ error: 'Device ID is required and cannot be empty.' });
     const existingStation = await db.get('SELECT id FROM stations WHERE id = ?', id);
     if (existingStation) return res.status(409).json({ error: `Station with device ID ${id} already exists.` });
-    await db.run('INSERT INTO stations (id, name, location, lat, lng, status, sensor_count, camera_count, last_update) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', id, name, location, locationCoords.lat, locationCoords.lng, 'active', selectedSensorIds.length, selectedCameraIds.length, new Date().toISOString());
+    await db.run('INSERT INTO stations (id, name, location, lat, lng, status, last_update) VALUES (?, ?, ?, ?, ?, ?, ?)', id, name, location, locationCoords.lat, locationCoords.lng, 'active', new Date().toISOString());
     if (selectedSensorIds?.length > 0) await db.run(`UPDATE sensors SET station_id = ? WHERE id IN (${selectedSensorIds.map(() => '?').join(',')})`, id, ...selectedSensorIds);
     if (selectedCameraIds?.length > 0) await db.run(`UPDATE cameras SET station_id = ? WHERE id IN (${selectedCameraIds.map(() => '?').join(',')})`, id, ...selectedCameraIds);
     const newStation = await db.get('SELECT * FROM stations WHERE id = ?', id);
@@ -314,6 +331,29 @@ apiRouter.put('/sensors/:id', async (req: express.Request, res: express.Response
 });
 // Fix: Use namespaced express types to avoid conflicts
 apiRouter.delete('/sensors/:id', async (req: express.Request, res: express.Response) => { await db.run('DELETE FROM sensors WHERE id = ?', req.params.id); res.status(204).send(); });
+// New endpoint to trigger a sensor read
+// Fix: Use namespaced express types to avoid conflicts
+apiRouter.post('/sensors/:id/read', async (req: express.Request, res: express.Response) => {
+    const { id: sensorId } = req.params;
+    try {
+        const sensor = await db.get('SELECT station_id FROM sensors WHERE id = ?', sensorId);
+        if (!sensor || !sensor.station_id) {
+            return res.status(404).json({ error: "Sensor not found or not assigned to a station." });
+        }
+
+        await db.run("INSERT INTO commands (device_id, command_type, payload) VALUES (?, ?, ?)",
+            sensor.station_id,
+            'FORCE_READ_SENSOR',
+            JSON.stringify({ sensor_id: sensorId })
+        );
+        console.log(`📠 Force read command queued for sensor ${sensorId} on device ${sensor.station_id}`);
+        res.status(202).json({ message: 'Force read command accepted.' });
+    } catch (e) {
+        console.error("Error creating force read command:", e);
+        res.status(500).json({ error: "Failed to queue force read command." });
+    }
+});
+
 
 // CAMERAS
 // Fix: Use namespaced express types to avoid conflicts
@@ -443,7 +483,38 @@ apiRouter.get('/readings/history', async (req: express.Request, res: express.Res
     const stationIdList = (stationIds as string).split(',');
     const sensorTypeList = (sensorTypes as string).split(',');
     const rows = await db.all(`SELECT r.value, r.timestamp, s.station_id, st.name as station_name, s.type as sensor_type FROM readings r JOIN sensors s ON r.sensor_id = s.id JOIN stations st ON s.station_id = st.id WHERE s.station_id IN (${stationIdList.map(() => '?').join(',')}) AND s.type IN (${sensorTypeList.map(() => '?').join(',')}) ${start ? `AND r.timestamp >= ?` : ''} ${end ? `AND r.timestamp <= ?` : ''} ORDER BY r.timestamp ASC`, ...stationIdList, ...sensorTypeList, ...(start ? [start as string] : []), ...(end ? [end as string] : []));
-    const formatted = rows.map(r => { try { const readingValue = JSON.parse(r.value); const key = Object.keys(readingValue)[0]; return { timestamp: r.timestamp, stationId: r.station_id, stationName: r.station_name, sensorType: r.sensor_type, value: readingValue[key] }; } catch { return null; } }).filter(Boolean);
+    
+    const formatted = rows.map(r => {
+        try {
+            const readingValue = JSON.parse(r.value);
+            let finalValue: number | null = null;
+
+            // Try to find value using the specific key for the sensor type
+            const valueKey = SENSOR_TYPE_TO_VALUE_KEY[r.sensor_type];
+            if (valueKey && typeof readingValue[valueKey] === 'number') {
+                finalValue = readingValue[valueKey];
+            } else {
+                // Fallback: find the first numeric value in the object
+                const numericValue = Object.values(readingValue).find(v => typeof v === 'number');
+                if (typeof numericValue === 'number') {
+                    finalValue = numericValue;
+                }
+            }
+
+            if (finalValue === null) return null;
+
+            return {
+                timestamp: r.timestamp,
+                stationId: r.station_id,
+                stationName: r.station_name,
+                sensorType: r.sensor_type,
+                value: finalValue
+            };
+        } catch {
+            return null;
+        }
+    }).filter(Boolean);
+    
     res.json(formatted);
 });
 
@@ -457,6 +528,22 @@ apiRouter.post('/definitions/:type', async (req: express.Request, res: express.R
 apiRouter.put('/definitions/:type/:id', async (req: express.Request, res: express.Response) => { const { type, id } = req.params; const { name } = req.body; if (!allowedDefTypes.includes(type)) return res.status(400).json({ error: 'Invalid definition type.' }); if (!name) return res.status(400).json({ error: 'Name is required.' }); await db.run(`UPDATE ${type} SET name = ? WHERE id = ?`, name, id); res.json({ id: parseInt(id), name }); });
 // Fix: Use namespaced express types to avoid conflicts
 apiRouter.delete('/definitions/:type/:id', async (req: express.Request, res: express.Response) => { const { type, id } = req.params; if (!allowedDefTypes.includes(type)) return res.status(400).json({ error: 'Invalid definition type.' }); await db.run(`DELETE FROM ${type} WHERE id = ?`, id); res.status(204).send(); });
+
+// Global Settings
+// Fix: Use namespaced express types to avoid conflicts
+apiRouter.get('/settings/global_read_frequency', async (req: express.Request, res: express.Response) => {
+    const setting = await db.get("SELECT value FROM global_settings WHERE key = 'global_read_frequency_minutes'");
+    res.json({ value: setting?.value || '0' });
+});
+// Fix: Use namespaced express types to avoid conflicts
+apiRouter.put('/settings/global_read_frequency', async (req: express.Request, res: express.Response) => {
+    const { value } = req.body;
+    if (typeof value !== 'string' || isNaN(parseInt(value, 10))) {
+        return res.status(400).json({ error: "Invalid value provided." });
+    }
+    await db.run("UPDATE global_settings SET value = ? WHERE key = 'global_read_frequency_minutes'", value);
+    res.status(204).send();
+});
 
 // REPORTS, NOTIFICATIONS etc.
 // Fix: Use namespaced express types to avoid conflicts

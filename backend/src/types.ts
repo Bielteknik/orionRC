@@ -3,10 +3,12 @@
 
 // A single sensor's configuration
 export interface SensorConfig {
-    id: number; // Unique ID for this sensor in the database
-    name: string; // Human-readable name, e.g., "Sıcaklık Sensörü 1"
+    id: string; 
+    name: string; 
     is_active: boolean;
-    interface: 'i2c' | 'serial' | 'virtual' | 'openweather' | 'http'; // The hardware interface type
+    interface: 'i2c' | 'serial' | 'virtual' | 'openweather' | 'http';
+    type: string;
+    read_frequency: number;
     
     // Defines which driver to use on the agent
     parser_config: {
@@ -32,6 +34,7 @@ export interface CameraConfig {
 export interface DeviceConfig {
     sensors: SensorConfig[];
     cameras: CameraConfig[];
+    global_read_frequency_seconds?: number;
 }
 
 // Data structure for a station, sent to the frontend
