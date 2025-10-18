@@ -443,8 +443,9 @@ class OrionAgent {
             const prompt = `Verilen görüntüyü analiz et. Görüntüde 0'dan 240'a kadar santimetre (cm) cinsinden işaretlenmiş bir kar ölçüm cetveli bulunmaktadır. Karla kaplı olan en yüksek sayıyı tespit et. Cevabını SADECE '{"snow_depth_cm": SAYI}' formatında bir JSON nesnesi olarak ver. Örneğin, kar 25 cm'yi kaplıyorsa '{"snow_depth_cm": 25}' şeklinde yanıt ver. Eğer hiç kar yoksa veya cetvel tamamen temizse 0 değerini kullan.`;
 
             logger.log(`Görüntü Gemini'ye gönderiliyor...`);
+            // Fix: Use gemini-2.5-flash for image analysis as per guidelines.
             const response = await this.geminiAI.models.generateContent({
-                model: 'gemini-flash-latest',
+                model: 'gemini-2.5-flash',
                 contents: { parts: [imagePart, { text: prompt }] },
             });
 
