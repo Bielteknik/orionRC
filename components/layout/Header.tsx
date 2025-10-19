@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Page, Notification, Severity } from '../../types.ts';
-import { BellIcon, ExclamationIcon, RaspberryPiIcon } from '../icons/Icons.tsx';
+import { BellIcon, ExclamationIcon } from '../icons/Icons.tsx';
 
 
 interface NotificationPopoverProps {
@@ -121,18 +121,31 @@ const Header: React.FC<HeaderProps> = ({ currentPage, notifications, onMarkAllNo
     <header className="flex-shrink-0 bg-primary dark:bg-gray-800 h-20 flex items-center justify-between px-8 border-b border-gray-200 dark:border-gray-700">
       <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{pageTitles[currentPage]}</h1>
       <div className="flex items-center space-x-6">
-         <div 
-            className="flex items-center space-x-2 cursor-default"
+        <div 
+            className="flex items-center gap-2 cursor-default"
             title={agentTooltip}
         >
-           <div className="relative">
-              {isAgentOnline && <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-ubuntu-orange opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-ubuntu-orange"></span></span>}
-              <RaspberryPiIcon className={`w-6 h-6 ${isAgentOnline ? 'text-ubuntu-purple' : 'text-muted'}`} />
-           </div>
-           <span className={`text-sm font-semibold ${isAgentOnline ? 'text-gray-800' : 'text-muted'}`}>
-                {isAgentOnline ? 'Agent Çevrimiçi' : 'Agent Çevrimdışı'}
-           </span>
-         </div>
+            {isAgentOnline ? (
+                <>
+                    <div className="relative flex items-center justify-center w-3 h-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-sm bg-success opacity-75"></span>
+                        <span className="relative inline-flex rounded-sm h-2.5 w-2.5 bg-success"></span>
+                    </div>
+                    <span className="text-sm font-semibold text-success">
+                        Sistem Durumu: Normal
+                    </span>
+                </>
+            ) : (
+                <>
+                    <div className="relative flex items-center justify-center w-3 h-3">
+                        <span className="relative inline-flex rounded-sm h-2.5 w-2.5 bg-danger"></span>
+                    </div>
+                    <span className="text-sm font-semibold text-danger">
+                        Sistem Durumu: Çevrimdışı
+                    </span>
+                </>
+            )}
+        </div>
 
          <div className="relative" ref={notificationsRef}>
             <button
