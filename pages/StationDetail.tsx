@@ -67,6 +67,13 @@ const SensorCard: React.FC<{ sensor: Sensor, onClick: () => void }> = ({ sensor,
     };
     const batteryColor = sensor.battery > 20 ? 'text-green-500' : 'text-danger';
 
+    const statusStyles: Record<SensorStatus, string> = {
+        [SensorStatus.Active]: 'bg-success/10 text-success',
+        [SensorStatus.Inactive]: 'bg-gray-200 text-gray-600',
+        [SensorStatus.Error]: 'bg-danger/10 text-danger',
+        [SensorStatus.Maintenance]: 'bg-warning/10 text-warning',
+    };
+
     const displayValue = useMemo(() => {
         if (sensor.value === null || sensor.value === undefined) return 'N/A';
 
@@ -98,7 +105,7 @@ const SensorCard: React.FC<{ sensor: Sensor, onClick: () => void }> = ({ sensor,
                         <p className="text-sm text-muted">{sensor.type}</p>
                     </div>
                 </div>
-                <span className={`px-3 py-1 text-xs font-semibold rounded-full ${sensor.status === SensorStatus.Active ? 'bg-gray-800 text-white' : 'bg-gray-200 text-gray-700'}`}>
+                <span className={`px-3 py-1 text-xs font-semibold rounded-full ${statusStyles[sensor.status]}`}>
                     {sensor.status}
                 </span>
             </div>
