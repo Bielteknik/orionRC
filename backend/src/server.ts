@@ -1,8 +1,4 @@
-
-
-
-
-// Fix: Import Request, Response, and NextFunction directly from express to avoid type conflicts.
+// Fix: Changed aliased imports for Request and Response to direct imports to resolve type conflicts.
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { openDb, db, migrate } from './database.js';
@@ -11,7 +7,6 @@ import { DeviceConfig, SensorConfig } from './types.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
-// Fix: Import Buffer to resolve "Cannot find name 'Buffer'" error.
 import { Buffer } from 'buffer';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -36,12 +31,10 @@ let commandQueue: { [deviceId: string]: any[] } = {};
 
 
 // --- AUTH MIDDLEWARE (simple token check) ---
-// Fix: Use explicit express types to resolve type errors from global type conflicts.
 const agentAuth = (req: Request, res: Response, next: NextFunction) => {
     const token = req.headers.authorization?.split(' ')[1];
-    // This is a placeholder for a real auth system. 
-    // In a real app, this token would be stored securely and validated against a database.
-    if (token && token === "secret-agent-token") { 
+    // This token MUST match the one in the agent's config.json
+    if (token && token === "EjderMeteo_Rpi_SecretKey_2025!") { 
         agentStatus.status = 'online';
         agentStatus.lastUpdate = new Date().toISOString();
         next();
@@ -187,7 +180,25 @@ app.get('/api/agent-status', (req: Request, res: Response) => {
 });
 
 // STATIONS
-app.get('/api/stations', async (req: Request, res: Response) => res.json(await db.all("SELECT * FROM stations")));
+app.get('/api/stations', async (req: Request, res: Response) => {
+    const stationsFromDb = await db.all(`
+        SELECT 
+            st.*,
+            COUNT(DISTINCT s.id) as sensor_count,
+            COUNT(DISTINCT c.id) as camera_count
+        FROM stations st
+        LEFT JOIN sensors s ON s.station_id = st.id
+        LEFT JOIN cameras c ON c.station_id = st.id
+        GROUP BY st.id
+    `);
+    const stations = stationsFromDb.map(s => ({
+        ...s,
+        sensorCount: s.sensor_count,
+        cameraCount: s.camera_count,
+        locationCoords: { lat: s.lat, lng: s.lng },
+    }));
+    res.json(stations);
+});
 app.post('/api/stations', async (req: Request, res: Response) => {
     const { id, name, location, locationCoords, selectedSensorIds = [], selectedCameraIds = [] } = req.body;
     await db.run(
@@ -224,7 +235,22 @@ app.get('/api/sensors', async (req: Request, res: Response) => {
         ? "SELECT * FROM sensors WHERE station_id IS NULL OR station_id = ''"
         : "SELECT * FROM sensors";
     const sensors = await db.all(query);
-    res.json(sensors.map(s => ({...s, value: JSON.parse(s.value || 'null')})));
+    // Map snake_case from DB to camelCase for frontend
+    res.json(sensors.map(s => ({
+        id: s.id,
+        name: s.name,
+        type: s.type,
+        stationId: s.station_id,
+        status: s.status,
+        value: JSON.parse(s.value || 'null'),
+        unit: s.unit,
+        battery: s.battery,
+        lastUpdate: s.last_update,
+        interface: s.interface,
+        config: JSON.parse(s.config || '{}'),
+        parser_config: JSON.parse(s.parser_config || '{}'),
+        read_frequency: s.read_frequency,
+    })));
 });
 app.post('/api/sensors', async (req: Request, res: Response) => {
     const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, readFrequency, isActive } = req.body;
@@ -274,7 +300,19 @@ app.get('/api/cameras', async (req: Request, res: Response) => {
         ? "SELECT * FROM cameras WHERE station_id IS NULL OR station_id = ''"
         : "SELECT * FROM cameras";
     const cameras = await db.all(query);
-    res.json(cameras.map(c => ({...c, photos: JSON.parse(c.photos || '[]')})));
+     // Map snake_case from DB to camelCase for frontend
+    res.json(cameras.map(c => ({
+        id: c.id,
+        name: c.name,
+        stationId: c.station_id,
+        status: c.status,
+        streamUrl: c.stream_url,
+        rtspUrl: c.rtsp_url,
+        cameraType: c.camera_type,
+        viewDirection: c.view_direction,
+        fps: c.fps,
+        photos: JSON.parse(c.photos || '[]')
+    })));
 });
 app.post('/api/cameras', async (req: Request, res: Response) => {
     const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
@@ -284,6 +322,15 @@ app.post('/api/cameras', async (req: Request, res: Response) => {
         id, name, stationId, status, viewDirection, rtspUrl, cameraType, '[]'
     );
     res.status(201).json({ id });
+});
+app.put('/api/cameras/:id', async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
+    await db.run(
+        "UPDATE cameras SET name = ?, station_id = ?, status = ?, view_direction = ?, rtsp_url = ?, camera_type = ? WHERE id = ?",
+        name, stationId, status, viewDirection, rtspUrl, cameraType, id
+    );
+    res.status(200).json({ id });
 });
 app.delete('/api/cameras/:id', async (req: Request, res: Response) => {
     await db.run("DELETE FROM cameras WHERE id = ?", req.params.id);
@@ -309,7 +356,7 @@ app.post('/api/cameras/:id/capture', async (req: Request, res: Response) => {
 // READINGS
 app.get('/api/readings', async (req: Request, res: Response) => {
     const readings = await db.all(`
-        SELECT r.id, r.sensor_id as sensorId, s.name as sensorName, s.type as sensorType, s.unit, st.id as stationId, st.name as stationName, r.value, r.timestamp 
+        SELECT r.id, r.sensor_id as sensorId, s.name as sensorName, s.type as sensorType, s.unit, s.interface, st.id as stationId, st.name as stationName, r.value, r.timestamp 
         FROM readings r
         JOIN sensors s ON r.sensor_id = s.id
         JOIN stations st ON s.station_id = st.id

@@ -1,12 +1,12 @@
 export enum Page {
-  Dashboard = 'Dashboard',
-  Stations = 'Stations',
-  Sensors = 'Sensors',
-  Cameras = 'Cameras',
-  Definitions = 'Definitions',
-  Reports = 'Reports',
-  Analysis = 'Analysis',
-  Notifications = 'Notifications',
+  Dashboard = 'Ana Sayfa',
+  Stations = 'İstasyon Yönetimi',
+  Sensors = 'Sensör Yönetimi',
+  Cameras = 'Kamera Yönetimi',
+  Definitions = 'Tanımlar',
+  Reports = 'Raporlar',
+  Analysis = 'Analiz',
+  Notifications = 'Bildirimler',
 }
 
 export enum Trend {

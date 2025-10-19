@@ -14,14 +14,16 @@ interface StationDetailProps {
   onViewCamera: (cameraId: string) => void;
 }
 
+// Define a more specific type for readings from the API
 interface SensorReading {
     id: string;
     sensorId: string;
     sensorName: string;
     sensorType: string;
-    value: number;
+    value: any; // Can be object or primitive
     unit: string;
     timestamp: string;
+    interface?: string; // Sensor interface type, now provided by API
 }
 
 const ITEMS_PER_PAGE_DATA = 10;
@@ -65,6 +67,27 @@ const SensorCard: React.FC<{ sensor: Sensor, onClick: () => void }> = ({ sensor,
     };
     const batteryColor = sensor.battery > 20 ? 'text-green-500' : 'text-danger';
 
+    const displayValue = useMemo(() => {
+        if (sensor.value === null || sensor.value === undefined) return 'N/A';
+
+        if (typeof sensor.value === 'object') {
+             // Handle OpenWeather sensors which return a combined object
+            if (sensor.interface === 'openweather') {
+                if (sensor.type === 'Sıcaklık' && sensor.value.temperature !== undefined) {
+                    return sensor.value.temperature;
+                }
+                if (sensor.type === 'Nem' && sensor.value.humidity !== undefined) {
+                    return sensor.value.humidity;
+                }
+            }
+            // Fallback for other complex objects (like snow depth)
+            const numericValue = Object.values(sensor.value).find(v => typeof v === 'number');
+            return numericValue !== undefined ? numericValue : 'N/A';
+        }
+
+        return sensor.value;
+    }, [sensor]);
+
     return (
         <Card className="p-4 flex flex-col space-y-3 h-full cursor-pointer hover:shadow-md hover:border-accent transition-all" onClick={onClick}>
             <div className="flex justify-between items-start">
@@ -80,7 +103,7 @@ const SensorCard: React.FC<{ sensor: Sensor, onClick: () => void }> = ({ sensor,
                 </span>
             </div>
             <div className="flex-grow text-center !my-4">
-                <p className="text-5xl font-bold text-gray-900">{sensor.value}<span className="text-2xl text-muted ml-1">{sensor.unit}</span></p>
+                <p className="text-5xl font-bold text-gray-900">{displayValue}<span className="text-2xl text-muted ml-1">{sensor.unit}</span></p>
             </div>
             <div className="flex justify-between items-center text-sm pt-2 border-t border-gray-200">
                  <div className="flex items-center space-x-1">
@@ -95,9 +118,27 @@ const SensorCard: React.FC<{ sensor: Sensor, onClick: () => void }> = ({ sensor,
     );
 };
 
-const TabContent: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <div className="py-6">{children}</div>
-);
+// Helper function to correctly format a sensor reading value for display
+const formatReadingValue = (reading: SensorReading): string => {
+    const { value, sensorType, interface: sensorInterface } = reading;
+    if (value === null || value === undefined) return 'N/A';
+    if (typeof value !== 'object') return String(value);
+
+    // Handle OpenWeather based on sensor type
+    if (sensorInterface === 'openweather') {
+        if (sensorType === 'Sıcaklık' && value.temperature !== undefined) {
+            return String(value.temperature);
+        }
+        if (sensorType === 'Nem' && value.humidity !== undefined) {
+            return String(value.humidity);
+        }
+    }
+    
+    // Generic fallback for any other object: find the first numeric value
+    const numericValue = Object.values(value).find(v => typeof v === 'number');
+    return numericValue !== undefined ? String(numericValue) : JSON.stringify(value);
+};
+
 
 const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onViewCamera }) => {
   const [station, setStation] = useState<Station | null>(null);
@@ -268,9 +309,9 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
             </nav>
          </div>
         
-         <div className="p-4">
+         <div className="p-6">
             {activeTab === 'Veriler' && (
-                <TabContent>
+                <>
                     <div className="relative w-full md:w-1/3 mb-4">
                         <SearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted" />
                         <input 
@@ -300,7 +341,7 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
                               <td className="px-6 py-4 font-mono text-gray-800">{reading.timestamp}</td>
                               <td className="px-6 py-4 font-medium text-gray-900">{reading.sensorName}</td>
                               <td className="px-6 py-4">{reading.sensorType}</td>
-                              <td className="px-6 py-4 text-right font-semibold text-gray-900">{`${reading.value} ${reading.unit || ''}`}</td>
+                              <td className="px-6 py-4 text-right font-semibold text-gray-900">{`${formatReadingValue(reading)} ${reading.unit || ''}`}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -317,10 +358,10 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
                             <p>Bu istasyona ait veri bulunamadı veya filtre ile eşleşmedi.</p>
                         </div>
                     )}
-                </TabContent>
+                </>
             )}
             {activeTab === 'Sensörler' && (
-                <TabContent>
+                <>
                     {sensors.length > 0 ? (
                         <>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -335,10 +376,10 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
                     ) : (
                         <p className="text-muted text-center py-4">Bu istasyona bağlı sensör bulunmamaktadır.</p>
                     )}
-                </TabContent>
+                </>
             )}
             {activeTab === 'Kameralar' && (
-                <TabContent>
+                <>
                     {cameras.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
                             {/* Camera List */}
@@ -423,10 +464,10 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
                     ) : (
                         <p className="text-muted text-center py-4">Bu istasyona bağlı kamera bulunmamaktadır.</p>
                     )}
-                </TabContent>
+                </>
             )}
             {activeTab === 'Konum' && (
-                 <TabContent>
+                 <>
                     <div className="flex justify-between items-center mb-4 pb-4 border-b border-gray-200 text-sm">
                         <div>
                             <p className="text-xs text-muted">Koordinatlar</p>
@@ -448,7 +489,7 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
                             lastUpdate={formatTimeAgo(station.lastUpdate)}
                         />
                     </div>
-                </TabContent>
+                </>
             )}
          </div>
       </Card>

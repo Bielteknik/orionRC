@@ -59,9 +59,26 @@ const SensorCard: React.FC<{
         [SensorStatus.Maintenance]: 'bg-warning/10 text-warning',
     };
 
-    const displayValue = typeof sensor.value === 'object' && sensor.value !== null 
-        ? Object.values(sensor.value).find(v => typeof v === 'number') ?? 'N/A'
-        : sensor.value;
+    const displayValue = useMemo(() => {
+        if (sensor.value === null || sensor.value === undefined) return 'N/A';
+
+        if (typeof sensor.value === 'object') {
+            // Handle OpenWeather sensors which return a combined object
+            if (sensor.interface === 'openweather') {
+                if (sensor.type === 'Sıcaklık' && sensor.value.temperature !== undefined) {
+                    return sensor.value.temperature;
+                }
+                if (sensor.type === 'Nem' && sensor.value.humidity !== undefined) {
+                    return sensor.value.humidity;
+                }
+            }
+            // Fallback for other complex objects (like snow depth)
+            const numericValue = Object.values(sensor.value).find(v => typeof v === 'number');
+            return numericValue !== undefined ? numericValue : 'N/A';
+        }
+
+        return sensor.value;
+    }, [sensor]);
 
     return (
         <Card className="p-3 flex flex-col h-full">

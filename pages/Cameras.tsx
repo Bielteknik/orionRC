@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Camera, CameraStatus, Station } from '../types.ts';
 import Card from '../components/common/Card.tsx';
-import { AddIcon, FilterIcon, SearchIcon, PlayIcon, ListIcon, GridIcon, ExclamationIcon, DeleteIcon } from '../components/icons/Icons.tsx';
+import { AddIcon, FilterIcon, SearchIcon, PlayIcon, ListIcon, GridIcon, ExclamationIcon, DeleteIcon, EditIcon } from '../components/icons/Icons.tsx';
 import AddCameraDrawer from '../components/AddCameraDrawer.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
-import { getCameras, getStations, addCamera, deleteCamera } from '../services/apiService.ts';
+import { getCameras, getStations, addCamera, updateCamera, deleteCamera } from '../services/apiService.ts';
 import DeleteConfirmationModal from '../components/DeleteConfirmationModal.tsx';
 
 const MosaicView: React.FC<{ cameras: Camera[], onViewDetails: (id: string) => void }> = ({ cameras, onViewDetails }) => {
@@ -51,6 +51,8 @@ const Cameras: React.FC<CamerasProps> = ({ onViewDetails }) => {
 
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [cameraToDelete, setCameraToDelete] = useState<Camera | null>(null);
+    const [cameraToEdit, setCameraToEdit] = useState<Camera | null>(null);
+
 
     const fetchData = useCallback(async () => {
         try {
@@ -82,10 +84,14 @@ const Cameras: React.FC<CamerasProps> = ({ onViewDetails }) => {
       );
     }, [cameras, searchTerm, statusFilter, stationMap]);
 
-    const handleSaveCamera = async (newCameraData: Omit<Camera, 'id' | 'photos' | 'fps' | 'streamUrl'>) => {
+    const handleSaveCamera = async (cameraData: any) => {
         try {
-            await addCamera(newCameraData);
-            fetchData(); // Refresh data
+            if (cameraData.id) {
+                await updateCamera(cameraData.id, cameraData);
+            } else {
+                await addCamera(cameraData);
+            }
+            fetchData();
         } catch(error) {
             console.error("Failed to save camera", error);
             alert("Kamera kaydedilirken bir hata oluştu.");
@@ -106,6 +112,21 @@ const Cameras: React.FC<CamerasProps> = ({ onViewDetails }) => {
             console.error("Failed to delete camera:", error);
             alert("Kamera silinirken bir hata oluştu.");
         }
+    };
+    
+    const handleOpenEdit = (camera: Camera) => {
+        setCameraToEdit(camera);
+        setIsDrawerOpen(true);
+    };
+
+    const handleOpenAdd = () => {
+        setCameraToEdit(null);
+        setIsDrawerOpen(true);
+    };
+
+    const handleCloseDrawer = () => {
+        setIsDrawerOpen(false);
+        setCameraToEdit(null);
     };
 
   return (
@@ -138,7 +159,7 @@ const Cameras: React.FC<CamerasProps> = ({ onViewDetails }) => {
                 ))}
             </select>
             <button 
-                onClick={() => setIsDrawerOpen(true)}
+                onClick={handleOpenAdd}
                 className="flex items-center justify-center gap-2 bg-accent text-white px-4 py-2.5 rounded-lg hover:bg-orange-600 transition-colors w-full md:w-auto">
               <AddIcon className="w-5 h-5"/>
               <span className="font-semibold text-sm">Yeni Ekle</span>
@@ -202,6 +223,7 @@ const Cameras: React.FC<CamerasProps> = ({ onViewDetails }) => {
                           <PlayIcon className="w-4 h-4 text-accent" />
                           <span>İzle</span>
                       </button>
+                      <button onClick={() => handleOpenEdit(camera)} className="p-2 text-muted hover:text-accent rounded-full hover:bg-accent/10"><EditIcon className="w-4 h-4" /></button>
                       <button onClick={() => handleDeleteCamera(camera)} className="p-2 text-muted hover:text-danger rounded-full hover:bg-danger/10"><DeleteIcon className="w-4 h-4" /></button>
                   </div>
                 </div>
@@ -218,9 +240,10 @@ const Cameras: React.FC<CamerasProps> = ({ onViewDetails }) => {
         )}
       <AddCameraDrawer
         isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
+        onClose={handleCloseDrawer}
         onSave={handleSaveCamera}
         stations={stations}
+        cameraToEdit={cameraToEdit}
       />
       <DeleteConfirmationModal
         isOpen={isDeleteModalOpen}

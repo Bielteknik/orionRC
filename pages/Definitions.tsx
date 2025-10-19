@@ -36,7 +36,7 @@ const DefinitionSection: React.FC<{
                     <span>Yeni Ekle</span>
                 </button>
             </div>
-            <ul className="space-y-2">
+            <ul className="space-y-2 max-h-96 overflow-y-auto pr-2">
                 {items.length > 0 ? items.map(item => (
                     <li key={item.id} className="flex justify-between items-center bg-secondary p-3 rounded-md border border-gray-200">
                         <span className="text-gray-700">{item.name}</span>

@@ -118,7 +118,7 @@ const App: React.FC = () => {
               onViewAllNotifications={handleViewAllNotifications}
               agentStatus={agentStatus}
           />
-          <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-6 lg:p-8">
+          <main className="flex-1 overflow-x-hidden overflow-y-auto px-4 md:px-6 lg:px-8 pt-4 pb-8">
             {renderPage()}
           </main>
         </div>

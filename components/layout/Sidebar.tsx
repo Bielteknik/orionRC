@@ -41,12 +41,12 @@ const NavItem: React.FC<NavItemProps> = ({ page, icon, label, currentPage, onCli
 
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, setCurrentPage }) => {
     const navItems = [
-        { page: Page.Dashboard, icon: <DashboardIcon className="w-5 h-5" />, label: 'Ana Sayfa' },
-        { page: Page.Stations, icon: <StationIcon className="w-5 h-5" />, label: 'İstasyon Yönetimi' },
-        { page: Page.Sensors, icon: <SensorIcon className="w-5 h-5" />, label: 'Sensör Yönetimi' },
-        { page: Page.Cameras, icon: <CameraIcon className="w-5 h-5" />, label: 'Kamera Yönetimi' },
-        { page: Page.Reports, icon: <ReportsIcon className="w-5 h-5" />, label: 'Raporlar' },
-        { page: Page.Definitions, icon: <DefinitionsIcon className="w-5 h-5" />, label: 'Tanımlar' },
+        { page: Page.Dashboard, icon: <DashboardIcon className="w-5 h-5" />, label: Page.Dashboard },
+        { page: Page.Stations, icon: <StationIcon className="w-5 h-5" />, label: Page.Stations },
+        { page: Page.Sensors, icon: <SensorIcon className="w-5 h-5" />, label: Page.Sensors },
+        { page: Page.Cameras, icon: <CameraIcon className="w-5 h-5" />, label: Page.Cameras },
+        { page: Page.Reports, icon: <ReportsIcon className="w-5 h-5" />, label: Page.Reports },
+        { page: Page.Definitions, icon: <DefinitionsIcon className="w-5 h-5" />, label: Page.Definitions },
     ];
 
     return (

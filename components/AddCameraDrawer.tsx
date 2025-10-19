@@ -4,13 +4,14 @@ import { Station, Camera, CameraStatus } from '../types.ts';
 interface AddCameraDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (newCameraData: Omit<Camera, 'id' | 'photos' | 'fps' | 'streamUrl'>) => void;
+  onSave: (cameraData: any) => void;
   stations: Station[];
+  cameraToEdit?: Camera | null;
 }
 
 const CAMERA_TYPES = ['Sabit Dome Kamera', 'PTZ Kamera', 'Termal Kamera', 'Geniş Açılı Kamera'];
 
-const AddCameraDrawer: React.FC<AddCameraDrawerProps> = ({ isOpen, onClose, onSave, stations }) => {
+const AddCameraDrawer: React.FC<AddCameraDrawerProps> = ({ isOpen, onClose, onSave, stations, cameraToEdit }) => {
     const [name, setName] = useState('');
     const [stationId, setStationId] = useState('');
     const [status, setStatus] = useState<CameraStatus>(CameraStatus.Online);
@@ -18,6 +19,9 @@ const AddCameraDrawer: React.FC<AddCameraDrawerProps> = ({ isOpen, onClose, onSa
     const [rtspUrl, setRtspUrl] = useState('');
     const [cameraType, setCameraType] = useState(CAMERA_TYPES[0]);
     const [error, setError] = useState('');
+
+    const isEditing = !!cameraToEdit;
+    const title = isEditing ? 'Kamera Ayarlarını Düzenle' : 'Yeni Kamera Ekle';
 
     useEffect(() => {
         const handleEsc = (event: KeyboardEvent) => {
@@ -36,9 +40,24 @@ const AddCameraDrawer: React.FC<AddCameraDrawerProps> = ({ isOpen, onClose, onSa
         setCameraType(CAMERA_TYPES[0]);
         setError('');
     };
+    
+    useEffect(() => {
+        if (isOpen) {
+            if (isEditing && cameraToEdit) {
+                setName(cameraToEdit.name);
+                setStationId(cameraToEdit.stationId);
+                setStatus(cameraToEdit.status);
+                setViewDirection(cameraToEdit.viewDirection);
+                setRtspUrl(cameraToEdit.rtspUrl);
+                setCameraType(cameraToEdit.cameraType);
+                setError('');
+            } else {
+                resetState();
+            }
+        }
+    }, [isOpen, cameraToEdit, isEditing]);
 
     const handleClose = () => {
-        resetState();
         onClose();
     };
 
@@ -49,6 +68,7 @@ const AddCameraDrawer: React.FC<AddCameraDrawerProps> = ({ isOpen, onClose, onSa
         }
         setError('');
         onSave({
+            id: cameraToEdit?.id,
             name,
             stationId,
             status,
@@ -64,7 +84,7 @@ const AddCameraDrawer: React.FC<AddCameraDrawerProps> = ({ isOpen, onClose, onSa
             <div className="absolute inset-0 bg-black/60" onClick={handleClose}></div>
             <div className={`absolute inset-y-0 right-0 bg-primary w-full max-w-lg transform transition-transform duration-300 ease-in-out flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
                 <header className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
-                    <h2 className="text-xl font-semibold text-gray-900">Yeni Kamera Ekle</h2>
+                    <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
                     <button onClick={handleClose} className="p-2 text-muted hover:bg-gray-100 rounded-full">
                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>

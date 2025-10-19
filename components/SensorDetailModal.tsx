@@ -4,9 +4,12 @@ import { ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, SensorIcon as Ge
 
 interface SensorReading {
     id: string;
-    value: number;
+    value: any;
     unit: string;
     timestamp: string;
+    sensorType: string;
+    // Fix: Make interface property optional to match the type in the parent component.
+    interface?: string;
 }
 
 interface SensorDetailModalProps {
@@ -25,6 +28,25 @@ const getSensorIcon = (type: string) => {
         default: return <GenericSensorIcon className="w-5 h-5 text-muted" />;
     }
 };
+
+const formatDisplayValue = (reading: SensorReading): string => {
+    const { value, sensorType, interface: sensorInterface } = reading;
+    if (value === null || value === undefined) return 'N/A';
+    if (typeof value !== 'object') return String(value);
+
+    if (sensorInterface === 'openweather') {
+        if (sensorType === 'Sıcaklık' && value.temperature !== undefined) {
+            return String(value.temperature);
+        }
+        if (sensorType === 'Nem' && value.humidity !== undefined) {
+            return String(value.humidity);
+        }
+    }
+    
+    const numericValue = Object.values(value).find(v => typeof v === 'number');
+    return numericValue !== undefined ? String(numericValue) : JSON.stringify(value);
+};
+
 
 const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, sensor, readings }) => {
     if (!isOpen || !sensor) return null;
@@ -73,7 +95,7 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
                                     {latestReadings.map(reading => (
                                         <tr key={reading.id} className="border-b border-gray-200 hover:bg-gray-50">
                                             <td className="px-6 py-3 font-mono text-gray-800">{new Date(reading.timestamp).toLocaleString('tr-TR')}</td>
-                                            <td className="px-6 py-3 text-right font-semibold text-gray-900">{`${reading.value} ${reading.unit || ''}`}</td>
+                                            <td className="px-6 py-3 text-right font-semibold text-gray-900">{`${formatDisplayValue(reading)} ${reading.unit || ''}`}</td>
                                         </tr>
                                     ))}
                                 </tbody>
