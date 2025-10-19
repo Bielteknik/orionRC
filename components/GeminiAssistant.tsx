@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { sendMessageToGemini } from '../services/geminiService.ts';
-import { ChatIcon, PaperAirplaneIcon } from './icons/Icons.tsx';
+// Fix: Corrected import path, removing unnecessary extension.
+import { sendMessageToGemini } from '../services/geminiService';
+import { ChatIcon, PaperAirplaneIcon } from './icons/Icons';
 
 interface Message {
   sender: 'user' | 'bot';

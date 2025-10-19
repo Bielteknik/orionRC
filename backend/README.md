@@ -7,8 +7,8 @@ This is the backend API for the ORION Observation Platform, built with Node.js, 
 -   Receives sensor data from remote IoT agents (like a Raspberry Pi).
 -   Provides configuration to IoT agents, telling them which sensors to read.
 -   Simple token-based authentication for IoT agents.
--   (Future) Serves processed data to the frontend dashboard.
--   (Future) Manages stations, sensors, users, and alert rules.
+-   Serves the frontend React application and its data.
+-   Manages stations, sensors, users, and alert rules.
 
 ## Setup & Running Locally
 
@@ -18,61 +18,54 @@ This is the backend API for the ORION Observation Platform, built with Node.js, 
     ```
 
 2.  **Create Environment File:**
-    Create a file named `.env` in this directory. Copy the contents of `.env.example` into it and fill in the required values.
+    Create a file named `.env` in this directory. Fill in the required values.
     -   `PORT`: The port the server will run on (e.g., 8000).
-    -   `DEVICE_AUTH_TOKEN`: A strong, secret token that your IoT agent will use to authenticate. **This must match the `token` in your agent's `config.json`**.
-    -   `OPENWEATHER_API_KEY`: (Optional) Your API key from OpenWeatherMap. This is required to use the OpenWeather virtual sensor for temperature and humidity data.
+    -   `DEVICE_AUTH_TOKEN`: A strong, secret token that your IoT agent will use to authenticate.
+    -   `OPENWEATHER_API_KEY`: (Optional) Your API key from OpenWeatherMap.
 
 3.  **Run in Development Mode:**
-    This command uses `nodemon` to automatically restart the server when you make changes to the code.
     ```bash
     npm run dev
     ```
 
-4.  **Build for Production:**
-    This command compiles the TypeScript code into JavaScript in the `dist/` directory.
+## Build & Deployment (Plesk)
+
+This guide provides a robust deployment method that avoids common permission issues on shared hosting environments like Plesk.
+
+1.  **Build Frontend:**
+    In the **root directory** of the project (outside the `backend` folder), run the build command. This compiles your React app into optimized HTML, CSS, and JS files.
     ```bash
     npm run build
     ```
+    This will create a `dist` folder in the root directory.
 
-5.  **Run in Production:**
-    This command runs the compiled JavaScript code.
+2.  **Build Backend:**
+    In this `backend` directory, run the build command. This compiles the TypeScript server code.
     ```bash
-    npm start
+    npm run build
     ```
+    This will create a `dist` folder inside the `backend` directory.
 
-## Deployment on Plesk
+3.  **Prepare Backend for Upload:**
+    -   Inside this `backend` folder, create a new folder named `public`.
+    -   Go to the `dist` folder created in **Step 1** (the frontend build).
+    -   Copy **all files and folders inside** the frontend `dist` folder and paste them into the `backend/public` folder you just created.
 
-Plesk makes deploying a Node.js application straightforward.
+4.  **Upload to Plesk:**
+    -   Upload the entire `backend` folder (which now contains `node_modules`, `dist` for the server, and `public` with the frontend files) to `/backend-app/` on your server.
 
-1.  **Prepare Your Code:** Push your code to a Git repository (e.g., GitHub, GitLab).
-
-2.  **Setup Subdomain in Plesk:**
-    -   Go to your domain in Plesk and create a new subdomain (e.g., `meteoroloji.ejderapi.com.tr`).
-    -   Make sure its "Hosting Type" is set to "Website hosting".
-
-3.  **Create Node.js Application:**
-    -   Navigate to the dashboard for your new subdomain.
-    -   Find and click on the **"Node.js"** icon. (If you don't see it, your hosting provider may need to install the Plesk Node.js extension).
-    -   **Application Root:** Set this to the root of your project (e.g., `/httpdocs/backend`).
-    -   **Document Root:** Can be the same as the Application Root.
+5.  **Configure Node.js in Plesk:**
+    -   Navigate to the **"Node.js"** icon in your Plesk dashboard for the domain.
+    -   **Application Root:** Set this to `/backend-app`.
+    -   **Application Startup File:** Set this to `dist/server.js`.
     -   **Application Mode:** Set to "production".
-    -   **Application Startup File:** Set this to `dist/server.js` (the compiled output of your TypeScript code).
     -   Click **"Enable Node.js"**.
 
-4.  **Install Dependencies & Build:**
-    -   After enabling Node.js, an "NPM install" button should appear. Click it to install the dependencies from your `package.json`.
-    -   You may need to run your build script. Plesk might have a section for build commands, or you might need to SSH into your server, navigate to the application directory (`/var/www/vhosts/yourdomain.com/meteoroloji.ejderapi.com.tr/backend`), and run `npm run build` manually the first time.
-
-5.  **Set Environment Variables:**
-    -   In the Plesk Node.js interface, there is a section for "Environment Variables".
-    -   Add your variables from the `.env` file here (e.g., `PORT`, `DEVICE_AUTH_TOKEN`, `OPENWEATHER_API_KEY`). Plesk will use its own mechanism for the port, but it's good practice to add it. The `DEVICE_AUTH_TOKEN` is crucial.
-
-6.  **Connect Git Repository (Recommended):**
-    -   Go to the "Git" icon in your subdomain's dashboard.
-    -   Connect it to your repository. This will allow you to automatically deploy changes by pushing to your Git remote.
+6.  **Install Dependencies & Set Environment:**
+    -   If you didn't upload `node_modules`, click the **"NPM install"** button in the Plesk interface.
+    -   Go to the "Environment Variables" section and add the variables from your local `.env` file (`PORT`, `DEVICE_AUTH_TOKEN`, etc.).
 
 7.  **Restart the Application:**
-    -   Go back to the Node.js section and click **"Restart App"**.
+    -   Click **"Restart App"**.
 
-Your backend should now be live at `https://meteoroloji.ejderapi.com.tr`. You can test it by visiting the URL in your browser. You should see the "API is running" message.
+Your application should now be live. The backend will serve both the API and the user interface from a single, self-contained directory, preventing any "Not Found" errors.

@@ -1,213 +1,226 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Station, Camera, Sensor } from '../types.ts';
-import { getStations, getCameras, getSensors, analyzeSnowDepth } from '../services/apiService.ts';
+import { Station, Sensor } from '../types.ts';
+import { getStations, getSensors, getReadingsHistory } from '../services/apiService.ts';
+import { sendMessageToGemini } from '../services/geminiService.ts';
 import Card from '../components/common/Card.tsx';
 import { BrainIcon, ExclamationIcon } from '../components/icons/Icons.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
-import { SnowRulerDayIcon, SnowRulerNightIcon } from '../components/icons/RulerIcons.tsx';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { useTheme } from '../components/ThemeContext.tsx';
 
-const Analysis: React.FC = () => {
-    const [stations, setStations] = useState<Station[]>([]);
-    const [cameras, setCameras] = useState<Camera[]>([]);
-    const [sensors, setSensors] = useState<Sensor[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    const [selectedStationId, setSelectedStationId] = useState<string>('');
-    const [selectedCameraId, setSelectedCameraId] = useState<string>('');
-    const [analysisResult, setAnalysisResult] = useState<number | null>(null);
-
-    const pollingIntervalRef = React.useRef<number | null>(null);
-
-    const fetchData = useCallback(async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const [stationsData, camerasData, sensorsData] = await Promise.all([getStations(), getCameras(), getSensors()]);
-            setStations(stationsData);
-            setCameras(camerasData);
-            setSensors(sensorsData);
-        } catch (err) {
-            setError("Gerekli veriler yüklenemedi. Lütfen sayfayı yenileyin.");
-            console.error(err);
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
+const SnowWaterEquivalentCalculator: React.FC = () => {
+    const [snowHeight, setSnowHeight] = useState('');
+    const [snowDensity, setSnowDensity] = useState('150'); // Avg density kg/m³
+    const [swe, setSwe] = useState<number | null>(null);
+    const [explanation, setExplanation] = useState('');
+    const [isExplaining, setIsExplaining] = useState(false);
 
     useEffect(() => {
-        fetchData();
-        return () => {
-            if (pollingIntervalRef.current) {
-                clearInterval(pollingIntervalRef.current);
+        if (snowHeight && snowDensity) {
+            const heightInMeters = parseFloat(snowHeight) / 100;
+            const density = parseFloat(snowDensity);
+            if (!isNaN(heightInMeters) && !isNaN(density)) {
+                // SWE (mm) = Snow Depth (m) * Snow Density (kg/m³)
+                setSwe(heightInMeters * density);
             }
-        };
-    }, [fetchData]);
-
-    const availableCameras = useMemo(() => {
-        return cameras.filter(c => c.stationId === selectedStationId);
-    }, [cameras, selectedStationId]);
-
-    const virtualSnowSensor = useMemo(() => {
-        return sensors.find(s => s.stationId === selectedStationId && s.type === 'Kar Yüksekliği');
-    }, [sensors, selectedStationId]);
-
-    useEffect(() => {
-        // Reset camera selection if station changes
-        setSelectedCameraId('');
-        setAnalysisResult(null);
-    }, [selectedStationId]);
+        } else {
+            setSwe(null);
+        }
+    }, [snowHeight, snowDensity]);
     
-    const pollForResults = useCallback(() => {
-        if (!virtualSnowSensor) return;
-
-        const checkResult = async () => {
-            try {
-                const updatedSensors = await getSensors();
-                setSensors(updatedSensors); // Update sensor list to get latest values
-                const updatedSensor = updatedSensors.find(s => s.id === virtualSnowSensor.id);
-
-                if (updatedSensor && typeof updatedSensor.value === 'number') {
-                    setAnalysisResult(updatedSensor.value);
-                    setIsAnalyzing(false);
-                    if (pollingIntervalRef.current) {
-                        clearInterval(pollingIntervalRef.current);
-                    }
-                }
-            } catch (error) {
-                console.error("Polling for results failed:", error);
-            }
-        };
-
-        if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = window.setInterval(checkResult, 3000); // Poll every 3 seconds
-
-        // Timeout to stop polling
-        setTimeout(() => {
-            if (pollingIntervalRef.current) {
-                clearInterval(pollingIntervalRef.current);
-                if (isAnalyzing) {
-                    setIsAnalyzing(false);
-                    setError("Analiz zaman aşımına uğradı. Agent'ın çevrimiçi olduğundan emin olun.");
-                }
-            }
-        }, 60000); // 1 minute timeout
-
-    }, [virtualSnowSensor, isAnalyzing]);
-
-    const handleAnalyze = async () => {
-        if (!selectedCameraId || !virtualSnowSensor) {
-            setError("Lütfen bir istasyon, kamera ve bu istasyona atanmış 'Kar Yüksekliği' tipinde bir sanal sensör olduğundan emin olun.");
-            return;
-        }
-        setIsAnalyzing(true);
-        setAnalysisResult(null);
-        setError(null);
+    const handleExplain = async () => {
+        if (swe === null) return;
+        setIsExplaining(true);
+        setExplanation('');
         try {
-            await analyzeSnowDepth(selectedCameraId, virtualSnowSensor.id);
-            pollForResults();
-        } catch (err) {
-            setError("Analiz başlatılamadı.");
-            setIsAnalyzing(false);
-            console.error(err);
+            const prompt = `Bir meteoroloji uzmanı gibi, ${snowHeight} cm kar yüksekliği ve ${snowDensity} kg/m³ yoğunluk ile hesaplanan ${swe.toFixed(2)} mm Kar Su Eşdeğeri'nin (SWE) ne anlama geldiğini, tarım ve su kaynakları için önemini basit ve anlaşılır bir dille açıkla.`;
+            // Using a non-streaming version of the Gemini service for a single response
+            const stream = await sendMessageToGemini(prompt);
+            let fullText = '';
+            for await (const chunk of stream) {
+                fullText += chunk.text;
+            }
+            setExplanation(fullText);
+        } catch (error) {
+            console.error("Failed to get explanation from Gemini:", error);
+            setExplanation("Açıklama alınırken bir hata oluştu.");
+        } finally {
+            setIsExplaining(false);
         }
     };
 
-    if (isLoading) {
-        return <Skeleton className="h-96 w-full" />;
-    }
-
-    if (error && !isLoading) {
-         return (
-             <Card>
-                <div className="text-center py-8 text-danger flex flex-col items-center justify-center gap-2">
-                    <ExclamationIcon className="w-12 h-12"/>
-                    <p className="font-semibold">{error}</p>
+    return (
+        <Card>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Kar Su Eşdeğeri (SWE) Hesaplayıcı</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Kar Yüksekliği (cm)</label>
+                    <input type="number" value={snowHeight} onChange={e => setSnowHeight(e.target.value)} className="mt-1 w-full input-base" placeholder="Örn: 85" />
                 </div>
-            </Card>
-         )
-    }
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Kar Yoğunluğu (kg/m³)</label>
+                    <input type="number" value={snowDensity} onChange={e => setSnowDensity(e.target.value)} className="mt-1 w-full input-base" />
+                </div>
+                <div className="p-4 rounded-lg bg-secondary text-center">
+                    <p className="text-sm text-muted">Hesaplanan SWE</p>
+                    <p className="text-3xl font-bold text-gray-800">{swe !== null ? `${swe.toFixed(2)}` : '--'}<span className="text-lg ml-1">mm</span></p>
+                </div>
+            </div>
+            {swe !== null && (
+                 <div className="mt-4">
+                    <button onClick={handleExplain} disabled={isExplaining} className="btn-primary flex items-center gap-2">
+                        <BrainIcon className="w-5 h-5"/>
+                        {isExplaining ? 'Açıklanıyor...' : 'Yapay Zeka ile Açıkla'}
+                    </button>
+                    {explanation && (
+                        <div className="mt-3 p-3 bg-secondary rounded-md border text-sm text-gray-700 whitespace-pre-wrap">{explanation}</div>
+                    )}
+                </div>
+            )}
+        </Card>
+    );
+};
+
+const SensorCorrelationChart: React.FC<{ stations: Station[], sensors: Sensor[] }> = ({ stations, sensors }) => {
+    const { theme } = useTheme();
+    const [selectedStation, setSelectedStation] = useState<string>('');
+    const [sensor1, setSensor1] = useState<string>('');
+    const [sensor2, setSensor2] = useState<string>('');
+    const [chartData, setChartData] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    
+    const availableSensorTypes = useMemo(() => {
+        if (!selectedStation) return [];
+        const stationSensors = sensors.filter(s => s.stationId === selectedStation);
+        return [...new Set(stationSensors.map(s => s.type))];
+    }, [selectedStation, sensors]);
+
+    useEffect(() => {
+        if (stations.length > 0) setSelectedStation(stations[0].id);
+    }, [stations]);
+
+    useEffect(() => {
+        if (availableSensorTypes.length >= 2) {
+            setSensor1(availableSensorTypes[0]);
+            setSensor2(availableSensorTypes[1]);
+        }
+    }, [availableSensorTypes]);
+
+    const fetchData = useCallback(async () => {
+        if (!selectedStation || !sensor1 || !sensor2) {
+            setChartData([]);
+            return;
+        };
+        setIsLoading(true);
+        try {
+            const history = await getReadingsHistory({ stationIds: [selectedStation], sensorTypes: [sensor1, sensor2]});
+            
+            const processedData = history.reduce((acc, reading) => {
+                const timestamp = new Date(reading.timestamp).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+                let entry = acc.find((item: any) => item.timestamp === timestamp);
+                if (!entry) {
+                    entry = { timestamp };
+                    acc.push(entry);
+                }
+                const value = typeof reading.value === 'object' ? Object.values(reading.value)[0] : reading.value;
+                if (reading.sensorType === sensor1) entry[sensor1] = value;
+                if (reading.sensorType === sensor2) entry[sensor2] = value;
+                return acc;
+            }, []);
+
+            setChartData(processedData.reverse());
+
+        } catch (error) {
+            console.error("Failed to fetch correlation data:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [selectedStation, sensor1, sensor2]);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-1 space-y-6">
-                 <Card>
-                    <div className="flex items-center gap-3 mb-4">
-                        <BrainIcon className="w-8 h-8 text-accent" />
-                        <h2 className="text-xl font-bold text-gray-800">Kar Yüksekliği Analizi</h2>
-                    </div>
-                    <p className="text-sm text-muted mb-4">
-                        Bu araç, kamera görüntüsündeki ölçüm cetvelini kullanarak kar yüksekliğini yapay zeka ile tahmin eder.
-                        Analizi başlatmak için bir istasyon ve kamera seçin.
-                    </p>
-                    <div className="space-y-4">
-                        <div>
-                            <label htmlFor="station-select" className="block text-sm font-medium text-gray-700 mb-1">İstasyon</label>
-                            <select id="station-select" value={selectedStationId} onChange={e => setSelectedStationId(e.target.value)} className="w-full bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent">
-                                <option value="" disabled>İstasyon Seçin...</option>
-                                {stations.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                            </select>
-                        </div>
-                         <div>
-                            <label htmlFor="camera-select" className="block text-sm font-medium text-gray-700 mb-1">Kamera</label>
-                            <select id="camera-select" value={selectedCameraId} onChange={e => setSelectedCameraId(e.target.value)} disabled={!selectedStationId || availableCameras.length === 0} className="w-full bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent disabled:bg-gray-200">
-                                <option value="" disabled>Kamera Seçin...</option>
-                                {availableCameras.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
-                        </div>
-                         {!virtualSnowSensor && selectedStationId && (
-                            <div className="bg-warning/10 text-warning text-xs p-3 rounded-md">
-                                Bu istasyonda 'Kar Yüksekliği' tipinde bir sanal sensör bulunamadı. Lütfen Sensörler sayfasından ekleyin.
-                            </div>
-                        )}
-                        <button onClick={handleAnalyze} disabled={!selectedCameraId || isAnalyzing || !virtualSnowSensor} className="w-full flex items-center justify-center gap-2 bg-accent text-white px-4 py-2.5 rounded-lg hover:bg-orange-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-semibold">
-                            {isAnalyzing ? (
-                                <>
-                                   <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                   Analiz Ediliyor...
-                                </>
-                            ) : (
-                                "Kar Yüksekliğini Analiz Et"
-                            )}
-                        </button>
-                    </div>
-                 </Card>
-
-                 {analysisResult !== null && (
-                    <Card>
-                        <h3 className="font-semibold text-lg text-center mb-2">Analiz Sonucu</h3>
-                        <div className="text-center">
-                            <p className="text-6xl font-bold text-accent">{analysisResult}</p>
-                            <p className="text-muted font-semibold">Santimetre (cm)</p>
-                        </div>
-                    </Card>
-                 )}
+        <Card>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Sensör Korelasyon Grafiği</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 p-3 bg-secondary rounded-md border">
+                <select value={selectedStation} onChange={e => setSelectedStation(e.target.value)} className="input-base"><option value="">İstasyon Seç</option>{stations.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+                <select value={sensor1} onChange={e => setSensor1(e.target.value)} className="input-base" disabled={!selectedStation}><option value="">Sensör 1</option>{availableSensorTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                <select value={sensor2} onChange={e => setSensor2(e.target.value)} className="input-base" disabled={!selectedStation}><option value="">Sensör 2</option>{availableSensorTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
             </div>
+            <div className="h-96">
+                {isLoading ? <Skeleton className="w-full h-full"/> : (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#374151' : '#E5E7EB'} />
+                            <XAxis dataKey="timestamp" tick={{ fontSize: 10 }} />
+                            <YAxis yAxisId="left" stroke="#8884d8" tick={{ fontSize: 10 }} />
+                            <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" tick={{ fontSize: 10 }} />
+                            <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF' }}/>
+                            <Legend />
+                            <Line yAxisId="left" type="monotone" dataKey={sensor1} stroke="#8884d8" activeDot={{ r: 8 }} />
+                            <Line yAxisId="right" type="monotone" dataKey={sensor2} stroke="#82ca9d" />
+                        </LineChart>
+                    </ResponsiveContainer>
+                )}
+            </div>
+        </Card>
+    )
+}
 
-            <div className="lg:col-span-2 space-y-4">
-                <Card>
-                    <h3 className="font-semibold text-lg mb-2">Referans Görüntüler</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="flex flex-col items-center">
-                            <SnowRulerDayIcon className="w-full h-auto max-w-[200px] mx-auto" />
-                            <p className="text-xs text-center text-muted mt-1">Gündüz Görünümü</p>
-                        </div>
-                        <div className="flex flex-col items-center">
-                           <SnowRulerNightIcon className="w-full h-auto max-w-[200px] mx-auto" />
-                            <p className="text-xs text-center text-muted mt-1">Gece Görünümü</p>
-                        </div>
-                    </div>
-                     <div className="mt-4 p-3 bg-secondary rounded-md border text-sm text-gray-600 space-y-2">
-                        <p>
-                            Yukarıdaki referans görüntüler, kar yüksekliğini ölçmek için kullanılan cetveli göstermektedir. Bu cetvel, 0'dan 240 cm'ye kadar 10 cm aralıklarla işaretlenmiştir. Yapay zeka, bu cetvel üzerindeki kar seviyesini analiz ederek kar yüksekliğini cm cinsinden tahmin eder.
-                        </p>
-                        <p>
-                            Yapay zeka analizleri, Google Gemini API kullanılarak yapılır ve bu servis ücrete tabidir. Detaylı ücretlendirme bilgisi için <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-accent font-semibold hover:underline">ai.google.dev/gemini-api/docs/billing</a> adresini ziyaret edebilirsiniz.
-                        </p>
+const Analysis: React.FC = () => {
+    const [stations, setStations] = useState<Station[]>([]);
+    const [sensors, setSensors] = useState<Sensor[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            setIsLoading(true);
+            try {
+                const [stationsData, sensorsData] = await Promise.all([getStations(), getSensors()]);
+                setStations(stationsData);
+                setSensors(sensorsData);
+            } catch (err) {
+                console.error("Failed to fetch data for analysis page:", err);
+                setError("Veriler yüklenemedi.");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchData();
+    }, []);
+
+
+    return (
+        <div className="max-w-6xl mx-auto space-y-6">
+             <div className="text-center">
+                <BrainIcon className="w-12 h-12 mx-auto text-accent"/>
+                <h1 className="text-3xl font-bold mt-2 text-gray-900">Gelişmiş Analiz</h1>
+                <p className="text-muted mt-1">Verilerinizi daha derinlemesine inceleyin ve özel hesaplamalar yapın.</p>
+            </div>
+            {isLoading ? <Skeleton className="h-96"/> : error ? (
+                 <Card>
+                    <div className="text-center py-8 text-danger flex flex-col items-center justify-center gap-2">
+                        <ExclamationIcon className="w-12 h-12"/>
+                        <p className="font-semibold">{error}</p>
                     </div>
                 </Card>
-            </div>
+            ) : (
+                <>
+                    <SnowWaterEquivalentCalculator />
+                    <SensorCorrelationChart stations={stations} sensors={sensors} />
+                </>
+            )}
+
+            <style>{`
+                .input-base { width: 100%; background-color: #F9FAFB; border: 1px solid #D1D5DB; border-radius: 0.5rem; padding: 0.625rem 1rem; }
+                .btn-primary { padding: 0.5rem 1rem; background-color: #E95420; color: white; border-radius: 0.5rem; font-weight: 600; transition: background-color 0.2s; }
+                .btn-primary:hover { background-color: #c2410c; }
+                .btn-primary:disabled { background-color: #9CA3AF; cursor: not-allowed; }
+            `}</style>
         </div>
     );
 };

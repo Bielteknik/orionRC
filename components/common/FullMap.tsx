@@ -26,7 +26,7 @@ const FullMap: React.FC<FullMapProps> = ({ stations, onViewStationDetails }) => 
             const map = L.map(mapContainerRef.current, { 
                 scrollWheelZoom: true,
                 attributionControl: false 
-            }).setView([39.90, 41.26], 6); // A more zoomed-out initial view
+            }).setView([39.90, 41.26], 7); // Increased initial zoom level
             mapRef.current = map;
 
             const streetLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
@@ -74,6 +74,10 @@ const FullMap: React.FC<FullMapProps> = ({ stations, onViewStationDetails }) => 
         const allMarkers: any[] = [];
 
         stations.forEach(station => {
+            if (!station.locationCoords || typeof station.locationCoords.lat !== 'number' || typeof station.locationCoords.lng !== 'number') {
+                console.warn(`Station "${station.name}" (ID: ${station.id}) has invalid coordinates and will not be displayed on the map.`);
+                return; // Skip stations with invalid coords
+            }
             const status = statusStyles[station.status] || statusStyles.inactive;
             
             let iconHtml = '';
@@ -137,10 +141,19 @@ const FullMap: React.FC<FullMapProps> = ({ stations, onViewStationDetails }) => 
         // Add all markers to the layer group at once
         allMarkers.forEach(marker => markersLayerRef.current.addLayer(marker));
 
-        // Fit bounds only on the initial load
-        if (!initialFitDoneRef.current && stations.length > 0) {
-            const bounds = L.latLngBounds(stations.map(s => [s.locationCoords.lat, s.locationCoords.lng]));
-            mapRef.current.fitBounds(bounds.pad(0.2));
+        // Fit bounds only on the initial load, with improved logic for single/multiple stations
+        const validStations = stations.filter(s => s.locationCoords && typeof s.locationCoords.lat === 'number');
+
+        if (!initialFitDoneRef.current && validStations.length > 0) {
+            if (validStations.length === 1) {
+                // If there's only one station, center on it with a more detailed zoom.
+                const { lat, lng } = validStations[0].locationCoords;
+                mapRef.current.setView([lat, lng], 12);
+            } else {
+                // If multiple stations, fit them all in the view.
+                const bounds = L.latLngBounds(validStations.map(s => [s.locationCoords.lat, s.locationCoords.lng]));
+                mapRef.current.fitBounds(bounds.pad(0.2));
+            }
             initialFitDoneRef.current = true;
         }
 

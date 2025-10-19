@@ -1,280 +1,375 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { AreaChart, Area, ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { Station, Sensor } from '../types.ts';
+
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Station, Sensor, Trend } from '../types.ts';
+import { getStations, getSensors, getReadingsHistory } from '../services/apiService.ts';
+import { sendMessageToGemini } from '../services/geminiService.ts';
 import Card from '../components/common/Card.tsx';
 import FullMap from '../components/common/FullMap.tsx';
+import WindRoseChart from '../components/WindRoseChart.tsx';
+import { StationIcon, SensorIcon, CameraIcon, ExclamationIcon, TrendUpIcon, TrendDownIcon, TrendStableIcon, BrainIcon, DashboardIcon } from '../components/icons/Icons.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useTheme } from '../components/ThemeContext.tsx';
-import { ChartBarIcon, MapIcon, ExclamationIcon, ReportsIcon, CalendarIcon, BrainIcon } from '../components/icons/Icons.tsx';
-import { getStations, getSensors, getReadingsHistory } from '../services/apiService.ts';
-import MultiSelectDropdown from '../components/common/MultiSelectDropdown.tsx';
-import Reports from './Reports.tsx';
-import Analysis from './Analysis.tsx';
 
-// Constants & Defaults
-const DEFAULT_COLORS = ['#E95420', '#77216F', '#2dd4bf', '#c084fc', '#f59e0b', '#10b981', '#ef4444', '#3b82f6'];
 
-const getPastDateString = (daysAgo: number) => {
-    const date = new Date();
-    date.setDate(date.getDate() - daysAgo);
-    return date.toISOString().split('T')[0];
-};
+// --- Analysis Components (moved from Analysis.tsx) ---
 
-// --- CHART COMPONENTS (NOW 'DUMB' AND RECEIVE DATA AS PROPS) ---
+const SnowWaterEquivalentCalculator: React.FC = () => {
+    const [snowHeight, setSnowHeight] = useState('');
+    const [snowDensity, setSnowDensity] = useState('150'); // Avg density kg/m³
+    const [swe, setSwe] = useState<number | null>(null);
+    const [explanation, setExplanation] = useState('');
+    const [isExplaining, setIsExplaining] = useState(false);
 
-const TemperatureScatterChart: React.FC<{ data: any[], stations: Station[], isLoading: boolean }> = ({ data, stations, isLoading }) => {
-    const { theme } = useTheme();
-    const tickColor = theme === 'dark' ? '#9CA3AF' : '#6B7281';
-
-    return (
-        <div className="h-full p-4 flex flex-col">
-            <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">Sıcaklık Trendleri</h3>
-            <p className="text-xs text-muted mb-2 -mt-2">Seçilen periyottaki sıcaklık değişimleri</p>
-            {isLoading ? <Skeleton className="w-full h-full"/> : 
-            <ResponsiveContainer width="100%" height="100%">
-                <ScatterChart margin={{ top: 5, right: 20, left: -20, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#374151' : '#E5E7EB'} />
-                    <XAxis type="number" dataKey="time" name="zaman" domain={['dataMin', 'dataMax']} tickFormatter={(unixTime) => new Date(unixTime).toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'})} stroke={tickColor} fontSize={10} />
-                    <YAxis type="number" dataKey="value" name="sıcaklık" unit="°C" stroke={tickColor} fontSize={10}/>
-                    <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF' }}/>
-                    {stations.map((station, index) => (
-                        <Scatter key={station.id} name={station.name} data={data.filter(d => d.stationId === station.id)} fill={DEFAULT_COLORS[index % DEFAULT_COLORS.length]} />
-                    ))}
-                </ScatterChart>
-            </ResponsiveContainer>}
-        </div>
-    );
-};
-
-const HumidityAreaChart: React.FC<{ data: any[], stations: Station[], isLoading: boolean }> = ({ data, stations, isLoading }) => {
-    const { theme } = useTheme();
-    const tickColor = theme === 'dark' ? '#9CA3AF' : '#6B7281';
-
-    return (
-        <div className="h-full p-4 flex flex-col">
-            <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">Nem Oranları</h3>
-            <p className="text-xs text-muted mb-2 -mt-2">İstasyonlara göre nem seviyeleri</p>
-             {isLoading ? <Skeleton className="w-full h-full"/> : 
-            <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data} margin={{ top: 5, right: 20, left: -20, bottom: 20 }}>
-                     <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#374151' : '#E5E7EB'} />
-                    <XAxis dataKey="time" stroke={tickColor} fontSize={10}/>
-                    <YAxis stroke={tickColor} fontSize={10} unit="%"/>
-                    <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF' }}/>
-                    {stations.map((station, index) => (
-                        <Area key={station.id} type="monotone" dataKey={station.name} stroke={DEFAULT_COLORS[index % DEFAULT_COLORS.length]} fill={DEFAULT_COLORS[index % DEFAULT_COLORS.length]} fillOpacity={0.6} />
-                    ))}
-                </AreaChart>
-            </ResponsiveContainer>}
-        </div>
-    );
-};
-
-const WindSpeedBarChart: React.FC<{ stations: Station[], sensors: Sensor[] }> = ({ stations, sensors }) => {
-    const { theme } = useTheme();
-    const tickColor = theme === 'dark' ? '#9CA3AF' : '#6B7281';
+    useEffect(() => {
+        if (snowHeight && snowDensity) {
+            const heightInMeters = parseFloat(snowHeight) / 100;
+            const density = parseFloat(snowDensity);
+            if (!isNaN(heightInMeters) && !isNaN(density)) {
+                // SWE (mm) = Snow Depth (m) * Snow Density (kg/m³)
+                setSwe(heightInMeters * density);
+            }
+        } else {
+            setSwe(null);
+        }
+    }, [snowHeight, snowDensity]);
     
-    const data = useMemo(() => {
-        return stations.map(station => {
-            const windSensor = sensors.find(s => s.stationId === station.id && s.type === 'Rüzgar Hızı');
-            return {
-                name: station.name,
-                'Rüzgar Hızı': windSensor ? (typeof windSensor.value === 'number' ? windSensor.value : 0) : 0
-            };
-        });
-    }, [stations, sensors]);
+    const handleExplain = async () => {
+        if (swe === null) return;
+        setIsExplaining(true);
+        setExplanation('');
+        try {
+            const prompt = `Bir meteoroloji uzmanı gibi, ${snowHeight} cm kar yüksekliği ve ${snowDensity} kg/m³ yoğunluk ile hesaplanan ${swe.toFixed(2)} mm Kar Su Eşdeğeri'nin (SWE) ne anlama geldiğini, tarım ve su kaynakları için önemini basit ve anlaşılır bir dille açıkla.`;
+            const stream = await sendMessageToGemini(prompt);
+            let fullText = '';
+            for await (const chunk of stream) {
+                fullText += chunk.text;
+            }
+            setExplanation(fullText);
+        } catch (error) {
+            console.error("Failed to get explanation from Gemini:", error);
+            setExplanation("Açıklama alınırken bir hata oluştu.");
+        } finally {
+            setIsExplaining(false);
+        }
+    };
 
     return (
-        <div className="h-full p-4 flex flex-col">
-            <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">Rüzgar Hızları</h3>
-            <p className="text-xs text-muted mb-2 -mt-2">İstasyonlardaki mevcut rüzgar hızları</p>
-            <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data} margin={{ top: 5, right: 20, left: -20, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#374151' : '#E5E7EB'} />
-                    <XAxis dataKey="name" stroke={tickColor} fontSize={10} interval={0} angle={-25} textAnchor="end"/>
-                    <YAxis stroke={tickColor} fontSize={10} unit="km/h"/>
-                    <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF' }}/>
-                    <Bar dataKey="Rüzgar Hızı" fill="#334155" />
-                </BarChart>
-            </ResponsiveContainer>
-        </div>
+        <Card>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Kar Su Eşdeğeri (SWE) Hesaplayıcı</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Kar Yüksekliği (cm)</label>
+                    <input type="number" value={snowHeight} onChange={e => setSnowHeight(e.target.value)} className="mt-1 w-full input-base" placeholder="Örn: 85" />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Kar Yoğunluğu (kg/m³)</label>
+                    <input type="number" value={snowDensity} onChange={e => setSnowDensity(e.target.value)} className="mt-1 w-full input-base" />
+                </div>
+                <div className="p-4 rounded-lg bg-secondary text-center">
+                    <p className="text-sm text-muted">Hesaplanan SWE</p>
+                    <p className="text-3xl font-bold text-gray-800">{swe !== null ? `${swe.toFixed(2)}` : '--'}<span className="text-lg ml-1">mm</span></p>
+                </div>
+            </div>
+            {swe !== null && (
+                 <div className="mt-4">
+                    <button onClick={handleExplain} disabled={isExplaining} className="btn-primary flex items-center gap-2">
+                        <BrainIcon className="w-5 h-5"/>
+                        {isExplaining ? 'Açıklanıyor...' : 'Yapay Zeka ile Açıkla'}
+                    </button>
+                    {explanation && (
+                        <div className="mt-3 p-3 bg-secondary rounded-md border text-sm text-gray-700 whitespace-pre-wrap">{explanation}</div>
+                    )}
+                </div>
+            )}
+        </Card>
     );
 };
 
-
-const MultiStationComparisonChart: React.FC<{ data: any[], isLoading: boolean }> = ({ data, isLoading }) => {
+const SensorCorrelationChart: React.FC<{ stations: Station[], sensors: Sensor[] }> = ({ stations, sensors }) => {
     const { theme } = useTheme();
-    const tickColor = theme === 'dark' ? '#9CA3AF' : '#6B7281';
+    const [selectedStation, setSelectedStation] = useState<string>('');
+    const [sensor1, setSensor1] = useState<string>('');
+    const [sensor2, setSensor2] = useState<string>('');
+    const [chartData, setChartData] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    
+    const availableSensorTypes = useMemo(() => {
+        if (!selectedStation) return [];
+        const stationSensors = sensors.filter(s => s.stationId === selectedStation);
+        return [...new Set(stationSensors.map(s => s.type))];
+    }, [selectedStation, sensors]);
+
+    useEffect(() => {
+        if (stations.length > 0 && !selectedStation) setSelectedStation(stations[0].id);
+    }, [stations, selectedStation]);
+
+    useEffect(() => {
+        if (availableSensorTypes.length >= 2) {
+            setSensor1(availableSensorTypes[0]);
+            setSensor2(availableSensorTypes[1]);
+        } else {
+            setSensor1('');
+            setSensor2('');
+        }
+    }, [availableSensorTypes]);
+
+    const fetchData = useCallback(async () => {
+        if (!selectedStation || !sensor1 || !sensor2) {
+            setChartData([]);
+            return;
+        };
+        setIsLoading(true);
+        try {
+            const history = await getReadingsHistory({ stationIds: [selectedStation], sensorTypes: [sensor1, sensor2]});
+            
+            const dataMap = new Map<string, any>();
+
+            history.forEach(reading => {
+                const timestamp = new Date(reading.timestamp).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+                
+                if (!dataMap.has(timestamp)) {
+                    dataMap.set(timestamp, { timestamp });
+                }
+
+                const entry = dataMap.get(timestamp);
+                const value = (typeof reading.value === 'object' && reading.value !== null) 
+                    ? Object.values(reading.value)[0] 
+                    : reading.value;
+
+                if (reading.sensorType === sensor1) {
+                    entry[sensor1] = value;
+                }
+                if (reading.sensorType === sensor2) {
+                    entry[sensor2] = value;
+                }
+            });
+
+            const processedData = Array.from(dataMap.values())
+              .sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+            setChartData(processedData);
+
+        } catch (error) {
+            console.error("Failed to fetch correlation data:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [selectedStation, sensor1, sensor2]);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
 
     return (
-         <div className="h-full p-4 flex flex-col">
-            <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">Çoklu İstasyon Karşılaştırma</h3>
-            <p className="text-xs text-muted mb-2 -mt-2">Tüm istasyonlardaki sıcaklık karşılaştırması</p>
-            {isLoading ? <Skeleton className="w-full h-full"/> : 
-            <ResponsiveContainer width="100%" height="100%">
-                <ScatterChart margin={{ top: 5, right: 20, left: -20, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#374151' : '#E5E7EB'} />
-                    <XAxis type="category" dataKey="stationName" name="istasyon" stroke={tickColor} fontSize={10} interval={0} angle={-25} textAnchor="end"/>
-                    <YAxis type="number" dataKey="value" name="sıcaklık" unit="°C" stroke={tickColor} fontSize={10}/>
-                    <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF' }}/>
-                    <Scatter name="Sıcaklık Okumaları" data={data} fill="#334155" shape="circle" />
-                </ScatterChart>
-            </ResponsiveContainer>}
+        <Card>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Sensör Korelasyon Grafiği</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 p-3 bg-secondary rounded-md border">
+                <select value={selectedStation} onChange={e => setSelectedStation(e.target.value)} className="input-base"><option value="">İstasyon Seç</option>{stations.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+                <select value={sensor1} onChange={e => setSensor1(e.target.value)} className="input-base" disabled={!selectedStation}><option value="">Sensör 1</option>{availableSensorTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                <select value={sensor2} onChange={e => setSensor2(e.target.value)} className="input-base" disabled={!selectedStation}><option value="">Sensör 2</option>{availableSensorTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
+            </div>
+            <div className="h-96">
+                {isLoading ? <Skeleton className="w-full h-full"/> : (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#374151' : '#E5E7EB'} />
+                            <XAxis dataKey="timestamp" tick={{ fontSize: 10 }} />
+                            <YAxis yAxisId="left" stroke="#8884d8" tick={{ fontSize: 10 }} />
+                            <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" tick={{ fontSize: 10 }} />
+                            <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF' }}/>
+                            <Legend />
+                            <Line yAxisId="left" type="monotone" dataKey={sensor1} stroke="#8884d8" activeDot={{ r: 8 }} />
+                            <Line yAxisId="right" type="monotone" dataKey={sensor2} stroke="#82ca9d" />
+                        </LineChart>
+                    </ResponsiveContainer>
+                )}
+            </div>
+        </Card>
+    )
+}
+
+// --- Original Dashboard Components ---
+
+interface DashboardProps {
+  onViewStationDetails: (stationId: string) => void;
+}
+
+interface StatCardProps {
+    icon: React.ReactNode;
+    label: string;
+    value: string | number;
+    color: string;
+}
+
+const StatCard: React.FC<StatCardProps> = ({ icon, label, value, color }) => (
+    <Card className={`p-4 flex items-center space-x-4 border-l-4 ${color}`}>
+        {icon}
+        <div>
+            <p className="text-sm font-medium text-muted dark:text-gray-400">{label}</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</p>
         </div>
+    </Card>
+);
+
+interface DataCardProps {
+    type: string;
+    value: number | string;
+    unit: string;
+    trend: Trend;
+}
+const DataCard: React.FC<DataCardProps> = ({ type, value, unit, trend }) => {
+    const trendInfo = {
+        up: { icon: <TrendUpIcon className="w-5 h-5 text-success" />, color: 'text-success' },
+        down: { icon: <TrendDownIcon className="w-5 h-5 text-danger" />, color: 'text-danger' },
+        stable: { icon: <TrendStableIcon className="w-5 h-5 text-muted" />, color: 'text-muted' },
+    };
+
+    return (
+        <Card className="p-4">
+            <div className="flex justify-between items-center">
+                <p className="font-semibold text-gray-800 dark:text-gray-200">{type}</p>
+                {trendInfo[trend].icon}
+            </div>
+            <div className="mt-2 text-center">
+                <span className="text-4xl font-bold text-gray-900 dark:text-gray-100">{value}</span>
+                <span className="text-lg text-muted dark:text-gray-400 ml-1">{unit}</span>
+            </div>
+        </Card>
     );
 };
 
 
-
-const Dashboard: React.FC<{ onViewStationDetails: (stationId: string) => void; }> = ({ onViewStationDetails }) => {
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+const Dashboard: React.FC<DashboardProps> = ({ onViewStationDetails }) => {
     const [stations, setStations] = useState<Station[]>([]);
     const [sensors, setSensors] = useState<Sensor[]>([]);
-    
-    const [activeTab, setActiveTab] = useState<'analytics' | 'reports' | 'analysis' | 'map'>('analytics');
+    const [isLoading, setIsLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState('Analitik');
 
-    // Filter states
-    const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
-    const [dateRange, setDateRange] = useState({ start: getPastDateString(1), end: getPastDateString(0) });
-    
-    // Chart data states
-    const [isChartLoading, setIsChartLoading] = useState(false);
-    const [tempData, setTempData] = useState<any[]>([]);
-    const [humidityData, setHumidityData] = useState<any[]>([]);
-    
-    const stationOptions = useMemo(() => stations.map(s => ({ value: s.id, label: s.name })), [stations]);
-    const filteredStations = useMemo(() => stations.filter(s => selectedStationIds.length === 0 || selectedStationIds.includes(s.id)), [selectedStationIds, stations]);
-
-    // Initial data fetching for stations and sensors
     useEffect(() => {
-        const fetchInitialData = async () => {
+        const fetchData = async () => {
             try {
-                setIsLoading(true);
-                setError(null);
+                if (stations.length === 0) setIsLoading(true);
                 const [stationsData, sensorsData] = await Promise.all([getStations(), getSensors()]);
                 setStations(stationsData);
                 setSensors(sensorsData);
-                // Select all stations by default
-                setSelectedStationIds(stationsData.map(s => s.id));
-            } catch (err) {
-                setError('Pano verileri yüklenirken bir hata oluştu.');
-                console.error(err);
+            } catch (error) {
+                console.error("Failed to fetch dashboard data:", error);
             } finally {
                 setIsLoading(false);
             }
         };
-        fetchInitialData();
+        fetchData();
+        const interval = setInterval(fetchData, 30000);
+        return () => clearInterval(interval);
     }, []);
 
-    // Effect to fetch and process chart data when filters change
-    useEffect(() => {
-        if (selectedStationIds.length === 0) {
-            setTempData([]);
-            setHumidityData([]);
-            return;
+    const stats = useMemo(() => {
+        const activeStations = stations.filter(s => s.status === 'active').length;
+        const totalSensors = sensors.length;
+        const totalCameras = stations.reduce((acc, s) => acc + (s.cameraCount || 0), 0);
+        const totalAlerts = stations.reduce((acc, s) => acc + (s.activeAlerts || 0), 0);
+        return { activeStations, totalSensors, totalCameras, totalAlerts };
+    }, [stations, sensors]);
+    
+    const latestSensorData = useMemo(() => {
+        const data: { [key: string]: { value: any; unit: string } } = {};
+        ['Sıcaklık', 'Nem', 'Rüzgar Hızı', 'Basınç'].forEach(type => {
+            const relevantSensors = sensors.filter(s => s.type === type && s.lastUpdate && s.value !== null);
+            if (relevantSensors.length > 0) {
+                const latestSensor = relevantSensors.reduce((latest, current) => 
+                    new Date(latest.lastUpdate) > new Date(current.lastUpdate) ? latest : current
+                );
+                const displayValue = typeof latestSensor.value === 'object' 
+                    ? Object.values(latestSensor.value).find(v => typeof v === 'number') ?? '--'
+                    : latestSensor.value;
+
+                data[type] = { value: displayValue, unit: latestSensor.unit };
+            }
+        });
+        return data;
+    }, [sensors]);
+
+
+    const renderContent = () => {
+        if (isLoading) {
+            return (
+                <div className="space-y-6 mt-4">
+                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <Skeleton className="h-24" /> <Skeleton className="h-24" />
+                        <Skeleton className="h-24" /> <Skeleton className="h-24" />
+                    </div>
+                    <Skeleton className="h-[480px]" />
+                </div>
+            );
         }
 
-        const fetchChartData = async () => {
-            setIsChartLoading(true);
-            try {
-                const [tempHistory, humidityHistory] = await Promise.all([
-                    getReadingsHistory({ stationIds: selectedStationIds, sensorTypes: ['Sıcaklık'], start: dateRange.start, end: dateRange.end }),
-                    getReadingsHistory({ stationIds: selectedStationIds, sensorTypes: ['Nem'], start: dateRange.start, end: dateRange.end })
-                ]);
+        if (activeTab === 'Analitik') {
+            return (
+                <div className="space-y-6 mt-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <StatCard icon={<StationIcon className="w-8 h-8 text-blue-500" />} label="Aktif İstasyon" value={`${stats.activeStations} / ${stations.length}`} color="border-l-blue-500" />
+                        <StatCard icon={<SensorIcon className="w-8 h-8 text-green-500" />} label="Toplam Sensör" value={stats.totalSensors} color="border-l-green-500" />
+                        <StatCard icon={<CameraIcon className="w-8 h-8 text-purple-500" />} label="Toplam Kamera" value={stats.totalCameras} color="border-l-purple-500" />
+                        <StatCard icon={<ExclamationIcon className="w-8 h-8 text-danger" />} label="Aktif Alarmlar" value={stats.totalAlerts} color="border-l-danger" />
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                        <div className="lg:col-span-3">
+                            <div className="bg-primary dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm h-[480px] overflow-hidden">
+                                <FullMap stations={stations} onViewStationDetails={onViewStationDetails} />
+                            </div>
+                        </div>
+                        <div className="lg:col-span-2 space-y-6">
+                            <div className="grid grid-cols-2 gap-4">
+                               {/* Fix: Use Trend enum members instead of string literals. */}
+                               <DataCard type="Sıcaklık" value={latestSensorData['Sıcaklık']?.value ?? '--'} unit={latestSensorData['Sıcaklık']?.unit ?? '°C'} trend={Trend.Stable} />
+                               <DataCard type="Nem" value={latestSensorData['Nem']?.value ?? '--'} unit={latestSensorData['Nem']?.unit ?? '%'} trend={Trend.Up} />
+                               <DataCard type="Rüzgar" value={latestSensorData['Rüzgar Hızı']?.value ?? '--'} unit={latestSensorData['Rüzgar Hızı']?.unit ?? 'km/h'} trend={Trend.Down} />
+                               <DataCard type="Basınç" value={latestSensorData['Basınç']?.value ?? '--'} unit={latestSensorData['Basınç']?.unit ?? 'hPa'} trend={Trend.Stable} />
+                            </div>
+                             <Card className="h-64">
+                                <WindRoseChart stations={stations} sensors={sensors} />
+                            </Card>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        if (activeTab === 'Analiz') {
+            return (
+                 <div className="space-y-6 mt-4">
+                    <SnowWaterEquivalentCalculator />
+                    <SensorCorrelationChart stations={stations} sensors={sensors} />
+                     <style>{`
+                        .input-base { width: 100%; background-color: #F9FAFB; border: 1px solid #D1D5DB; border-radius: 0.5rem; padding: 0.625rem 1rem; }
+                        .btn-primary { padding: 0.5rem 1rem; background-color: #E95420; color: white; border-radius: 0.5rem; font-weight: 600; transition: background-color 0.2s; }
+                        .btn-primary:hover { background-color: #c2410c; }
+                        .btn-primary:disabled { background-color: #9CA3AF; cursor: not-allowed; }
+                    `}</style>
+                </div>
+            );
+        }
 
-                // Process temperature data for scatter chart
-                setTempData(tempHistory.map(d => ({ ...d, time: new Date(d.timestamp).getTime() })));
-
-                // Process humidity data for area chart
-                const groupedByTime: { [key: string]: any } = {};
-                humidityHistory.forEach(r => {
-                    const time = new Date(r.timestamp).toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'});
-                    if (!groupedByTime[time]) groupedByTime[time] = { time };
-                    groupedByTime[time][r.stationName] = r.value;
-                });
-                setHumidityData(Object.values(groupedByTime));
-
-            } catch (err) {
-                console.error("Failed to fetch chart history:", err);
-            } finally {
-                setIsChartLoading(false);
-            }
-        };
-
-        fetchChartData();
-    }, [selectedStationIds, dateRange]);
+        return null;
+    }
     
     return (
-        <div className="flex flex-col h-full">
-            <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                <nav className="-mb-px flex space-x-8">
-                    <button onClick={() => setActiveTab('analytics')} className={`flex items-center gap-2 whitespace-nowrap py-2 px-1 border-b-2 font-semibold text-sm transition-colors ${activeTab === 'analytics' ? 'border-accent text-accent' : 'border-transparent text-muted dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'}`}><ChartBarIcon className="w-5 h-5" /><span>Analitik</span></button>
-                    <button onClick={() => setActiveTab('reports')} className={`flex items-center gap-2 whitespace-nowrap py-2 px-1 border-b-2 font-semibold text-sm transition-colors ${activeTab === 'reports' ? 'border-accent text-accent' : 'border-transparent text-muted dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'}`}><ReportsIcon className="w-5 h-5" /><span>Raporlar</span></button>
-                    <button onClick={() => setActiveTab('analysis')} className={`flex items-center gap-2 whitespace-nowrap py-2 px-1 border-b-2 font-semibold text-sm transition-colors ${activeTab === 'analysis' ? 'border-accent text-accent' : 'border-transparent text-muted dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'}`}><BrainIcon className="w-5 h-5" /><span>Analiz</span></button>
-                    <button onClick={() => setActiveTab('map')} className={`flex items-center gap-2 whitespace-nowrap py-2 px-1 border-b-2 font-semibold text-sm transition-colors ${activeTab === 'map' ? 'border-accent text-accent' : 'border-transparent text-muted dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'}`}><MapIcon className="w-5 h-5" /><span>İstasyon Haritası</span></button>
+        <div className="space-y-2">
+            <div className="border-b border-gray-200">
+                <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+                    <button onClick={() => setActiveTab('Analitik')} className={`flex items-center gap-2 whitespace-nowrap py-3 px-1 border-b-2 font-semibold text-sm ${activeTab === 'Analitik' ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-gray-700'}`}>
+                        <DashboardIcon className="w-5 h-5"/>
+                        <span>Analitik</span>
+                    </button>
+                    <button onClick={() => setActiveTab('Analiz')} className={`flex items-center gap-2 whitespace-nowrap py-3 px-1 border-b-2 font-semibold text-sm ${activeTab === 'Analiz' ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-gray-700'}`}>
+                        <BrainIcon className="w-5 h-5"/>
+                        <span>Analiz</span>
+                    </button>
                 </nav>
             </div>
-
-            {activeTab === 'analytics' && (
-                <div className="overflow-y-auto pt-4 space-y-4">
-                    <Card>
-                         {isLoading ? <Skeleton className="h-12"/> : error ? (
-                             <div className="text-center py-4 text-danger flex items-center justify-center gap-2"><ExclamationIcon/><span>{error}</span></div>
-                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                                <div className="w-full">
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">İstasyonlar</label>
-                                    <MultiSelectDropdown options={stationOptions} selected={selectedStationIds} onChange={setSelectedStationIds} label="İstasyon"/>
-                                </div>
-                                <div className="w-full">
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Zaman Aralığı</label>
-                                    <div className="flex items-center gap-2 bg-secondary dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5">
-                                        <CalendarIcon className="w-5 h-5 text-muted dark:text-gray-400"/>
-                                        <input type="date" value={dateRange.start} onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))} className="bg-transparent focus:outline-none text-sm w-full" />
-                                        <span className="text-muted dark:text-gray-400">-</span>
-                                        <input type="date" value={dateRange.end} onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))} className="bg-transparent focus:outline-none text-sm w-full" />
-                                    </div>
-                                </div>
-                            </div>
-                         )}
-                    </Card>
-
-                    {isLoading ? (
-                        <div className="grid grid-cols-4 gap-6 auto-rows-[300px]">
-                            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="col-span-2"/>)}
-                        </div>
-                    ) : error ? null : (
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 auto-rows-[minmax(300px,_auto)]">
-                            <Card className="p-0" style={{ gridArea: '1 / 1 / 2 / 3' }}><TemperatureScatterChart data={tempData} stations={filteredStations} isLoading={isChartLoading} /></Card>
-                            <Card className="p-0" style={{ gridArea: '1 / 3 / 2 / 5' }}><HumidityAreaChart data={humidityData} stations={filteredStations} isLoading={isChartLoading} /></Card>
-                            <Card className="p-0" style={{ gridArea: '2 / 1 / 3 / 3' }}><WindSpeedBarChart stations={filteredStations} sensors={sensors} /></Card>
-                            <Card className="p-0" style={{ gridArea: '2 / 3 / 3 / 5' }}><MultiStationComparisonChart data={tempData} isLoading={isChartLoading} /></Card>
-                        </div>
-                    )}
-                </div>
-            )}
-            {activeTab === 'reports' && (
-                 <div className="overflow-y-auto pt-4">
-                    <Reports />
-                </div>
-            )}
-            {activeTab === 'analysis' && (
-                 <div className="overflow-y-auto pt-4">
-                    <Analysis />
-                </div>
-            )}
-            {activeTab === 'map' && (
-                <div className="flex-grow pt-4">
-                    {isLoading ? <Skeleton className="h-full w-full rounded-lg"/> : error ? (
-                        <Card><div className="text-center py-8 text-danger flex items-center justify-center gap-2"><ExclamationIcon/><span>Harita verileri yüklenemedi.</span></div></Card>
-                    ) : (
-                        <div className="h-full bg-primary dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-hidden">
-                            <FullMap stations={stations} onViewStationDetails={onViewStationDetails} />
-                        </div>
-                    )}
-                </div>
-            )}
+            {renderContent()}
         </div>
     );
 };

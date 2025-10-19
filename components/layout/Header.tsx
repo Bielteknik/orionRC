@@ -1,61 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Page, Notification, Severity } from '../../types.ts';
-import { BellIcon, ExclamationIcon } from '../icons/Icons.tsx';
-
-
-interface NotificationPopoverProps {
-  notifications: Notification[];
-  onMarkAllAsRead: () => void;
-  onViewAll: () => void;
-  onClose: () => void;
-}
-
-const severityStyles: Record<Severity, { iconClass: string, bgClass: string }> = {
-    'Kritik': { iconClass: 'text-danger', bgClass: 'bg-danger/10' },
-    'Uyarı': { iconClass: 'text-warning', bgClass: 'bg-warning/10' },
-    'Bilgi': { iconClass: 'text-blue-500', bgClass: 'bg-blue-500/10' },
-};
-
-const NotificationPopover: React.FC<NotificationPopoverProps> = ({ notifications, onMarkAllAsRead, onViewAll, onClose }) => {
-    const unreadCount = notifications.filter(n => !n.isRead).length;
-
-    return (
-        <div className="absolute top-16 right-0 w-80 md:w-96 bg-primary dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50">
-            <header className="flex justify-between items-center p-3 border-b border-gray-200 dark:border-gray-700">
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Bildirimler ({unreadCount})</h3>
-                <button onClick={onMarkAllAsRead} className="text-sm font-medium text-accent hover:underline" disabled={unreadCount === 0}>
-                    Tümünü okundu işaretle
-                </button>
-            </header>
-            <div className="max-h-96 overflow-y-auto">
-                {notifications.length > 0 ? (
-                    notifications.map(notification => (
-                        <div key={notification.id} className={`flex items-start gap-3 p-3 border-b border-gray-200 dark:border-gray-700 last:border-b-0 hover:bg-secondary dark:hover:bg-gray-700 ${!notification.isRead ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-800/50'}`}>
-                            <div className={`mt-1 flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${severityStyles[notification.severity].bgClass}`}>
-                                <ExclamationIcon className={`w-5 h-5 ${severityStyles[notification.severity].iconClass}`} />
-                            </div>
-                            <div className="flex-1">
-                                <p className={`text-sm text-gray-800 dark:text-gray-200 ${!notification.isRead ? 'font-bold' : ''}`}>{notification.message}</p>
-                                <p className="text-xs text-muted dark:text-gray-400 mt-0.5">
-                                    {notification.stationName} - {notification.sensorName} ({notification.triggeredValue})
-                                </p>
-                                <p className="text-xs text-muted dark:text-gray-400 mt-1">{new Date(notification.timestamp).toLocaleString('tr-TR')}</p>
-                            </div>
-                        </div>
-                    ))
-                ) : (
-                    <div className="p-10 text-center">
-                        <p className="text-muted dark:text-gray-400">Okunmamış bildiriminiz yok.</p>
-                    </div>
-                )}
-            </div>
-            <footer className="p-2 bg-gray-50 dark:bg-gray-700/50 text-center border-t border-gray-200 dark:border-gray-700">
-                <button onClick={onViewAll} className="text-sm font-semibold text-accent hover:underline w-full">Tüm Bildirimleri Görüntüle</button>
-            </footer>
-        </div>
-    );
-};
-
+import React, { useState, useRef, useEffect } from 'react';
+import { Page, Notification } from '../../types.ts';
+import { useTheme } from '../ThemeContext.tsx';
+import { BellIcon, SunIcon, MoonIcon, CheckIcon } from '../icons/Icons.tsx';
 
 interface HeaderProps {
   currentPage: Page;
@@ -65,43 +11,13 @@ interface HeaderProps {
   agentStatus: { status: string; lastUpdate: string | null };
 }
 
-const Header: React.FC<HeaderProps> = ({ currentPage, notifications, onMarkAllNotificationsAsRead, onViewAllNotifications, agentStatus }) => {
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const notificationsRef = useRef<HTMLDivElement>(null);
-
-  const pageTitles: { [key in Page]: string } = {
-    [Page.Dashboard]: 'Ana Sayfa',
-    [Page.Stations]: 'İstasyon Yönetimi',
-    [Page.Sensors]: 'Sensör Yönetimi',
-    [Page.Cameras]: 'Kamera İzleme',
-    [Page.Definitions]: 'Sistem Tanımları',
-    [Page.Reports]: 'Raporlar',
-    [Page.Analysis]: 'Yapay Zeka Analizi',
-    [Page.Notifications]: 'Bildirimler',
-  };
-
-  const unreadCount = notifications.filter(n => !n.isRead).length;
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
-        setIsNotificationsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleViewAll = () => {
-    setIsNotificationsOpen(false);
-    onViewAllNotifications();
-  }
-
-  const formatTimeAgo = (isoString: string | null): string => {
+const formatTimeAgo = (isoString: string | null): string => {
     if (!isoString) return 'hiçbir zaman';
     const date = new Date(isoString);
     const now = new Date();
     const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (seconds < 10) return "şimdi";
     if (seconds < 60) return `${seconds} sn önce`;
     const minutes = Math.floor(seconds / 60);
     if (minutes < 60) return `${minutes} dk önce`;
@@ -109,69 +25,88 @@ const Header: React.FC<HeaderProps> = ({ currentPage, notifications, onMarkAllNo
     if (hours < 24) return `${hours} sa önce`;
     const days = Math.floor(hours / 24);
     return `${days} gün önce`;
-  };
+};
 
-  const isAgentOnline = agentStatus.status === 'online';
-  const agentTooltip = isAgentOnline 
-    ? `Agent Çevrimiçi | Son Sinyal: ${formatTimeAgo(agentStatus.lastUpdate)}`
-    : `Agent Çevrimdışı | Son Sinyal: ${formatTimeAgo(agentStatus.lastUpdate)}`;
+const Header: React.FC<HeaderProps> = ({ currentPage, notifications, onMarkAllNotificationsAsRead, onViewAllNotifications, agentStatus }) => {
+    const { theme, toggleTheme } = useTheme();
+    const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+    const notificationRef = useRef<HTMLDivElement>(null);
 
+    const unreadCount = notifications.filter(n => !n.isRead).length;
 
-  return (
-    <header className="flex-shrink-0 bg-primary dark:bg-gray-800 h-20 flex items-center justify-between px-8 border-b border-gray-200 dark:border-gray-700">
-      <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{pageTitles[currentPage]}</h1>
-      <div className="flex items-center space-x-6">
-        <div 
-            className="flex items-center gap-2 cursor-default"
-            title={agentTooltip}
-        >
-            {isAgentOnline ? (
-                <>
-                    <div className="relative flex items-center justify-center w-3 h-3">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-sm bg-success opacity-75"></span>
-                        <span className="relative inline-flex rounded-sm h-2.5 w-2.5 bg-success"></span>
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+                setIsNotificationsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const isOnline = agentStatus.status === 'online';
+    
+    return (
+        <header className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-3 bg-primary dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-gray-100">{currentPage}</h1>
+
+            <div className="flex items-center space-x-4">
+                {/* Agent Status */}
+                <div className="flex items-center space-x-2" title={`Son sinyal: ${formatTimeAgo(agentStatus.lastUpdate)}`}>
+                    <div className={`relative w-3 h-3 rounded-sm ${isOnline ? 'bg-green-500' : 'bg-red-500'}`}>
+                        {isOnline && <div className="absolute inset-0 w-full h-full bg-green-500 rounded-sm animate-ping"></div>}
                     </div>
-                    <span className="text-sm font-semibold text-success">
-                        Sistem Durumu: Normal
+                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 hidden sm:block">
+                        Sistem Durumu: {isOnline ? 'Normal' : 'Çevrimdışı'}
                     </span>
-                </>
-            ) : (
-                <>
-                    <div className="relative flex items-center justify-center w-3 h-3">
-                        <span className="relative inline-flex rounded-sm h-2.5 w-2.5 bg-danger"></span>
-                    </div>
-                    <span className="text-sm font-semibold text-danger">
-                        Sistem Durumu: Çevrimdışı
-                    </span>
-                </>
-            )}
-        </div>
+                </div>
 
-         <div className="relative" ref={notificationsRef}>
-            <button
-                onClick={() => setIsNotificationsOpen(prev => !prev)}
-                className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent"
-                aria-label="Bildirimleri Görüntüle"
-            >
-                <BellIcon className="h-6 w-6" />
-                {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-danger text-white text-xs font-bold">
-                        {unreadCount > 9 ? '9+' : unreadCount}
-                    </span>
-                )}
-            </button>
-            {isNotificationsOpen && (
-                <NotificationPopover
-                    notifications={notifications}
-                    onMarkAllAsRead={onMarkAllNotificationsAsRead}
-                    onViewAll={handleViewAll}
-                    onClose={() => setIsNotificationsOpen(false)}
-                />
-            )}
-         </div>
-      </div>
-    </header>
-  );
+                {/* Theme Toggle */}
+                <button onClick={toggleTheme} className="p-2 text-muted dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full" aria-label="Toggle theme">
+                    {theme === 'light' ? <MoonIcon className="w-5 h-5" /> : <SunIcon className="w-5 h-5" />}
+                </button>
+
+                {/* Notifications */}
+                <div className="relative" ref={notificationRef}>
+                    <button onClick={() => setIsNotificationsOpen(!isNotificationsOpen)} className="p-2 text-muted dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full relative" aria-label="Notifications">
+                        <BellIcon className="w-6 h-6" />
+                        {unreadCount > 0 && (
+                            <span className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-danger ring-2 ring-primary dark:ring-gray-800"></span>
+                        )}
+                    </button>
+                    {isNotificationsOpen && (
+                        <div className="absolute right-0 mt-2 w-80 bg-primary dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-20">
+                            <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                                <h4 className="font-semibold text-gray-900 dark:text-gray-100">Bildirimler</h4>
+                                {unreadCount > 0 && <span className="text-xs bg-accent text-white font-semibold rounded-full px-2 py-0.5">{unreadCount} yeni</span>}
+                            </div>
+                            <ul className="max-h-80 overflow-y-auto">
+                                {notifications.length > 0 ? (
+                                    notifications.slice(0, 5).map(notification => (
+                                        <li key={notification.id} className={`p-3 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 ${!notification.isRead ? 'font-semibold' : ''}`}>
+                                            <p className="text-sm text-gray-800 dark:text-gray-200">{notification.message}</p>
+                                            <p className="text-xs text-muted dark:text-gray-400 mt-1">{notification.stationName}</p>
+                                        </li>
+                                    ))
+                                ) : (
+                                    <li className="p-4 text-center text-sm text-muted dark:text-gray-400">Yeni bildirim yok.</li>
+                                )}
+                            </ul>
+                            <div className="p-2 bg-gray-50 dark:bg-gray-900/50 flex justify-between items-center text-sm">
+                                <button onClick={onMarkAllNotificationsAsRead} className="flex items-center gap-1 font-semibold text-accent hover:underline disabled:text-muted" disabled={unreadCount === 0}>
+                                    <CheckIcon className="w-4 h-4" />
+                                    Tümünü Oku
+                                </button>
+                                <button onClick={onViewAllNotifications} className="font-semibold text-accent hover:underline">
+                                    Tümünü Gör
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </header>
+    );
 };
 
 export default Header;

@@ -1,40 +1,38 @@
+import { GoogleGenAI, Chat, GenerateContentResponse } from "@google/genai";
 
-// This function communicates with our own backend, which then securely calls the Gemini API.
-export const sendMessageToGemini = async function* (message: string) {
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+const getChat = () => ai.chats.create({
+  model: 'gemini-2.5-flash',
+  config: {
+    systemInstruction: `You are ORION Assistant, a helpful AI assistant for a sophisticated weather and environmental monitoring system. 
+    Your primary role is to help users understand data, identify trends, and manage their monitoring stations.
+    - You have access to real-time data about stations, sensors (temperature, humidity, wind, snow depth, etc.), and cameras.
+    - Be concise and direct in your answers.
+    - When asked about system status, you should imagine you have access to the data and provide plausible, realistic responses. For example: "Station Alpha is online, reporting a temperature of 15°C with stable conditions."
+    - If a user asks a question outside the scope of weather/environmental monitoring, politely decline and steer the conversation back to your purpose. For example: "I am an assistant for the ORION monitoring system. I can help you with questions about your stations and sensor data."
+    - Do not make up fake data if you can't access it, instead say something like "I cannot access live data at the moment, but I can help you analyze patterns or explain what certain metrics mean."
+    - Respond in Turkish.
+    `,
+  },
+});
+
+let chatInstance: Chat = getChat();
+
+/**
+ * Sends a message to the Gemini model and returns the response stream.
+ * @param message The user's message.
+ * @returns An async iterable stream of GenerateContentResponse chunks.
+ */
+export async function sendMessageToGemini(message: string): Promise<AsyncGenerator<GenerateContentResponse>> {
     try {
-        const response = await fetch('/api/gemini-chat-stream', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ message }),
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Yapay zeka asistanından yanıt alınamadı.');
-        }
-
-        const reader = response.body?.getReader();
-        if (!reader) {
-            throw new Error('Yanıt akışı okunamadı.');
-        }
-
-        const decoder = new TextDecoder();
-        
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-                break;
-            }
-            const chunk = decoder.decode(value);
-            // Yield each piece of text as it arrives
-            yield { text: chunk };
-        }
-
+        const result = await chatInstance.sendMessageStream({ message });
+        return result;
     } catch (error) {
-        console.error("Error streaming message from backend:", error);
-        // Yield a final error message in the generator
-        yield { text: "Üzgünüm, asistana bağlanırken bir sorun oluştu." };
+        console.error("Gemini chat error, restarting chat session:", error);
+        // If the chat session has an issue, try creating a new one
+        chatInstance = getChat();
+        const result = await chatInstance.sendMessageStream({ message });
+        return result;
     }
-};
+}
