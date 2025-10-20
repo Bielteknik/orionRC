@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+// Fix: Import GoogleGenAI from '@google/genai' correctly
 import { GoogleGenAI } from "@google/genai";
 import {
     DeviceConfig,
@@ -324,6 +325,7 @@ class Agent {
             
             // 3. Call Gemini API
             console.log('   -> Gemini API ile analiz ediliyor...');
+            // Fix: Use new GoogleGenAI({apiKey: ...}) for initialization.
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const imagePart = {
                 inlineData: {
@@ -335,17 +337,19 @@ class Agent {
                 text: "Bu görüntüdeki kar ölçüm cetveline göre karla kaplı en yüksek sayısal değer nedir? Cevabını sadece `{\"snow_depth_cm\": SAYI}` formatında bir JSON olarak ver.",
             };
 
+            // Fix: Use correct model name 'gemini-2.5-flash-image' for image analysis
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash-image',
                 contents: { parts: [imagePart, textPart] },
             });
             
-            if (!response.text) {
+            // Fix: Directly access the 'text' property from the response for simpler and more reliable text extraction.
+            const resultText = response.text;
+            if (!resultText) {
                 console.error('   -> HATA: Gemini API boş yanıt döndü.');
                 return false;
             }
 
-            const resultText = response.text.trim();
             console.log(`   -> Gemini Yanıtı: ${resultText}`);
 
             // 4. Parse response and send reading
