@@ -74,6 +74,8 @@ export const setGlobalReadFrequency = (value: string): Promise<void> => apiClien
 export const getReports = (): Promise<Report[]> => apiClient.get('/reports').then(res => res.data).catch(e => handleError(e, 'fetching reports'));
 export const deleteReport = (id: string): Promise<void> => apiClient.delete(`/reports/${id}`).then(res => res.data).catch(e => handleError(e, 'deleting report'));
 export const getReportSchedules = (): Promise<ReportSchedule[]> => apiClient.get('/report-schedules').then(res => res.data).catch(e => handleError(e, 'fetching report schedules'));
+export const addReportSchedule = (data: Omit<ReportSchedule, 'id' | 'lastRun'>): Promise<ReportSchedule> => apiClient.post('/report-schedules', data).then(res => res.data).catch(e => handleError(e, 'adding report schedule'));
+export const updateReportSchedule = (id: string, data: Partial<ReportSchedule>): Promise<void> => apiClient.put(`/report-schedules/${id}`, data).then(res => res.data).catch(e => handleError(e, 'updating report schedule'));
 export const deleteReportSchedule = (id: string): Promise<void> => apiClient.delete(`/report-schedules/${id}`).then(res => res.data).catch(e => handleError(e, 'deleting report schedule'));
 
 

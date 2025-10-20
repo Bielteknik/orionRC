@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Station, Sensor, SensorStatus } from '../types.ts';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Station, Sensor, SensorStatus, Camera } from '../types.ts';
 import { SerialPortIcon, CpuChipIcon, HttpIcon, BrainIcon } from './icons/Icons.tsx';
+import { SnowRulerDayIcon, SnowRulerNightIcon } from './icons/RulerIcons.tsx';
+import { useTheme } from './ThemeContext.tsx';
+
 
 interface AddSensorDrawerProps {
   isOpen: boolean;
@@ -8,6 +11,7 @@ interface AddSensorDrawerProps {
   onSave: (sensorData: any) => void;
   stations: Station[];
   sensorTypes: string[];
+  cameras: Camera[];
   sensorToEdit?: Sensor | null;
 }
 
@@ -19,19 +23,26 @@ const interfaceIcons: { [key: string]: React.ReactNode } = {
     'openweather': <HttpIcon className="w-5 h-5 text-muted" />,
 };
 
-const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSave, stations, sensorTypes, sensorToEdit }) => {
+const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSave, stations, sensorTypes, cameras, sensorToEdit }) => {
+    const { theme } = useTheme();
     const [name, setName] = useState('');
     const [stationId, setStationId] = useState('');
     const [interfaceType, setInterfaceType] = useState('serial');
     const [interfaceConfig, setInterfaceConfig] = useState('{}');
     const [parserConfig, setParserConfig] = useState('{}');
     const [sensorType, setSensorType] = useState('');
-    const [readFrequency, setReadFrequency] = useState('300');
+    const [unit, setUnit] = useState('');
+    const [readFrequency, setReadFrequency] = useState('600');
     const [isActive, setIsActive] = useState(true);
     const [error, setError] = useState('');
     
     const [interfaceConfigError, setInterfaceConfigError] = useState<string | null>(null);
     const [parserConfigError, setParserConfigError] = useState<string | null>(null);
+    
+    // State for AI Snow Sensor
+    const [sourceCameraId, setSourceCameraId] = useState('');
+    const isSnowSensor = useMemo(() => sensorType === 'Kar Yüksekliği' && interfaceType === 'virtual', [sensorType, interfaceType]);
+    const stationMap = useMemo(() => new Map(stations.map(s => [s.id, s.name])), [stations]);
 
     const title = sensorToEdit ? 'Sensör Ayarlarını Düzenle' : 'Yeni Sensör Ekle';
 
@@ -50,11 +61,13 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
         setInterfaceConfig('{\n  "port": "/dev/ttyMESAFE",\n  "baudrate": 9600\n}');
         setParserConfig('{\n  "driver": "dfrobot_ult"\n}');
         setSensorType(sensorTypes[0] || '');
-        setReadFrequency('300');
+        setUnit('');
+        setReadFrequency('600');
         setIsActive(true);
         setError('');
         setInterfaceConfigError(null);
         setParserConfigError(null);
+        setSourceCameraId('');
     };
 
     useEffect(() => {
@@ -63,11 +76,25 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
                 setName(sensorToEdit.name);
                 setStationId(sensorToEdit.stationId);
                 setSensorType(sensorToEdit.type);
+                setUnit(sensorToEdit.unit || '');
                 setIsActive(sensorToEdit.status === SensorStatus.Active);
                 setInterfaceType(sensorToEdit.interface || 'serial');
                 setInterfaceConfig(JSON.stringify(sensorToEdit.config, null, 2) || '{}');
                 setParserConfig(JSON.stringify(sensorToEdit.parser_config, null, 2) || '{}');
-                setReadFrequency(String(sensorToEdit.read_frequency || 300));
+                setReadFrequency(String(sensorToEdit.read_frequency || 600));
+
+                // If editing a snow sensor, parse the source camera ID
+                if (sensorToEdit.type === 'Kar Yüksekliği' && sensorToEdit.interface === 'virtual') {
+                     try {
+                        const configObj = typeof sensorToEdit.config === 'string' ? JSON.parse(sensorToEdit.config) : sensorToEdit.config;
+                        setSourceCameraId(configObj.source_camera_id || '');
+                    } catch {
+                        setSourceCameraId('');
+                    }
+                } else {
+                    setSourceCameraId('');
+                }
+
             } else {
                 resetState();
             }
@@ -76,7 +103,7 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
 
     // Automatically set example config when interface type changes for a new sensor
     useEffect(() => {
-        if (sensorToEdit) return; // Don't override when editing
+        if (sensorToEdit || isSnowSensor) return; // Don't override when editing or if it's the special snow sensor case
 
         if (interfaceType === 'i2c') {
             setInterfaceConfig('{\n  "address": "0x44",\n  "bus": 1\n}');
@@ -94,28 +121,45 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
             setInterfaceConfig('{}');
             setParserConfig('{}');
         }
-    }, [interfaceType, sensorToEdit]);
+    }, [interfaceType, sensorToEdit, isSnowSensor]);
+
+    // Effect to auto-generate JSON for the snow sensor
+    useEffect(() => {
+        if (isSnowSensor) {
+            setInterfaceConfig(JSON.stringify({
+                source_camera_id: sourceCameraId,
+                script: "image_analyzer.py"
+            }, null, 2));
+            setParserConfig(JSON.stringify({
+                driver: "image_analyzer"
+            }, null, 2));
+            setInterfaceConfigError(null);
+            setParserConfigError(null);
+        }
+    }, [isSnowSensor, sourceCameraId]);
 
 
     useEffect(() => {
+        if (isSnowSensor) return; // JSON is handled automatically for snow sensor
         try {
             JSON.parse(interfaceConfig);
             setInterfaceConfigError(null);
         } catch (e) {
             setInterfaceConfigError('Geçersiz JSON formatı.');
         }
-    }, [interfaceConfig]);
+    }, [interfaceConfig, isSnowSensor]);
 
     useEffect(() => {
+        if (isSnowSensor) return; // JSON is handled automatically for snow sensor
         try {
             JSON.parse(parserConfig);
             setParserConfigError(null);
         } catch (e) {
             setParserConfigError('Geçersiz JSON formatı.');
         }
-    }, [parserConfig]);
+    }, [parserConfig, isSnowSensor]);
 
-    const isFormInvalid = !name.trim() || !stationId || !!interfaceConfigError || !!parserConfigError;
+    const isFormInvalid = !name.trim() || !stationId || (isSnowSensor && !sourceCameraId) || (!isSnowSensor && (!!interfaceConfigError || !!parserConfigError));
 
     const handleClose = () => {
         onClose();
@@ -124,6 +168,10 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
     const handleSave = () => {
         if (!name.trim() || !stationId) {
             setError('Sensör Adı ve Bağlı Olduğu İstasyon alanları zorunludur.');
+            return;
+        }
+        if (isSnowSensor && !sourceCameraId) {
+            setError('Yapay Zeka Kar Sensörü için bir Kaynak Kamera seçmelisiniz.');
             return;
         }
         if (isFormInvalid) return;
@@ -137,7 +185,8 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
             parserConfig,
             interfaceConfig,
             type: sensorType,
-            readFrequency: parseInt(readFrequency, 10) || 300,
+            unit,
+            readFrequency: parseInt(readFrequency, 10) || 600,
             status: isActive ? SensorStatus.Active : SensorStatus.Inactive,
             isActive,
         });
@@ -173,13 +222,19 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
                                     ))}
                                 </select>
                             </div>
-                            <div>
-                                <label htmlFor="sensor-type" className="block text-sm font-medium text-gray-700 mb-1.5">Sensör Tipi</label>
-                                <select id="sensor-type" value={sensorType} onChange={e => setSensorType(e.target.value)} className="w-full bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent">
-                                    {sensorTypes.map(type => (
-                                        <option key={type} value={type}>{type}</option>
-                                    ))}
-                                </select>
+                            <div className="md:col-span-1 grid grid-cols-2 gap-4">
+                                <div>
+                                    <label htmlFor="sensor-type" className="block text-sm font-medium text-gray-700 mb-1.5">Sensör Tipi</label>
+                                    <select id="sensor-type" value={sensorType} onChange={e => setSensorType(e.target.value)} className="w-full bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent">
+                                        {sensorTypes.map(type => (
+                                            <option key={type} value={type}>{type}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label htmlFor="sensor-unit" className="block text-sm font-medium text-gray-700 mb-1.5">Birim</label>
+                                    <input type="text" id="sensor-unit" value={unit} onChange={e => setUnit(e.target.value)} placeholder="Örn: °C" className="w-full bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent" />
+                                </div>
                             </div>
                             <div>
                                 <label htmlFor="interface-type" className="block text-sm font-medium text-gray-700 mb-1.5">Arayüz Tipi</label>
@@ -198,16 +253,47 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
                             </div>
                         </div>
 
-                        <div>
-                            <label htmlFor="interface-config" className="block text-sm font-medium text-gray-700 mb-1.5">Arayüz Yapılandırması (JSON)</label>
-                            <textarea id="interface-config" value={interfaceConfig} onChange={e => setInterfaceConfig(e.target.value)} rows={4} className={`w-full bg-secondary border rounded-md px-3 py-2 focus:outline-none focus:ring-2 font-mono text-sm ${interfaceConfigError ? 'border-danger focus:ring-danger' : 'border-gray-300 focus:ring-accent'}`}></textarea>
-                            {interfaceConfigError && <p className="text-xs text-danger mt-1.5">{interfaceConfigError}</p>}
-                        </div>
-                        <div>
-                            <label htmlFor="parser-config" className="block text-sm font-medium text-gray-700 mb-1.5">Ayrıştırıcı Yapılandırması (JSON)</label>
-                            <textarea id="parser-config" value={parserConfig} onChange={e => setParserConfig(e.target.value)} rows={4} className={`w-full bg-secondary border rounded-md px-3 py-2 focus:outline-none focus:ring-2 font-mono text-sm ${parserConfigError ? 'border-danger focus:ring-danger' : 'border-gray-300 focus:ring-accent'}`}></textarea>
-                            {parserConfigError && <p className="text-xs text-danger mt-1.5">{parserConfigError}</p>}
-                        </div>
+                        {isSnowSensor ? (
+                             <div className="p-4 bg-blue-50 dark:bg-gray-900/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                                <div className="flex gap-6 items-center">
+                                    <div className="flex-shrink-0 pt-2 hidden sm:block">
+                                        {theme === 'dark' ? <SnowRulerNightIcon className="w-16 h-auto" /> : <SnowRulerDayIcon className="w-16 h-auto" />}
+                                    </div>
+                                    <div className="flex-grow space-y-3">
+                                        <h4 className="font-semibold text-gray-800 dark:text-gray-200">Yapay Zeka Yapılandırması</h4>
+                                        <p className="text-xs text-muted dark:text-gray-400">Bu sensör, seçilen kameradan alınan görüntüleri yapay zeka ile analiz ederek kar yüksekliğini ölçer.</p>
+                                        <div>
+                                            <label htmlFor="source-camera" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Kaynak Kamera *</label>
+                                            <select
+                                                id="source-camera"
+                                                value={sourceCameraId}
+                                                onChange={e => setSourceCameraId(e.target.value)}
+                                                className="w-full bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
+                                            >
+                                                <option value="" disabled>Kamera Seçin...</option>
+                                                {cameras.map(camera => (
+                                                    <option key={camera.id} value={camera.id}>{camera.name} ({stationMap.get(camera.stationId) || 'Atanmamış'})</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                <div>
+                                    <label htmlFor="interface-config" className="block text-sm font-medium text-gray-700 mb-1.5">Arayüz Yapılandırması (JSON)</label>
+                                    <textarea id="interface-config" value={interfaceConfig} onChange={e => setInterfaceConfig(e.target.value)} rows={4} className={`w-full bg-secondary border rounded-md px-3 py-2 focus:outline-none focus:ring-2 font-mono text-sm ${interfaceConfigError ? 'border-danger focus:ring-danger' : 'border-gray-300 focus:ring-accent'}`}></textarea>
+                                    {interfaceConfigError && <p className="text-xs text-danger mt-1.5">{interfaceConfigError}</p>}
+                                </div>
+                                <div>
+                                    <label htmlFor="parser-config" className="block text-sm font-medium text-gray-700 mb-1.5">Ayrıştırıcı Yapılandırması (JSON)</label>
+                                    <textarea id="parser-config" value={parserConfig} onChange={e => setParserConfig(e.target.value)} rows={4} className={`w-full bg-secondary border rounded-md px-3 py-2 focus:outline-none focus:ring-2 font-mono text-sm ${parserConfigError ? 'border-danger focus:ring-danger' : 'border-gray-300 focus:ring-accent'}`}></textarea>
+                                    {parserConfigError && <p className="text-xs text-danger mt-1.5">{parserConfigError}</p>}
+                                </div>
+                            </>
+                        )}
+
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5 items-end">
                             <div>

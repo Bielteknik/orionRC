@@ -98,9 +98,12 @@ export default class Sht3xDriver implements ISensorDriver {
                 console.log(`     -> Okunan Değer:`, result);
                 return result;
 
-            } catch (error) {
+            } catch (error: any) {
                  if (attempt === maxRetries) {
-                    console.error(`     -> HATA (SHT3x): Maksimum deneme sayısına ulaşıldıktan sonra I2C bus (${busNumber}) üzerinden 0x${address.toString(16)} adresli cihaza erişilemedi.`, error);
+                    console.error(`     -> HATA (SHT3x): Maksimum deneme sayısına ulaşıldıktan sonra I2C bus (${busNumber}) üzerinden 0x${address.toString(16)} adresli cihaza erişilemedi.`, error.message);
+                    console.error(`     -> ÖNERİ: 1) Raspberry Pi'de I2C arayüzünün 'sudo raspi-config' ile etkinleştirildiğinden emin olun.`);
+                    console.error(`     -> ÖNERİ: 2) Sensörün kablo bağlantılarını (SDA, SCL, VCC, GND) kontrol edin.`);
+                    console.error(`     -> ÖNERİ: 3) 'i2cdetect -y ${busNumber}' komutunu çalıştırarak sensörün 0x${address.toString(16)} adresinde göründüğünü doğrulayın.`);
                     return null;
                 }
                  await new Promise(resolve => setTimeout(resolve, 100)); // Wait before retrying on error

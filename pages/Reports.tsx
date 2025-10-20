@@ -4,7 +4,7 @@ import Card from '../components/common/Card.tsx';
 import AddReportDrawer from '../components/AddReportDrawer.tsx';
 import ScheduleReportDrawer from '../components/ScheduleReportDrawer.tsx';
 import { AddIcon, SearchIcon, DownloadIcon, EditIcon, DeleteIcon, CalendarIcon } from '../components/icons/Icons.tsx';
-import { getStations, getSensors, getReports, getReportSchedules, getReadings, deleteReport, deleteReportSchedule } from '../services/apiService.ts';
+import { getStations, getSensors, getReports, getReportSchedules, getReadings, deleteReport, deleteReportSchedule, addReportSchedule, updateReportSchedule } from '../services/apiService.ts';
 import DeleteConfirmationModal from '../components/DeleteConfirmationModal.tsx';
 
 declare const XLSX: any;
@@ -31,7 +31,8 @@ const Reports: React.FC = () => {
     const [scheduleToDelete, setScheduleToDelete] = useState<ReportSchedule | null>(null);
 
     const fetchData = async () => {
-        setIsLoading(true);
+        // Don't show loader on subsequent refetches
+        if (reports.length === 0 && schedules.length === 0) setIsLoading(true);
         try {
             const [stationsData, sensorsData, reportsData, schedulesData, readingsData] = await Promise.all([
                 getStations(), 
@@ -68,10 +69,24 @@ const Reports: React.FC = () => {
         setReports(prev => [newReport, ...prev]);
     };
 
-    const handleSaveSchedule = (scheduleData: Omit<ReportSchedule, 'id'>) => {
-        // Mocked until backend endpoint is implemented
-        const newSchedule: ReportSchedule = { id: `SCH${Date.now()}`, ...scheduleData, lastRun: 'Hiç çalışmadı' };
-        setSchedules(prev => [newSchedule, ...prev]);
+    const handleSaveSchedule = async (scheduleData: Omit<ReportSchedule, 'id' | 'lastRun'>) => {
+        try {
+            await addReportSchedule(scheduleData);
+            fetchData();
+        } catch(e) {
+            console.error(e);
+            alert("Rapor planı kaydedilemedi.");
+        }
+    };
+
+    const handleToggleSchedule = async (schedule: ReportSchedule) => {
+        try {
+            await updateReportSchedule(schedule.id, { isEnabled: !schedule.isEnabled });
+            fetchData();
+        } catch(e) {
+            console.error(e);
+            alert("Plan durumu güncellenemedi.");
+        }
     };
 
     const generateCsv = (data: any[], fileName: string) => {
@@ -220,10 +235,19 @@ const Reports: React.FC = () => {
 
              {activeTab === 'scheduled' && (
                 <Card className="p-0"><div className="overflow-x-auto"><table className="w-full text-sm text-left text-gray-600"><thead className="text-xs text-gray-700 uppercase bg-gray-100"><tr><th scope="col" className="px-6 py-3">Plan Adı</th><th scope="col" className="px-6 py-3">Sıklık</th><th scope="col" className="px-6 py-3">Alıcı</th><th scope="col" className="px-6 py-3">Durum</th><th scope="col" className="px-6 py-3">Son Çalışma</th><th scope="col" className="px-6 py-3 text-right">İşlemler</th></tr></thead><tbody>
-                {schedules.map(schedule => (<tr key={schedule.id} className="border-b border-gray-200 hover:bg-gray-50"><td className="px-6 py-4 font-medium text-gray-900">{schedule.name}</td><td className="px-6 py-4 capitalize">{schedule.frequency} @ {schedule.time}</td><td className="px-6 py-4">{schedule.recipient}</td><td className="px-6 py-4"><span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${schedule.isEnabled ? 'bg-success/10 text-success' : 'bg-gray-200 text-muted'}`}>{schedule.isEnabled ? 'Aktif' : 'Pasif'}</span></td><td className="px-6 py-4 font-mono text-gray-800 text-xs">{schedule.lastRun}</td>
+                {schedules.map(schedule => (<tr key={schedule.id} className="border-b border-gray-200 hover:bg-gray-50"><td className="px-6 py-4 font-medium text-gray-900">{schedule.name}</td><td className="px-6 py-4 capitalize">{schedule.frequency} @ {schedule.time}</td><td className="px-6 py-4">{schedule.recipient}</td>
+                <td className="px-6 py-4">
+                    <label className="flex items-center cursor-pointer">
+                        <div className="relative">
+                            <input type="checkbox" className="sr-only peer" checked={schedule.isEnabled} onChange={() => handleToggleSchedule(schedule)} />
+                            <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent"></div>
+                        </div>
+                    </label>
+                </td>
+                <td className="px-6 py-4 font-mono text-gray-800 text-xs">{schedule.lastRun || "Henüz çalışmadı"}</td>
                 <td className="px-6 py-4 text-right flex justify-end gap-2">
-                    <button className="text-muted hover:text-accent p-1"><EditIcon className="w-4 h-4"/></button>
-                    <button onClick={() => handleOpenDeleteScheduleModal(schedule)} className="text-muted hover:text-danger p-1"><DeleteIcon className="w-4 h-4"/></button>
+                    <button className="text-muted hover:text-accent p-2 rounded-lg hover:bg-accent/10 transition-colors"><EditIcon className="w-4 h-4"/></button>
+                    <button onClick={() => handleOpenDeleteScheduleModal(schedule)} className="text-muted hover:text-danger p-2 rounded-lg hover:bg-danger/10 transition-colors"><DeleteIcon className="w-4 h-4"/></button>
                 </td>
                 </tr>))}
                 </tbody></table></div>{filteredSchedules.length === 0 && (<div className="text-center py-8 text-muted"><p>Zamanlanmış rapor bulunamadı.</p></div>)}</Card>

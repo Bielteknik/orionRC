@@ -1,13 +1,20 @@
-// Fix: Use explicit express.Request, express.Response, and express.NextFunction types to resolve type conflicts.
+// Fix: Use explicit express.Request and express.Response types to avoid collision with global types.
+// Fix: Removed named imports for Request, Response, and NextFunction to avoid type collisions with global types. Using express.Request etc. instead.
 import express from 'express';
+import type { NextFunction } from 'express';
 import cors from 'cors';
 import { openDb, db, migrate } from './database.js';
 import { v4 as uuidv4 } from 'uuid';
-import { DeviceConfig, SensorConfig } from './types.js';
+import { DeviceConfig, SensorConfig, ReportSchedule } from './types.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
 import { Buffer } from 'buffer';
+import XLSX from 'xlsx';
+import nodemailer from 'nodemailer';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,7 +38,7 @@ let commandQueue: { [deviceId: string]: any[] } = {};
 
 
 // --- AUTH MIDDLEWARE (simple token check) ---
-const agentAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+const agentAuth = (req: express.Request, res: express.Response, next: NextFunction) => {
     const token = req.headers.authorization?.split(' ')[1];
     // This token MUST match the one in the agent's config.json
     if (token && token === "EjderMeteo_Rpi_SecretKey_2025!") { 
@@ -274,22 +281,22 @@ app.get('/api/sensors', async (req: express.Request, res: express.Response) => {
     })));
 });
 app.post('/api/sensors', async (req: express.Request, res: express.Response) => {
-    const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, readFrequency, isActive } = req.body;
+    const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive } = req.body;
     const id = `S${Date.now()}`;
     await db.run(
-        `INSERT INTO sensors (id, name, station_id, type, status, interface, parser_config, config, read_frequency, is_active, last_update) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        id, name, stationId, type, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfig, interfaceConfig, readFrequency, isActive, new Date().toISOString()
+        `INSERT INTO sensors (id, name, station_id, type, unit, status, interface, parser_config, config, read_frequency, is_active, last_update) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, name, stationId, type, unit, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfig, interfaceConfig, readFrequency, isActive, new Date().toISOString()
     );
     res.status(201).json({ id });
 });
 app.put('/api/sensors/:id', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
-    const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, readFrequency, isActive } = req.body;
+    const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive } = req.body;
     await db.run(
-        `UPDATE sensors SET name=?, station_id=?, type=?, status=?, interface=?, parser_config=?, config=?, read_frequency=?, is_active=?
+        `UPDATE sensors SET name=?, station_id=?, type=?, unit=?, status=?, interface=?, parser_config=?, config=?, read_frequency=?, is_active=?
          WHERE id = ?`,
-        name, stationId, type, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfig, interfaceConfig, readFrequency, isActive, id
+        name, stationId, type, unit, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfig, interfaceConfig, readFrequency, isActive, id
     );
     res.status(200).json({ id });
 });
@@ -458,7 +465,25 @@ app.delete('/api/reports/:id', async (req: express.Request, res: express.Respons
     await db.run("DELETE FROM reports WHERE id = ?", req.params.id);
     res.status(204).send();
 });
-app.get('/api/report-schedules', async (req: express.Request, res: express.Response) => res.json(await db.all("SELECT * FROM report_schedules")));
+app.get('/api/report-schedules', async (req: express.Request, res: express.Response) => {
+    const schedules = await db.all("SELECT * FROM report_schedules");
+    res.json(schedules.map(s => ({...s, reportConfig: JSON.parse(s.report_config || '{}')})));
+});
+app.post('/api/report-schedules', async (req: express.Request, res: express.Response) => {
+    const { name, frequency, time, recipient, reportConfig, isEnabled } = req.body;
+    const id = `SCH_${uuidv4()}`;
+    await db.run(
+        `INSERT INTO report_schedules (id, name, frequency, time, recipient, report_config, is_enabled) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        id, name, frequency, time, recipient, JSON.stringify(reportConfig), isEnabled
+    );
+    res.status(201).json({ id });
+});
+app.put('/api/report-schedules/:id', async (req: express.Request, res: express.Response) => {
+    const { id } = req.params;
+    const { isEnabled } = req.body; // For now, only supports toggling
+    await db.run("UPDATE report_schedules SET is_enabled = ? WHERE id = ?", isEnabled, id);
+    res.status(200).send('OK');
+});
 app.delete('/api/report-schedules/:id', async (req: express.Request, res: express.Response) => {
     await db.run("DELETE FROM report_schedules WHERE id = ?", req.params.id);
     res.status(204).send();
@@ -499,6 +524,111 @@ app.post('/api/analysis/snow-depth', async (req: express.Request, res: express.R
     res.status(202).json({ message: 'Snow depth analysis command queued.' });
 });
 
+
+// --- NODEMAILER TRANSPORTER & SCHEDULED REPORTS ---
+
+const transporter = nodemailer.createTransport({
+    host: process.env.EMAIL_HOST,
+    port: parseInt(process.env.EMAIL_PORT || '587', 10),
+    secure: (process.env.EMAIL_PORT === '465'), // true for 465, false for other ports
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+    },
+});
+
+transporter.verify(function(error, success) {
+    if (error) {
+        console.error("❌ E-posta gönderici yapılandırma hatası:", error.message);
+        console.warn("   -> .env dosyanızda EMAIL_HOST, EMAIL_PORT, EMAIL_USER, ve EMAIL_PASS değişkenlerini kontrol edin.");
+    } else {
+        console.log("✅ E-posta gönderici (Nodemailer) başarıyla yapılandırıldı ve hazır.");
+    }
+});
+
+
+async function sendEmail(recipient: string, subject: string, body: string, attachment?: { filename: string, content: Buffer, contentType: string }) {
+    console.log(`[E-POSTA GÖNDERİLİYOR] -> Alıcı: ${recipient}, Konu: ${subject}`);
+    
+    const mailOptions: nodemailer.SendMailOptions = {
+        from: `"ORION Gözlem Platformu" <${process.env.EMAIL_USER}>`,
+        to: recipient,
+        subject: subject,
+        html: `<p>${body}</p>`,
+    };
+
+    if (attachment) {
+        mailOptions.attachments = [
+            {
+                filename: attachment.filename,
+                content: attachment.content,
+                contentType: attachment.contentType,
+            },
+        ];
+    }
+
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log(`✅ [E-POSTA BAŞARILI] -> Alıcı: ${recipient}`);
+    } catch (error) {
+        console.error(`❌ [E-POSTA HATASI] -> Alıcı: ${recipient}, Hata:`, error);
+    }
+}
+
+async function checkAndSendScheduledReports() {
+    try {
+        const now = new Date();
+        const today = now.toISOString().split('T')[0]; // YYYY-MM-DD
+        const currentTime = now.toTimeString().substring(0, 5); // HH:MM
+
+        const dueSchedules = await db.all<ReportSchedule[]>(
+            "SELECT * FROM report_schedules WHERE is_enabled = 1 AND time = ? AND (last_run IS NULL OR last_run < ?)",
+            currentTime,
+            today
+        );
+        
+        for (const schedule of dueSchedules) {
+             const scheduleConfig = typeof schedule.reportConfig === 'string' ? JSON.parse(schedule.reportConfig) : schedule.reportConfig;
+
+            const readings = await db.all(`
+                SELECT r.timestamp, st.name as stationName, s.name as sensorName, s.type as sensorType, r.value, s.unit FROM readings r
+                JOIN sensors s ON r.sensor_id = s.id
+                JOIN stations st ON s.station_id = st.id
+                WHERE s.station_id IN (${scheduleConfig.selectedStations.map((s:string) => `'${s}'`).join(',')})
+                AND s.type IN (${scheduleConfig.selectedSensorTypes.map((t:string) => `'${t}'`).join(',')})
+                ORDER BY r.timestamp DESC
+            `);
+
+            const formattedData = readings.map(d => ({
+                'Zaman Damgası': d.timestamp,
+                'İstasyon': d.stationName,
+                'Sensör': d.sensorName,
+                'Sensör Tipi': d.sensorType,
+                'Değer': `${JSON.parse(d.value)} ${d.unit}`
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(formattedData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Rapor");
+            const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
+            
+            const filename = `${schedule.name.replace(/ /g, '_')}_${today}.xlsx`;
+            const emailBody = `Merhaba,<br><br><b>${schedule.name}</b> adlı otomatik raporunuz oluşturulmuş ve eke eklenmiştir.<br><br>Saygılarımızla,<br>ORION Gözlem Platformu`;
+
+            await sendEmail(schedule.recipient, `Otomatik Rapor: ${schedule.name}`, emailBody, {
+                filename,
+                content: buffer,
+                contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            });
+
+            await db.run("UPDATE report_schedules SET last_run = ? WHERE id = ?", today, schedule.id);
+        }
+    } catch (error) {
+        console.error("[Zamanlayıcı Hatası] Raporlar gönderilemedi:", error);
+    }
+}
+
+
 // --- SERVE FRONTEND ---
 // This robust path serves the frontend from a 'public' directory
 // inside the backend's root folder.
@@ -531,6 +661,10 @@ app.get('*', (req: express.Request, res: express.Response) => {
 async function startServer() {
     await openDb();
     await migrate();
+
+    // Start the scheduled report checker (runs every minute)
+    setInterval(checkAndSendScheduledReports, 60000);
+    console.log('✅ Rapor zamanlayıcısı aktif, her dakika kontrol edilecek.');
 
     app.listen(port, () => {
         console.log(`✅ Backend server listening on http://localhost:${port}`);

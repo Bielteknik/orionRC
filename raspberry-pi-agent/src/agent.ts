@@ -337,9 +337,9 @@ class Agent {
                 text: "Bu görüntüdeki kar ölçüm cetveline göre karla kaplı en yüksek sayısal değer nedir? Cevabını sadece `{\"snow_depth_cm\": SAYI}` formatında bir JSON olarak ver.",
             };
 
-            // Fix: Use correct model name 'gemini-2.5-flash-image' for image analysis
+            // Fix: Use correct model name 'gemini-2.5-flash' for image analysis and correct API call structure.
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash-image',
+                model: 'gemini-2.5-flash',
                 contents: { parts: [imagePart, textPart] },
             });
             

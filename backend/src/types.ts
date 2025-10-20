@@ -91,3 +91,29 @@ export interface Camera {
   fps: number;
   photos: string[];
 }
+
+export interface ReportConfig {
+  reportName: string;
+  reportType: 'Günlük' | 'Haftalık' | 'Aylık';
+  fileFormat: 'XLSX' | 'CSV';
+  dateRangePreset: 'last24h' | 'last7d' | 'last30d' | 'custom';
+  customDateRange: { start: string; end: string };
+  selectedStations: string[];
+  selectedSensorTypes: string[];
+  dataRules: {
+    includeMinMaxAvg: boolean;
+    includeAlerts: boolean;
+    includeUptime: boolean;
+  };
+}
+
+export interface ReportSchedule {
+    id: string;
+    name: string;
+    frequency: 'daily' | 'weekly' | 'monthly';
+    time: string;
+    recipient: string;
+    reportConfig: ReportConfig;
+    isEnabled: boolean;
+    lastRun?: string;
+}

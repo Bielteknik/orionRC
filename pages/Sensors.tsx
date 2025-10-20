@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Sensor, Station, SensorStatus } from '../types.ts';
+import { Sensor, Station, SensorStatus, Camera } from '../types.ts';
 import Card from '../components/common/Card.tsx';
 import { AddIcon, SearchIcon, EditIcon, DeleteIcon, ExclamationIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, SensorIcon as GenericSensorIcon, BrainIcon, RefreshIcon } from '../components/icons/Icons.tsx';
 import AddSensorDrawer from '../components/AddSensorDrawer.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
-import { getSensors, getStations, addSensor, updateSensor, deleteSensor, getDefinitions, forceReadSensor } from '../services/apiService.ts';
+import { getSensors, getStations, addSensor, updateSensor, deleteSensor, getDefinitions, forceReadSensor, getCameras } from '../services/apiService.ts';
 import DeleteConfirmationModal from '../components/DeleteConfirmationModal.tsx';
 
 const formatTimeAgo = (isoString: string | undefined): string => {
@@ -127,6 +127,7 @@ const SensorCard: React.FC<{
 const Sensors: React.FC = () => {
     const [sensors, setSensors] = useState<Sensor[]>([]);
     const [stations, setStations] = useState<Station[]>([]);
+    const [cameras, setCameras] = useState<Camera[]>([]);
     const [sensorTypes, setSensorTypes] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -144,10 +145,16 @@ const Sensors: React.FC = () => {
             // Don't set loading to true on refetch, only on initial load
             if (sensors.length === 0) setIsLoading(true);
             setError(null);
-            const [sensorsData, stationsData, definitionsData] = await Promise.all([getSensors(), getStations(), getDefinitions()]);
+            const [sensorsData, stationsData, definitionsData, camerasData] = await Promise.all([
+                getSensors(), 
+                getStations(), 
+                getDefinitions(),
+                getCameras()
+            ]);
             setSensors(sensorsData);
             setStations(stationsData);
             setSensorTypes(definitionsData.sensorTypes.map(st => st.name));
+            setCameras(camerasData);
         } catch (err) {
             setError('Sensör verileri yüklenirken bir hata oluştu.');
             console.error(err);
@@ -315,6 +322,7 @@ const Sensors: React.FC = () => {
                 stations={stations}
                 sensorTypes={sensorTypes}
                 sensorToEdit={sensorToEdit}
+                cameras={cameras}
             />
             <DeleteConfirmationModal
                 isOpen={isDeleteModalOpen}

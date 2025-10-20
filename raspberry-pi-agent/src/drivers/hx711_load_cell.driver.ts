@@ -25,7 +25,8 @@ export default class Hx711Driver implements ISensorDriver {
 
             console.log(`     -> HX711 okunuyor... Port: ${port}, Baud: ${baudrate}`);
             
-            const serialPort = new SerialPort({
+            // Fix: Cast serialPort to 'any' to resolve method not found errors due to potential type mismatches.
+            const serialPort: any = new SerialPort({
                 path: port,
                 baudRate: baudrate,
                 autoOpen: false, // Hata yönetimi için manuel açılacak
@@ -47,7 +48,7 @@ export default class Hx711Driver implements ISensorDriver {
                 serialPort.removeAllListeners('open');
                 
                 if (serialPort.isOpen) {
-                    serialPort.close(err => {
+                    serialPort.close((err: Error | null) => {
                         if (err) {
                            console.error(`     -> HATA (HX711): Port kapatılamadı (${port}): ${err.message}`);
                         }
@@ -97,7 +98,7 @@ export default class Hx711Driver implements ISensorDriver {
             parser.on('data', onData);
 
             // Portu aç
-            serialPort.open(err => {
+            serialPort.open((err: Error | null) => {
                 if (err) {
                     return onError(err);
                 }

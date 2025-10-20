@@ -22,10 +22,15 @@ export default class DFRobotUltDriver implements ISensorDriver {
                 console.error("     -> HATA (Lidar): Yapılandırmada 'port' belirtilmemiş.");
                 return resolve(null);
             }
+            
+            if (port === '/dev/tty0') {
+                console.warn(`     -> UYARI (Lidar): '/dev/tty0' portu genellikle sistem konsoludur. Lidar sensörünüzün farklı bir porta (örn: /dev/ttyS0, /dev/ttyAMA0 veya /dev/ttyUSB0) bağlı olması muhtemeldir. Lütfen yapılandırmayı kontrol edin.`);
+            }
 
             console.log(`     -> DFRobot Lidar okunuyor... Port: ${port}, Baud: ${baudrate}`);
             
-            const serialPort = new SerialPort({
+            // Fix: Cast serialPort to 'any' to resolve method not found errors due to potential type mismatches.
+            const serialPort: any = new SerialPort({
                 path: port,
                 baudRate: baudrate,
                 autoOpen: false,
@@ -44,7 +49,7 @@ export default class DFRobotUltDriver implements ISensorDriver {
                 serialPort.removeAllListeners('open');
                 
                 if (serialPort.isOpen) {
-                    serialPort.close(err => {
+                    serialPort.close((err: Error | null) => {
                         if (err) {
                            console.error(`     -> HATA (Lidar): Port kapatılamadı (${port}): ${err.message}`);
                         }
@@ -91,8 +96,12 @@ export default class DFRobotUltDriver implements ISensorDriver {
             };
 
             const onError = (err: Error | null) => {
-                if(err) {
-                    console.error(`     -> HATA (Lidar): Seri port hatası (${port}):`, err.message);
+                if (err) {
+                    console.error(`     -> HATA (Lidar): Seri port hatası (${port}): ${err.message}`);
+                    if (err.message.includes('Permission denied')) {
+                        console.error(`     -> ÖNERİ: Port erişim izni reddedildi. Agent'ı çalıştıran kullanıcının 'dialout' grubuna ekli olduğundan emin olun.`);
+                        console.error(`     -> Komut: 'sudo usermod -a -G dialout $USER' ve ardından sistemi yeniden başlatın.`);
+                    }
                 }
                 cleanupAndResolve(null);
             };
@@ -106,7 +115,7 @@ export default class DFRobotUltDriver implements ISensorDriver {
             serialPort.on('error', onError);
             serialPort.on('data', onData);
 
-            serialPort.open(err => {
+            serialPort.open((err: Error | null) => {
                 if (err) {
                     return onError(err);
                 }

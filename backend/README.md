@@ -9,6 +9,7 @@ This is the backend API for the ORION Observation Platform, built with Node.js, 
 -   Simple token-based authentication for IoT agents.
 -   Serves the frontend React application and its data.
 -   Manages stations, sensors, users, and alert rules.
+-   Sends scheduled reports via email.
 
 ## Setup & Running Locally
 
@@ -22,6 +23,10 @@ This is the backend API for the ORION Observation Platform, built with Node.js, 
     -   `PORT`: The port the server will run on (e.g., 8000).
     -   `DEVICE_AUTH_TOKEN`: A strong, secret token that your IoT agent will use to authenticate.
     -   `OPENWEATHER_API_KEY`: (Optional) Your API key from OpenWeatherMap.
+    -   `EMAIL_HOST`: Your SMTP server host (e.g., 'smtp.gmail.com').
+    -   `EMAIL_PORT`: Your SMTP port (e.g., 587 for TLS, 465 for SSL).
+    -   `EMAIL_USER`: Your email account username.
+    -   `EMAIL_PASS`: Your email account password or an app-specific password.
 
 3.  **Run in Development Mode:**
     ```bash
