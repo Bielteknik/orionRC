@@ -10,8 +10,36 @@ import DeleteConfirmationModal from '../components/DeleteConfirmationModal.tsx';
 declare const XLSX: any;
 
 interface SensorReading {
-    id: string; sensorId: string; stationId: string; sensorName: string; stationName: string; sensorType: string; value: number; unit: string; timestamp: string;
+    id: string;
+    sensorId: string;
+    stationId: string;
+    sensorName: string;
+    stationName: string;
+    sensorType: string;
+    value: any;
+    unit: string;
+    timestamp: string;
+    interface: string;
 }
+
+const formatReadingValue = (reading: SensorReading): string => {
+    const { value, sensorType, interface: sensorInterface } = reading;
+    if (value === null || value === undefined) return 'N/A';
+    if (typeof value !== 'object') return String(value);
+
+    if (sensorInterface === 'openweather') {
+        if (sensorType === 'Sıcaklık' && value.temperature !== undefined) {
+            return String(value.temperature);
+        }
+        if (sensorType === 'Nem' && value.humidity !== undefined) {
+            return String(value.humidity);
+        }
+    }
+    
+    const numericValue = Object.values(value).find(v => typeof v === 'number');
+    return numericValue !== undefined ? String(numericValue) : JSON.stringify(value);
+};
+
 
 const Reports: React.FC = () => {
     const [reports, setReports] = useState<Report[]>([]);
@@ -133,30 +161,47 @@ const Reports: React.FC = () => {
             alert('Bu rapor için yapılandırma bulunamadı, indirilemiyor.');
             return;
         }
-
-        const reportData = readings.filter(reading => {
+    
+        let reportData = readings.filter(reading => {
             const stationMatch = !config.selectedStations || config.selectedStations.length === 0 || config.selectedStations.includes(reading.stationId);
             const sensorTypeMatch = !config.selectedSensorTypes || config.selectedSensorTypes.length === 0 || config.selectedSensorTypes.includes(reading.sensorType);
             // Date filtering would be added here in a real scenario
             return stationMatch && sensorTypeMatch;
         });
-
-        const headers = {
-            timestamp: 'Zaman Damgası',
-            stationName: 'İstasyon',
-            sensorName: 'Sensör',
-            sensorType: 'Sensör Tipi',
-            value: 'Değer'
-        };
-
-        const formattedData = reportData.map(d => ({
-            [headers.timestamp]: d.timestamp,
-            [headers.stationName]: d.stationName,
-            [headers.sensorName]: d.sensorName,
-            [headers.sensorType]: d.sensorType,
-            [headers.value]: `${d.value} ${d.unit}`
-        }));
-
+    
+        // Apply grouping/sorting
+        if (config.dataRules.groupByStation || config.dataRules.groupBySensorType) {
+            reportData.sort((a, b) => {
+                if (config.dataRules.groupByStation) {
+                    const stationCompare = a.stationName.localeCompare(b.stationName, 'tr');
+                    if (stationCompare !== 0) return stationCompare;
+                }
+                if (config.dataRules.groupBySensorType) {
+                    const typeCompare = a.sensorType.localeCompare(b.sensorType, 'tr');
+                    if (typeCompare !== 0) return typeCompare;
+                }
+                // Finally sort by date descending
+                return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+            });
+        }
+    
+        const formattedData = reportData.map(d => {
+            const date = new Date(d.timestamp);
+            return {
+                'Tarih': date.toLocaleDateString('tr-TR'),
+                'Saat': date.toLocaleTimeString('tr-TR'),
+                'İstasyon': d.stationName,
+                'Sensör': d.sensorName,
+                'Sensör Tipi': d.sensorType,
+                'Değer': `${formatReadingValue(d)} ${d.unit || ''}`
+            };
+        });
+    
+        if (formattedData.length === 0) {
+            alert('Rapor için filtrelenen kriterlerde veri bulunamadı.');
+            return;
+        }
+    
         const safeFileName = report.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
         
         if (config.fileFormat === 'CSV') {

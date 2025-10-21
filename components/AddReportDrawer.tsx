@@ -24,6 +24,8 @@ const AddReportDrawer: React.FC<AddReportDrawerProps> = ({ isOpen, onClose, onSa
         includeMinMaxAvg: true,
         includeAlerts: true,
         includeUptime: false,
+        groupByStation: false,
+        groupBySensorType: false,
     });
     const [error, setError] = useState('');
 
@@ -47,7 +49,7 @@ const AddReportDrawer: React.FC<AddReportDrawerProps> = ({ isOpen, onClose, onSa
         setCustomDateRange({ start: today, end: today });
         setSelectedStations([]);
         setSelectedSensorTypes([]);
-        setDataRules({ includeMinMaxAvg: true, includeAlerts: true, includeUptime: false });
+        setDataRules({ includeMinMaxAvg: true, includeAlerts: true, includeUptime: false, groupByStation: false, groupBySensorType: false });
         setError('');
     };
 
@@ -184,6 +186,16 @@ const AddReportDrawer: React.FC<AddReportDrawerProps> = ({ isOpen, onClose, onSa
                                 <input type="checkbox" checked={dataRules.includeUptime} onChange={e => setDataRules(p => ({...p, includeUptime: e.target.checked}))} className="h-4 w-4 rounded border-gray-300 text-accent focus:ring-accent" />
                                 <span className="text-sm text-gray-700">Cihaz Çalışma Sürelerini (Uptime) Ekle</span>
                             </label>
+                            <div className="pt-2 mt-2 border-t">
+                                <label className="flex items-center space-x-3 cursor-pointer mt-3">
+                                    <input type="checkbox" checked={dataRules.groupByStation} onChange={e => setDataRules(p => ({...p, groupByStation: e.target.checked}))} className="h-4 w-4 rounded border-gray-300 text-accent focus:ring-accent" />
+                                    <span className="text-sm text-gray-700 font-medium">İstasyona Göre Grupla (Sırala)</span>
+                                </label>
+                                <label className="flex items-center space-x-3 cursor-pointer mt-3">
+                                    <input type="checkbox" checked={dataRules.groupBySensorType} onChange={e => setDataRules(p => ({...p, groupBySensorType: e.target.checked}))} className="h-4 w-4 rounded border-gray-300 text-accent focus:ring-accent" />
+                                    <span className="text-sm text-gray-700 font-medium">Sensör Tipine Göre Grupla (Sırala)</span>
+                                </label>
+                            </div>
                          </div>
                     </div>
                 </main>

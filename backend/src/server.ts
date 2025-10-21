@@ -1,7 +1,6 @@
 // Fix: Use explicit express.Request and express.Response types to avoid collision with global types.
-// Fix: Removed named imports for Request, Response, and NextFunction to avoid type collisions with global types. Using express.Request etc. instead.
-import express from 'express';
-import type { NextFunction } from 'express';
+// Fix: Re-introduced named imports for Request, Response, and NextFunction to ensure correct Express types are used.
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { openDb, db, migrate } from './database.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -38,7 +37,8 @@ let commandQueue: { [deviceId: string]: any[] } = {};
 
 
 // --- AUTH MIDDLEWARE (simple token check) ---
-const agentAuth = (req: express.Request, res: express.Response, next: NextFunction) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+const agentAuth = (req: Request, res: Response, next: NextFunction) => {
     const token = req.headers.authorization?.split(' ')[1];
     // This token MUST match the one in the agent's config.json
     if (token && token === "EjderMeteo_Rpi_SecretKey_2025!") { 
@@ -52,7 +52,8 @@ const agentAuth = (req: express.Request, res: express.Response, next: NextFuncti
 
 // --- AGENT-FACING ENDPOINTS ---
 
-app.get('/api/config/:deviceId', agentAuth, async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.get('/api/config/:deviceId', agentAuth, async (req: Request, res: Response) => {
     try {
         const { deviceId } = req.params;
 
@@ -97,7 +98,8 @@ app.get('/api/config/:deviceId', agentAuth, async (req: express.Request, res: ex
     }
 });
 
-app.post('/api/submit-reading', agentAuth, async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.post('/api/submit-reading', agentAuth, async (req: Request, res: Response) => {
     try {
         const { sensor: sensor_id, value } = req.body;
         const timestamp = new Date().toISOString();
@@ -113,7 +115,8 @@ app.post('/api/submit-reading', agentAuth, async (req: express.Request, res: exp
     }
 });
 
-app.get('/api/commands/:deviceId', agentAuth, (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.get('/api/commands/:deviceId', agentAuth, (req: Request, res: Response) => {
     const { deviceId } = req.params;
     const pendingCommands = commandQueue[deviceId]?.filter(cmd => cmd.status === 'pending') || [];
     if (pendingCommands.length > 0) {
@@ -124,7 +127,8 @@ app.get('/api/commands/:deviceId', agentAuth, (req: express.Request, res: expres
 });
 
 
-app.post('/api/commands/:id/:status', agentAuth, async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.post('/api/commands/:id/:status', agentAuth, async (req: Request, res: Response) => {
     const { id, status } = req.params;
     const commandId = parseInt(id, 10);
 
@@ -153,7 +157,8 @@ app.post('/api/commands/:id/:status', agentAuth, async (req: express.Request, re
 });
 
 
-app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: Request, res: Response) => {
     const { cameraId } = req.params;
     const { image, filename } = req.body; // base64 image and filename
 
@@ -181,7 +186,8 @@ app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: express.R
 });
 
 // Endpoint for analysis photos
-app.post('/api/analysis/upload-photo', agentAuth, async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.post('/api/analysis/upload-photo', agentAuth, async (req: Request, res: Response) => {
     const { cameraId, image, filename } = req.body;
     try {
         const uploadsDir = path.join(__dirname, '..', 'uploads', 'analysis');
@@ -199,7 +205,8 @@ app.post('/api/analysis/upload-photo', agentAuth, async (req: express.Request, r
 
 
 // --- FRONTEND-FACING ENDPOINTS ---
-app.get('/api/agent-status', (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.get('/api/agent-status', (req: Request, res: Response) => {
     // Add logic to check if lastUpdate is recent
     if (agentStatus.lastUpdate && (new Date().getTime() - new Date(agentStatus.lastUpdate).getTime()) > 30000) {
         agentStatus.status = 'offline';
@@ -208,7 +215,8 @@ app.get('/api/agent-status', (req: express.Request, res: express.Response) => {
 });
 
 // STATIONS
-app.get('/api/stations', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.get('/api/stations', async (req: Request, res: Response) => {
     const stationsFromDb = await db.all(`
         SELECT 
             st.*,
@@ -227,7 +235,8 @@ app.get('/api/stations', async (req: express.Request, res: express.Response) => 
     }));
     res.json(stations);
 });
-app.post('/api/stations', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.post('/api/stations', async (req: Request, res: Response) => {
     const { id, name, location, locationCoords, selectedSensorIds = [], selectedCameraIds = [] } = req.body;
     await db.run(
         "INSERT INTO stations (id, name, location, lat, lng, last_update) VALUES (?, ?, ?, ?, ?, ?)",
@@ -241,7 +250,8 @@ app.post('/api/stations', async (req: express.Request, res: express.Response) =>
     }
     res.status(201).json({ id });
 });
-app.put('/api/stations/:id', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.put('/api/stations/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, location, locationCoords, status } = req.body;
     await db.run(
@@ -250,14 +260,16 @@ app.put('/api/stations/:id', async (req: express.Request, res: express.Response)
     );
     res.status(200).json({ id });
 });
-app.delete('/api/stations/:id', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.delete('/api/stations/:id', async (req: Request, res: Response) => {
     await db.run("DELETE FROM stations WHERE id = ?", req.params.id);
     res.status(204).send();
 });
 
 
 // SENSORS
-app.get('/api/sensors', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.get('/api/sensors', async (req: Request, res: Response) => {
     const unassigned = req.query.unassigned === 'true';
     const query = unassigned
         ? "SELECT * FROM sensors WHERE station_id IS NULL OR station_id = ''"
@@ -280,7 +292,8 @@ app.get('/api/sensors', async (req: express.Request, res: express.Response) => {
         read_frequency: s.read_frequency,
     })));
 });
-app.post('/api/sensors', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.post('/api/sensors', async (req: Request, res: Response) => {
     const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive } = req.body;
     const id = `S${Date.now()}`;
     await db.run(
@@ -290,7 +303,8 @@ app.post('/api/sensors', async (req: express.Request, res: express.Response) => 
     );
     res.status(201).json({ id });
 });
-app.put('/api/sensors/:id', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.put('/api/sensors/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive } = req.body;
     await db.run(
@@ -300,11 +314,13 @@ app.put('/api/sensors/:id', async (req: express.Request, res: express.Response) 
     );
     res.status(200).json({ id });
 });
-app.delete('/api/sensors/:id', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.delete('/api/sensors/:id', async (req: Request, res: Response) => {
     await db.run("DELETE FROM sensors WHERE id = ?", req.params.id);
     res.status(204).send();
 });
-app.post('/api/sensors/:id/read', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.post('/api/sensors/:id/read', async (req: Request, res: Response) => {
     const { id } = req.params;
     const sensor = await db.get("SELECT * FROM sensors WHERE id = ?", id);
     if (!sensor || !sensor.station_id) {
@@ -322,7 +338,8 @@ app.post('/api/sensors/:id/read', async (req: express.Request, res: express.Resp
 });
 
 // CAMERAS
-app.get('/api/cameras', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.get('/api/cameras', async (req: Request, res: Response) => {
     const unassigned = req.query.unassigned === 'true';
     const query = unassigned
         ? "SELECT * FROM cameras WHERE station_id IS NULL OR station_id = ''"
@@ -342,7 +359,8 @@ app.get('/api/cameras', async (req: express.Request, res: express.Response) => {
         photos: JSON.parse(c.photos || '[]')
     })));
 });
-app.post('/api/cameras', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.post('/api/cameras', async (req: Request, res: Response) => {
     const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
     const id = `C${Date.now()}`;
     await db.run(
@@ -351,7 +369,8 @@ app.post('/api/cameras', async (req: express.Request, res: express.Response) => 
     );
     res.status(201).json({ id });
 });
-app.put('/api/cameras/:id', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.put('/api/cameras/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
     await db.run(
@@ -360,11 +379,13 @@ app.put('/api/cameras/:id', async (req: express.Request, res: express.Response) 
     );
     res.status(200).json({ id });
 });
-app.delete('/api/cameras/:id', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.delete('/api/cameras/:id', async (req: Request, res: Response) => {
     await db.run("DELETE FROM cameras WHERE id = ?", req.params.id);
     res.status(204).send();
 });
-app.post('/api/cameras/:id/capture', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.post('/api/cameras/:id/capture', async (req: Request, res: Response) => {
     const { id } = req.params;
     const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", id);
     if (!camera || !camera.station_id) {
@@ -382,7 +403,8 @@ app.post('/api/cameras/:id/capture', async (req: express.Request, res: express.R
 });
 
 // READINGS
-app.get('/api/readings', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.get('/api/readings', async (req: Request, res: Response) => {
     const readings = await db.all(`
         SELECT r.id, r.sensor_id as sensorId, s.name as sensorName, s.type as sensorType, s.unit, s.interface, st.id as stationId, st.name as stationName, r.value, r.timestamp 
         FROM readings r
@@ -393,7 +415,8 @@ app.get('/api/readings', async (req: express.Request, res: express.Response) => 
     `);
     res.json(readings.map(r => ({ ...r, value: JSON.parse(r.value || 'null') })));
 });
-app.get('/api/readings/history', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.get('/api/readings/history', async (req: Request, res: Response) => {
     const { stationIds: stationIdsQuery, sensorTypes: sensorTypesQuery } = req.query;
 
     if (typeof stationIdsQuery !== 'string' || typeof sensorTypesQuery !== 'string' || stationIdsQuery.length === 0 || sensorTypesQuery.length === 0) {
@@ -421,7 +444,8 @@ app.get('/api/readings/history', async (req: express.Request, res: express.Respo
 
 
 // DEFINITIONS & SETTINGS
-app.get('/api/definitions', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.get('/api/definitions', async (req: Request, res: Response) => {
     const [stationTypes, sensorTypes, cameraTypes] = await Promise.all([
         db.all("SELECT * FROM station_types"),
         db.all("SELECT * FROM sensor_types"),
@@ -429,47 +453,57 @@ app.get('/api/definitions', async (req: express.Request, res: express.Response) 
     ]);
     res.json({ stationTypes, sensorTypes, cameraTypes });
 });
-app.post('/api/definitions/:type', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.post('/api/definitions/:type', async (req: Request, res: Response) => {
     const { type } = req.params;
     const { name } = req.body;
     const result = await db.run(`INSERT INTO ${type} (name) VALUES (?)`, name);
     res.status(201).json({ id: result.lastID, name });
 });
-app.put('/api/definitions/:type/:id', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.put('/api/definitions/:type/:id', async (req: Request, res: Response) => {
     const { type, id } = req.params;
     const { name } = req.body;
     await db.run(`UPDATE ${type} SET name = ? WHERE id = ?`, name, id);
     res.status(200).json({ id, name });
 });
-app.delete('/api/definitions/:type/:id', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.delete('/api/definitions/:type/:id', async (req: Request, res: Response) => {
     const { type, id } = req.params;
     await db.run(`DELETE FROM ${type} WHERE id = ?`, id);
     res.status(204).send();
 });
 
-app.get('/api/alert-rules', async (req: express.Request, res: express.Response) => res.json(await db.all("SELECT * FROM alert_rules")));
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.get('/api/alert-rules', async (req: Request, res: Response) => res.json(await db.all("SELECT * FROM alert_rules")));
 
-app.get('/api/settings/global_read_frequency', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.get('/api/settings/global_read_frequency', async (req: Request, res: Response) => {
     const setting = await db.get("SELECT value FROM global_settings WHERE key = 'global_read_frequency_minutes'");
     res.json(setting || { value: '0' });
 });
-app.put('/api/settings/global_read_frequency', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.put('/api/settings/global_read_frequency', async (req: Request, res: Response) => {
     const { value } = req.body;
     await db.run("UPDATE global_settings SET value = ? WHERE key = 'global_read_frequency_minutes'", value);
     res.status(200).send('OK');
 });
 
 // REPORTS
-app.get('/api/reports', async (req: express.Request, res: express.Response) => res.json(await db.all("SELECT * FROM reports")));
-app.delete('/api/reports/:id', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.get('/api/reports', async (req: Request, res: Response) => res.json(await db.all("SELECT * FROM reports")));
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.delete('/api/reports/:id', async (req: Request, res: Response) => {
     await db.run("DELETE FROM reports WHERE id = ?", req.params.id);
     res.status(204).send();
 });
-app.get('/api/report-schedules', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.get('/api/report-schedules', async (req: Request, res: Response) => {
     const schedules = await db.all("SELECT * FROM report_schedules");
     res.json(schedules.map(s => ({...s, reportConfig: JSON.parse(s.report_config || '{}')})));
 });
-app.post('/api/report-schedules', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.post('/api/report-schedules', async (req: Request, res: Response) => {
     const { name, frequency, time, recipient, reportConfig, isEnabled } = req.body;
     const id = `SCH_${uuidv4()}`;
     await db.run(
@@ -478,30 +512,36 @@ app.post('/api/report-schedules', async (req: express.Request, res: express.Resp
     );
     res.status(201).json({ id });
 });
-app.put('/api/report-schedules/:id', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.put('/api/report-schedules/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { isEnabled } = req.body; // For now, only supports toggling
     await db.run("UPDATE report_schedules SET is_enabled = ? WHERE id = ?", isEnabled, id);
     res.status(200).send('OK');
 });
-app.delete('/api/report-schedules/:id', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.delete('/api/report-schedules/:id', async (req: Request, res: Response) => {
     await db.run("DELETE FROM report_schedules WHERE id = ?", req.params.id);
     res.status(204).send();
 });
 
 // NOTIFICATIONS
-app.get('/api/notifications', async (req: express.Request, res: express.Response) => res.json(await db.all("SELECT * FROM notifications ORDER BY timestamp DESC")));
-app.post('/api/notifications/mark-all-read', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.get('/api/notifications', async (req: Request, res: Response) => res.json(await db.all("SELECT * FROM notifications ORDER BY timestamp DESC")));
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.post('/api/notifications/mark-all-read', async (req: Request, res: Response) => {
     await db.run("UPDATE notifications SET is_read = 1 WHERE is_read = 0");
     res.status(200).send('OK');
 });
-app.delete('/api/notifications/clear-all', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.delete('/api/notifications/clear-all', async (req: Request, res: Response) => {
     await db.run("DELETE FROM notifications");
     res.status(204).send();
 });
 
 // ANALYSIS
-app.post('/api/analysis/snow-depth', async (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.post('/api/analysis/snow-depth', async (req: Request, res: Response) => {
     const { cameraId, virtualSensorId } = req.body;
     const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", cameraId);
 
@@ -575,6 +615,27 @@ async function sendEmail(recipient: string, subject: string, body: string, attac
     }
 }
 
+const formatReadingValueForReport = (reading: any): string => {
+    // Reading value is a JSON string from DB
+    const value = JSON.parse(reading.value || 'null');
+    const { type: sensorType, interface: sensorInterface } = reading;
+
+    if (value === null || value === undefined) return 'N/A';
+    if (typeof value !== 'object') return String(value);
+
+    if (sensorInterface === 'openweather') {
+        if (sensorType === 'Sıcaklık' && value.temperature !== undefined) {
+            return String(value.temperature);
+        }
+        if (sensorType === 'Nem' && value.humidity !== undefined) {
+            return String(value.humidity);
+        }
+    }
+    
+    const numericValue = Object.values(value).find(v => typeof v === 'number');
+    return numericValue !== undefined ? String(numericValue) : JSON.stringify(value);
+};
+
 async function checkAndSendScheduledReports() {
     try {
         const now = new Date();
@@ -590,22 +651,40 @@ async function checkAndSendScheduledReports() {
         for (const schedule of dueSchedules) {
              const scheduleConfig = typeof schedule.reportConfig === 'string' ? JSON.parse(schedule.reportConfig) : schedule.reportConfig;
 
-            const readings = await db.all(`
-                SELECT r.timestamp, st.name as stationName, s.name as sensorName, s.type as sensorType, r.value, s.unit FROM readings r
+            let readings = await db.all(`
+                SELECT r.timestamp, st.name as stationName, s.name as sensorName, s.type as sensorType, r.value, s.unit, s.interface FROM readings r
                 JOIN sensors s ON r.sensor_id = s.id
                 JOIN stations st ON s.station_id = st.id
                 WHERE s.station_id IN (${scheduleConfig.selectedStations.map((s:string) => `'${s}'`).join(',')})
                 AND s.type IN (${scheduleConfig.selectedSensorTypes.map((t:string) => `'${t}'`).join(',')})
                 ORDER BY r.timestamp DESC
             `);
+            
+            if (scheduleConfig.dataRules.groupByStation || scheduleConfig.dataRules.groupBySensorType) {
+                readings.sort((a: any, b: any) => {
+                    if (scheduleConfig.dataRules.groupByStation) {
+                        const stationCompare = a.stationName.localeCompare(b.stationName, 'tr');
+                        if (stationCompare !== 0) return stationCompare;
+                    }
+                    if (scheduleConfig.dataRules.groupBySensorType) {
+                        const typeCompare = a.sensorType.localeCompare(b.sensorType, 'tr');
+                        if (typeCompare !== 0) return typeCompare;
+                    }
+                    return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+                });
+            }
 
-            const formattedData = readings.map(d => ({
-                'Zaman Damgası': d.timestamp,
-                'İstasyon': d.stationName,
-                'Sensör': d.sensorName,
-                'Sensör Tipi': d.sensorType,
-                'Değer': `${JSON.parse(d.value)} ${d.unit}`
-            }));
+            const formattedData = readings.map((d: any) => {
+                const date = new Date(d.timestamp);
+                return {
+                    'Tarih': date.toLocaleDateString('tr-TR'),
+                    'Saat': date.toLocaleTimeString('tr-TR'),
+                    'İstasyon': d.stationName,
+                    'Sensör': d.sensorName,
+                    'Sensör Tipi': d.sensorType,
+                    'Değer': `${formatReadingValueForReport(d)} ${d.unit || ''}`
+                }
+            });
 
             const ws = XLSX.utils.json_to_sheet(formattedData);
             const wb = XLSX.utils.book_new();
@@ -644,7 +723,8 @@ fs.access(path.join(publicPath, 'index.html')).catch(() => {
 app.use(express.static(publicPath));
 
 // Catch-all to serve index.html for any other request (for client-side routing)
-app.get('*', (req: express.Request, res: express.Response) => {
+// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+app.get('*', (req: Request, res: Response) => {
     // Exclude API routes from being caught by this
     if (req.path.startsWith('/api/')) {
         return res.status(404).send('API endpoint not found.');

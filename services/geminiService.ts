@@ -26,12 +26,14 @@ let chatInstance: Chat = getChat();
  */
 export async function sendMessageToGemini(message: string): Promise<AsyncGenerator<GenerateContentResponse>> {
     try {
+        // Fix: Return the result of sendMessageStream directly.
         const result = await chatInstance.sendMessageStream({ message });
         return result;
     } catch (error) {
         console.error("Gemini chat error, restarting chat session:", error);
         // If the chat session has an issue, try creating a new one
         chatInstance = getChat();
+        // Fix: Return the result of sendMessageStream directly after restarting the chat.
         const result = await chatInstance.sendMessageStream({ message });
         return result;
     }

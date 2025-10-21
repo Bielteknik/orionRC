@@ -118,6 +118,8 @@ export interface ReportConfig {
     includeMinMaxAvg: boolean;
     includeAlerts: boolean;
     includeUptime: boolean;
+    groupByStation?: boolean;
+    groupBySensorType?: boolean;
   };
 }
 

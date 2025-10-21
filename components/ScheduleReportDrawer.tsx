@@ -29,7 +29,7 @@ const ScheduleReportDrawer: React.FC<ScheduleReportDrawerProps> = ({ isOpen, onC
         customDateRange: { start: today, end: today },
         selectedStations: [],
         selectedSensorTypes: [],
-        dataRules: { includeMinMaxAvg: true, includeAlerts: true, includeUptime: false },
+        dataRules: { includeMinMaxAvg: true, includeAlerts: true, includeUptime: false, groupByStation: false, groupBySensorType: false },
     });
     
     const [error, setError] = useState('');
@@ -56,7 +56,7 @@ const ScheduleReportDrawer: React.FC<ScheduleReportDrawerProps> = ({ isOpen, onC
         setReportConfig({
             reportName: '', reportType: 'Günlük', fileFormat: 'XLSX', dateRangePreset: 'last24h',
             customDateRange: { start: today, end: today }, selectedStations: [], selectedSensorTypes: [],
-            dataRules: { includeMinMaxAvg: true, includeAlerts: true, includeUptime: false },
+            dataRules: { includeMinMaxAvg: true, includeAlerts: true, includeUptime: false, groupByStation: false, groupBySensorType: false },
         });
         setError('');
     };
@@ -164,6 +164,33 @@ const ScheduleReportDrawer: React.FC<ScheduleReportDrawerProps> = ({ isOpen, onC
                                         </label>
                                     ))}
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-primary p-5 rounded-lg border border-gray-200">
+                        <h3 className="font-semibold text-lg text-gray-800 border-b border-gray-200 pb-2">Veri Kuralları</h3>
+                        <div className="pt-4 space-y-3">
+                            <label className="flex items-center space-x-3 cursor-pointer">
+                                <input type="checkbox" checked={reportConfig.dataRules.includeMinMaxAvg} onChange={e => setReportConfig(p => ({...p, dataRules: {...p.dataRules, includeMinMaxAvg: e.target.checked}}))} className="h-4 w-4 rounded border-gray-300 text-accent focus:ring-accent" />
+                                <span className="text-sm text-gray-700">Min/Maks/Ortalama Değerleri Ekle</span>
+                            </label>
+                            <label className="flex items-center space-x-3 cursor-pointer">
+                                <input type="checkbox" checked={reportConfig.dataRules.includeAlerts} onChange={e => setReportConfig(p => ({...p, dataRules: {...p.dataRules, includeAlerts: e.target.checked}}))} className="h-4 w-4 rounded border-gray-300 text-accent focus:ring-accent" />
+                                <span className="text-sm text-gray-700">Aktif Uyarıları Ekle</span>
+                            </label>
+                            <label className="flex items-center space-x-3 cursor-pointer">
+                                <input type="checkbox" checked={reportConfig.dataRules.includeUptime} onChange={e => setReportConfig(p => ({...p, dataRules: {...p.dataRules, includeUptime: e.target.checked}}))} className="h-4 w-4 rounded border-gray-300 text-accent focus:ring-accent" />
+                                <span className="text-sm text-gray-700">Cihaz Çalışma Sürelerini (Uptime) Ekle</span>
+                            </label>
+                             <div className="pt-2 mt-2 border-t">
+                                <label className="flex items-center space-x-3 cursor-pointer mt-3">
+                                    <input type="checkbox" checked={reportConfig.dataRules.groupByStation} onChange={e => setReportConfig(p => ({...p, dataRules: {...p.dataRules, groupByStation: e.target.checked}}))} className="h-4 w-4 rounded border-gray-300 text-accent focus:ring-accent" />
+                                    <span className="text-sm text-gray-700 font-medium">İstasyona Göre Grupla (Sırala)</span>
+                                </label>
+                                <label className="flex items-center space-x-3 cursor-pointer mt-3">
+                                    <input type="checkbox" checked={reportConfig.dataRules.groupBySensorType} onChange={e => setReportConfig(p => ({...p, dataRules: {...p.dataRules, groupBySensorType: e.target.checked}}))} className="h-4 w-4 rounded border-gray-300 text-accent focus:ring-accent" />
+                                    <span className="text-sm text-gray-700 font-medium">Sensör Tipine Göre Grupla (Sırala)</span>
+                                </label>
                             </div>
                         </div>
                     </div>
