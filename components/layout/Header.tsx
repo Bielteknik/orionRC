@@ -57,7 +57,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, notifications, onMarkAllNo
                         {isOnline && <div className="absolute inset-0 w-full h-full bg-green-500 rounded-sm animate-ping"></div>}
                     </div>
                     <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 hidden sm:block">
-                        Sistem Durumu: {isOnline ? 'Normal' : 'Çevrimdışı'}
+                        Sistem Durumu: {isOnline ? 'Çevrimiçi' : 'Çevrimdışı'}
                     </span>
                 </div>
 

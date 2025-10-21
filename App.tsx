@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Page, Notification } from './types.ts';
+import { Page, Notification, Station, Sensor } from './types.ts';
 // Fix: Corrected import paths, removing unnecessary extensions.
 import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
 import Dashboard from './pages/Dashboard';
+import Analysis from './pages/Analysis';
 import Stations from './pages/Stations';
 import Sensors from './pages/Sensors';
 import Cameras from './pages/Cameras';
@@ -14,7 +15,7 @@ import CameraDetail from './pages/CameraDetail';
 import { ThemeProvider } from './components/ThemeContext';
 import Notifications from './pages/Notifications';
 import GeminiAssistant from './components/GeminiAssistant';
-import { getNotifications, markAllNotificationsAsRead, getAgentStatus } from './services/apiService.ts';
+import { getNotifications, markAllNotificationsAsRead, getAgentStatus, getStations, getSensors } from './services/apiService.ts';
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.Dashboard);
@@ -22,6 +23,8 @@ const App: React.FC = () => {
   const [viewingCameraId, setViewingCameraId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [agentStatus, setAgentStatus] = useState<{ status: string; lastUpdate: string | null }>({ status: 'offline', lastUpdate: null });
+  const [stations, setStations] = useState<Station[]>([]);
+  const [sensors, setSensors] = useState<Sensor[]>([]);
 
 
   const fetchNotifications = useCallback(async () => {
@@ -39,7 +42,16 @@ const App: React.FC = () => {
         setAgentStatus(status);
     } catch (error) {
         console.error("Failed to fetch agent status:", error);
-        // Keep the old status on error to prevent flickering
+    }
+  }, []);
+
+  const fetchMainData = useCallback(async () => {
+    try {
+      const [stationsData, sensorsData] = await Promise.all([getStations(), getSensors()]);
+      setStations(stationsData);
+      setSensors(sensorsData);
+    } catch (error) {
+      console.error("Failed to fetch main data (stations, sensors):", error);
     }
   }, []);
 
@@ -47,13 +59,16 @@ const App: React.FC = () => {
   useEffect(() => {
     fetchNotifications();
     fetchAgentStatus();
+    fetchMainData();
     const notificationInterval = setInterval(fetchNotifications, 20000); 
     const agentStatusInterval = setInterval(fetchAgentStatus, 15000);
+    const mainDataInterval = setInterval(fetchMainData, 30000);
     return () => {
       clearInterval(notificationInterval);
       clearInterval(agentStatusInterval);
+      clearInterval(mainDataInterval);
     }
-  }, [fetchNotifications, fetchAgentStatus]);
+  }, [fetchNotifications, fetchAgentStatus, fetchMainData]);
 
   const handleMarkAllAsRead = async () => {
     try {
@@ -88,7 +103,9 @@ const App: React.FC = () => {
     }
     switch (currentPage) {
       case Page.Dashboard:
-        return <Dashboard onViewStationDetails={handleViewStationDetails} />;
+        return <Dashboard onViewStationDetails={handleViewStationDetails} stations={stations} sensors={sensors} />;
+      case Page.Analysis:
+        return <Analysis stations={stations} sensors={sensors} />;
       case Page.Stations:
         return <Stations onViewDetails={setViewingStationId} />;
       case Page.Sensors:
@@ -102,7 +119,7 @@ const App: React.FC = () => {
       case Page.Notifications:
         return <Notifications notifications={notifications} setNotifications={setNotifications} onRefresh={fetchNotifications} />;
       default:
-        return <Dashboard onViewStationDetails={handleViewStationDetails} />;
+        return <Dashboard onViewStationDetails={handleViewStationDetails} stations={stations} sensors={sensors} />;
     }
   };
 

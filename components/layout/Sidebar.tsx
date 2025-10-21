@@ -7,7 +7,8 @@ import {
     CameraIcon, 
     DefinitionsIcon, 
     ReportsIcon, 
-    CloudIcon 
+    CloudIcon,
+    BrainIcon
 } from '../icons/Icons.tsx';
 
 interface SidebarProps {
@@ -42,6 +43,7 @@ const NavItem: React.FC<NavItemProps> = ({ page, icon, label, currentPage, onCli
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, setCurrentPage }) => {
     const navItems = [
         { page: Page.Dashboard, icon: <DashboardIcon className="w-5 h-5" />, label: Page.Dashboard },
+        { page: Page.Analysis, icon: <BrainIcon className="w-5 h-5" />, label: Page.Analysis },
         { page: Page.Stations, icon: <StationIcon className="w-5 h-5" />, label: Page.Stations },
         { page: Page.Sensors, icon: <SensorIcon className="w-5 h-5" />, label: Page.Sensors },
         { page: Page.Cameras, icon: <CameraIcon className="w-5 h-5" />, label: Page.Cameras },
