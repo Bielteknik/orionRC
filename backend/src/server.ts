@@ -1,5 +1,4 @@
 // Fix: Use explicit express.Request and express.Response types to avoid collision with global types.
-// Fix: Re-introduced named imports for Request, Response, and NextFunction to ensure correct Express types are used.
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { openDb, db, migrate } from './database.js';
@@ -37,11 +36,11 @@ let commandQueue: { [deviceId: string]: any[] } = {};
 
 
 // --- AUTH MIDDLEWARE (simple token check) ---
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 const agentAuth = (req: Request, res: Response, next: NextFunction) => {
     const token = req.headers.authorization?.split(' ')[1];
     // This token MUST match the one in the agent's config.json
-    if (token && token === "EjderMeteo_Rpi_SecretKey_2025!") { 
+    if (token && token === (process.env.DEVICE_AUTH_TOKEN || "EjderMeteo_Rpi_SecretKey_2025!")) { 
         agentStatus.status = 'online';
         agentStatus.lastUpdate = new Date().toISOString();
         next();
@@ -52,7 +51,7 @@ const agentAuth = (req: Request, res: Response, next: NextFunction) => {
 
 // --- AGENT-FACING ENDPOINTS ---
 
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.get('/api/config/:deviceId', agentAuth, async (req: Request, res: Response) => {
     try {
         const { deviceId } = req.params;
@@ -98,7 +97,7 @@ app.get('/api/config/:deviceId', agentAuth, async (req: Request, res: Response) 
     }
 });
 
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.post('/api/submit-reading', agentAuth, async (req: Request, res: Response) => {
     try {
         const { sensor: sensor_id, value } = req.body;
@@ -115,7 +114,7 @@ app.post('/api/submit-reading', agentAuth, async (req: Request, res: Response) =
     }
 });
 
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.get('/api/commands/:deviceId', agentAuth, (req: Request, res: Response) => {
     const { deviceId } = req.params;
     const pendingCommands = commandQueue[deviceId]?.filter(cmd => cmd.status === 'pending') || [];
@@ -127,7 +126,7 @@ app.get('/api/commands/:deviceId', agentAuth, (req: Request, res: Response) => {
 });
 
 
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.post('/api/commands/:id/:status', agentAuth, async (req: Request, res: Response) => {
     const { id, status } = req.params;
     const commandId = parseInt(id, 10);
@@ -157,7 +156,7 @@ app.post('/api/commands/:id/:status', agentAuth, async (req: Request, res: Respo
 });
 
 
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: Request, res: Response) => {
     const { cameraId } = req.params;
     const { image, filename } = req.body; // base64 image and filename
@@ -186,7 +185,7 @@ app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: Request, 
 });
 
 // Endpoint for analysis photos
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.post('/api/analysis/upload-photo', agentAuth, async (req: Request, res: Response) => {
     const { cameraId, image, filename } = req.body;
     try {
@@ -205,7 +204,7 @@ app.post('/api/analysis/upload-photo', agentAuth, async (req: Request, res: Resp
 
 
 // --- FRONTEND-FACING ENDPOINTS ---
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.get('/api/agent-status', (req: Request, res: Response) => {
     // Add logic to check if lastUpdate is recent
     if (agentStatus.lastUpdate && (new Date().getTime() - new Date(agentStatus.lastUpdate).getTime()) > 30000) {
@@ -215,7 +214,7 @@ app.get('/api/agent-status', (req: Request, res: Response) => {
 });
 
 // STATIONS
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.get('/api/stations', async (req: Request, res: Response) => {
     const stationsFromDb = await db.all(`
         SELECT 
@@ -235,7 +234,7 @@ app.get('/api/stations', async (req: Request, res: Response) => {
     }));
     res.json(stations);
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.post('/api/stations', async (req: Request, res: Response) => {
     const { id, name, location, locationCoords, selectedSensorIds = [], selectedCameraIds = [] } = req.body;
     await db.run(
@@ -250,7 +249,7 @@ app.post('/api/stations', async (req: Request, res: Response) => {
     }
     res.status(201).json({ id });
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.put('/api/stations/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, location, locationCoords, status } = req.body;
@@ -260,7 +259,7 @@ app.put('/api/stations/:id', async (req: Request, res: Response) => {
     );
     res.status(200).json({ id });
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.delete('/api/stations/:id', async (req: Request, res: Response) => {
     await db.run("DELETE FROM stations WHERE id = ?", req.params.id);
     res.status(204).send();
@@ -268,7 +267,7 @@ app.delete('/api/stations/:id', async (req: Request, res: Response) => {
 
 
 // SENSORS
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.get('/api/sensors', async (req: Request, res: Response) => {
     const unassigned = req.query.unassigned === 'true';
     const query = unassigned
@@ -292,7 +291,7 @@ app.get('/api/sensors', async (req: Request, res: Response) => {
         read_frequency: s.read_frequency,
     })));
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.post('/api/sensors', async (req: Request, res: Response) => {
     const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive } = req.body;
     const id = `S${Date.now()}`;
@@ -303,7 +302,7 @@ app.post('/api/sensors', async (req: Request, res: Response) => {
     );
     res.status(201).json({ id });
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.put('/api/sensors/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive } = req.body;
@@ -314,12 +313,12 @@ app.put('/api/sensors/:id', async (req: Request, res: Response) => {
     );
     res.status(200).json({ id });
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.delete('/api/sensors/:id', async (req: Request, res: Response) => {
     await db.run("DELETE FROM sensors WHERE id = ?", req.params.id);
     res.status(204).send();
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.post('/api/sensors/:id/read', async (req: Request, res: Response) => {
     const { id } = req.params;
     const sensor = await db.get("SELECT * FROM sensors WHERE id = ?", id);
@@ -338,7 +337,7 @@ app.post('/api/sensors/:id/read', async (req: Request, res: Response) => {
 });
 
 // CAMERAS
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.get('/api/cameras', async (req: Request, res: Response) => {
     const unassigned = req.query.unassigned === 'true';
     const query = unassigned
@@ -359,7 +358,7 @@ app.get('/api/cameras', async (req: Request, res: Response) => {
         photos: JSON.parse(c.photos || '[]')
     })));
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.post('/api/cameras', async (req: Request, res: Response) => {
     const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
     const id = `C${Date.now()}`;
@@ -369,7 +368,7 @@ app.post('/api/cameras', async (req: Request, res: Response) => {
     );
     res.status(201).json({ id });
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.put('/api/cameras/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
@@ -379,12 +378,12 @@ app.put('/api/cameras/:id', async (req: Request, res: Response) => {
     );
     res.status(200).json({ id });
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.delete('/api/cameras/:id', async (req: Request, res: Response) => {
     await db.run("DELETE FROM cameras WHERE id = ?", req.params.id);
     res.status(204).send();
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.post('/api/cameras/:id/capture', async (req: Request, res: Response) => {
     const { id } = req.params;
     const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", id);
@@ -403,7 +402,7 @@ app.post('/api/cameras/:id/capture', async (req: Request, res: Response) => {
 });
 
 // READINGS
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.get('/api/readings', async (req: Request, res: Response) => {
     const readings = await db.all(`
         SELECT r.id, r.sensor_id as sensorId, s.name as sensorName, s.type as sensorType, s.unit, s.interface, st.id as stationId, st.name as stationName, r.value, r.timestamp 
@@ -415,7 +414,7 @@ app.get('/api/readings', async (req: Request, res: Response) => {
     `);
     res.json(readings.map(r => ({ ...r, value: JSON.parse(r.value || 'null') })));
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.get('/api/readings/history', async (req: Request, res: Response) => {
     const { stationIds: stationIdsQuery, sensorTypes: sensorTypesQuery } = req.query;
 
@@ -444,7 +443,7 @@ app.get('/api/readings/history', async (req: Request, res: Response) => {
 
 
 // DEFINITIONS & SETTINGS
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.get('/api/definitions', async (req: Request, res: Response) => {
     const [stationTypes, sensorTypes, cameraTypes] = await Promise.all([
         db.all("SELECT * FROM station_types"),
@@ -453,36 +452,36 @@ app.get('/api/definitions', async (req: Request, res: Response) => {
     ]);
     res.json({ stationTypes, sensorTypes, cameraTypes });
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.post('/api/definitions/:type', async (req: Request, res: Response) => {
     const { type } = req.params;
     const { name } = req.body;
     const result = await db.run(`INSERT INTO ${type} (name) VALUES (?)`, name);
     res.status(201).json({ id: result.lastID, name });
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.put('/api/definitions/:type/:id', async (req: Request, res: Response) => {
     const { type, id } = req.params;
     const { name } = req.body;
     await db.run(`UPDATE ${type} SET name = ? WHERE id = ?`, name, id);
     res.status(200).json({ id, name });
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.delete('/api/definitions/:type/:id', async (req: Request, res: Response) => {
     const { type, id } = req.params;
     await db.run(`DELETE FROM ${type} WHERE id = ?`, id);
     res.status(204).send();
 });
 
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.get('/api/alert-rules', async (req: Request, res: Response) => res.json(await db.all("SELECT * FROM alert_rules")));
 
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.get('/api/settings/global_read_frequency', async (req: Request, res: Response) => {
     const setting = await db.get("SELECT value FROM global_settings WHERE key = 'global_read_frequency_minutes'");
     res.json(setting || { value: '0' });
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.put('/api/settings/global_read_frequency', async (req: Request, res: Response) => {
     const { value } = req.body;
     await db.run("UPDATE global_settings SET value = ? WHERE key = 'global_read_frequency_minutes'", value);
@@ -490,19 +489,19 @@ app.put('/api/settings/global_read_frequency', async (req: Request, res: Respons
 });
 
 // REPORTS
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.get('/api/reports', async (req: Request, res: Response) => res.json(await db.all("SELECT * FROM reports")));
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.delete('/api/reports/:id', async (req: Request, res: Response) => {
     await db.run("DELETE FROM reports WHERE id = ?", req.params.id);
     res.status(204).send();
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.get('/api/report-schedules', async (req: Request, res: Response) => {
     const schedules = await db.all("SELECT * FROM report_schedules");
     res.json(schedules.map(s => ({...s, reportConfig: JSON.parse(s.report_config || '{}')})));
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.post('/api/report-schedules', async (req: Request, res: Response) => {
     const { name, frequency, time, recipient, reportConfig, isEnabled } = req.body;
     const id = `SCH_${uuidv4()}`;
@@ -512,35 +511,35 @@ app.post('/api/report-schedules', async (req: Request, res: Response) => {
     );
     res.status(201).json({ id });
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.put('/api/report-schedules/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { isEnabled } = req.body; // For now, only supports toggling
     await db.run("UPDATE report_schedules SET is_enabled = ? WHERE id = ?", isEnabled, id);
     res.status(200).send('OK');
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.delete('/api/report-schedules/:id', async (req: Request, res: Response) => {
     await db.run("DELETE FROM report_schedules WHERE id = ?", req.params.id);
     res.status(204).send();
 });
 
 // NOTIFICATIONS
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.get('/api/notifications', async (req: Request, res: Response) => res.json(await db.all("SELECT * FROM notifications ORDER BY timestamp DESC")));
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.post('/api/notifications/mark-all-read', async (req: Request, res: Response) => {
-    await db.run("UPDATE notifications SET is_read = 1 WHERE is_read = 0");
+    await db.run("UPDATE notifications SET is_read = 0 WHERE is_read = 1");
     res.status(200).send('OK');
 });
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.delete('/api/notifications/clear-all', async (req: Request, res: Response) => {
     await db.run("DELETE FROM notifications");
     res.status(204).send();
 });
 
 // ANALYSIS
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.post('/api/analysis/snow-depth', async (req: Request, res: Response) => {
     const { cameraId, virtualSensorId } = req.body;
     const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", cameraId);
@@ -723,7 +722,7 @@ fs.access(path.join(publicPath, 'index.html')).catch(() => {
 app.use(express.static(publicPath));
 
 // Catch-all to serve index.html for any other request (for client-side routing)
-// Fix: Changed req and res types from express.Request/Response to Request/Response from named imports.
+// Fix: Use express.Request and express.Response to avoid type collisions.
 app.get('*', (req: Request, res: Response) => {
     // Exclude API routes from being caught by this
     if (req.path.startsWith('/api/')) {

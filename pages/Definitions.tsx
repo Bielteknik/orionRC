@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Card from '../components/common/Card.tsx';
-import { AddIcon, EditIcon, DeleteIcon, StationIcon } from '../components/icons/Icons.tsx';
+import { AddIcon, EditIcon, DeleteIcon, StationIcon, BrainIcon } from '../components/icons/Icons.tsx';
 import { AlertRule, Severity, AlertCondition, Station, Sensor } from '../types.ts';
 import { getStations, getSensors, getDefinitions, getAlertRules, addDefinition, updateDefinition, deleteDefinition, getGlobalReadFrequency, setGlobalReadFrequency } from '../services/apiService.ts';
 import DefinitionModal from '../components/DefinitionModal.tsx';
@@ -129,6 +129,7 @@ const Definitions: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [globalReadFrequency, setGlobalReadFrequencyState] = useState('0');
     const [isSavingFreq, setIsSavingFreq] = useState(false);
+    const [activeAgent, setActiveAgent] = useState('ts');
 
     const [isDefModalOpen, setIsDefModalOpen] = useState(false);
     const [modalConfig, setModalConfig] = useState<{
@@ -264,7 +265,7 @@ const Definitions: React.FC = () => {
                 onDelete={(id) => handleDeleteDefinition('camera_types', id)}
             />
             
-            <div className="lg:col-span-3">
+            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card>
                     <h3 className="text-xl font-semibold text-gray-900 mb-4">Genel Ayarlar</h3>
                     <div className="max-w-md space-y-2">
@@ -288,6 +289,27 @@ const Definitions: React.FC = () => {
                             className="px-4 py-2 bg-accent text-white rounded-lg hover:bg-orange-600 font-semibold disabled:bg-gray-400">
                             {isSavingFreq ? 'Kaydediliyor...' : 'Kaydet'}
                         </button>
+                    </div>
+                </Card>
+                 <Card>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-4">Agent Yazılım Seçimi</h3>
+                    <div className="space-y-3">
+                        <p className="text-sm text-muted">Raspberry Pi üzerinde çalışacak olan agent yazılımını seçin. Her iki agent da aynı işlevselliği sunar.</p>
+                        <div className="flex gap-2 p-1 bg-secondary rounded-lg">
+                            <button 
+                                onClick={() => setActiveAgent('ts')}
+                                className={`w-full text-center px-4 py-2 rounded-md font-semibold transition-all duration-200 ${activeAgent === 'ts' ? 'bg-white shadow text-accent' : 'text-muted hover:bg-white/50'}`}>
+                                TypeScript
+                            </button>
+                             <button 
+                                onClick={() => setActiveAgent('py')}
+                                className={`w-full text-center px-4 py-2 rounded-md font-semibold transition-all duration-200 ${activeAgent === 'py' ? 'bg-white shadow text-accent' : 'text-muted hover:bg-white/50'}`}>
+                                Python
+                            </button>
+                        </div>
+                        <p className="text-xs text-center text-muted p-2">
+                            Seçiminiz, ilgili agent'ın <code className="text-xs bg-gray-200 px-1 rounded">README.md</code> dosyasındaki kurulum adımlarını takip etmeniz gerektiğini belirtir.
+                        </p>
                     </div>
                 </Card>
             </div>

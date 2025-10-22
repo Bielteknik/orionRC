@@ -1,0 +1,5 @@
+requests
+pyserial
+smbus2
+python-dotenv
+google-generativeai
