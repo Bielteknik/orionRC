@@ -3,3 +3,5 @@ pyserial
 smbus2
 python-dotenv
 google-generativeai
+sensirion-i2c-driver
+sensirion-i2c-sht3x
