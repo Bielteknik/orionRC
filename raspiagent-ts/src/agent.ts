@@ -68,6 +68,13 @@ class Agent {
         setInterval(() => this.processSensors(), SENSOR_READ_INTERVAL);
         setInterval(() => this.checkForCommands(), COMMAND_POLL_INTERVAL);
     }
+    
+    public shutdown() {
+        console.log("\n🚫 Agent durduruluyor... Kaynaklar temizleniyor.");
+        // In the future, any open connections or hardware resources can be closed here.
+        // For now, the drivers are self-contained and don't hold open resources.
+        console.log("✅ Güvenli çıkış tamamlandı.");
+    }
 
     private async fetchConfig() {
         console.log("🔄 Yapılandırma sunucudan alınıyor...");
@@ -339,7 +346,7 @@ class Agent {
 
             // Fix: Use correct model name 'gemini-2.5-flash-image' for image analysis and correct API call structure.
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash-image',
+                model: 'gemini-2.5-flash',
                 contents: { parts: [imagePart, textPart] },
             });
             
@@ -445,6 +452,14 @@ async function main() {
         }
 
         const agent = new Agent(localConfig);
+        
+        // Handle graceful shutdown on Ctrl+C
+        // Fix: Property 'on' and 'exit' do not exist on type 'Process'. Cast to 'any' to bypass TypeScript type error.
+        (process as any).on('SIGINT', () => {
+            agent.shutdown();
+            (process as any).exit(0);
+        });
+
         agent.start().catch(error => {
             console.error("Agent çalışırken kritik bir hata oluştu:", error);
             // Fix: Cast process to 'any' to bypass TypeScript type error for 'exit'.

@@ -1,5 +1,6 @@
-// Fix: Use explicit express.Request and express.Response types to avoid collision with global types.
-import express, { NextFunction } from 'express';
+
+// Fix: Use explicit Request and Response types from express to avoid collision with global types.
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { openDb, db, migrate } from './database.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -36,8 +37,8 @@ let commandQueue: { [deviceId: string]: any[] } = {};
 
 
 // --- AUTH MIDDLEWARE (simple token check) ---
-// Fix: Use express.Request and express.Response to avoid type collisions.
-const agentAuth = (req: express.Request, res: express.Response, next: NextFunction) => {
+// Fix: Use express.Request and express.Response from express to avoid type collisions with global DOM types.
+const agentAuth = (req: Request, res: Response, next: NextFunction) => {
     const token = req.headers.authorization?.split(' ')[1];
     // This token MUST match the one in the agent's config.json
     if (token && token === (process.env.DEVICE_AUTH_TOKEN || "EjderMeteo_Rpi_SecretKey_2025!")) { 
@@ -51,8 +52,7 @@ const agentAuth = (req: express.Request, res: express.Response, next: NextFuncti
 
 // --- AGENT-FACING ENDPOINTS ---
 
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.get('/api/config/:deviceId', agentAuth, async (req: express.Request, res: express.Response) => {
+app.get('/api/config/:deviceId', agentAuth, async (req: Request, res: Response) => {
     try {
         const { deviceId } = req.params;
 
@@ -97,12 +97,46 @@ app.get('/api/config/:deviceId', agentAuth, async (req: express.Request, res: ex
     }
 });
 
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.post('/api/submit-reading', agentAuth, async (req: express.Request, res: express.Response) => {
+app.post('/api/submit-reading', agentAuth, async (req: Request, res: Response) => {
     try {
-        const { sensor: sensor_id, value } = req.body;
+        const { sensor: sensor_id, value: rawValue } = req.body;
+
+        const sensor = await db.get("SELECT reference_value, reference_operation FROM sensors WHERE id = ?", sensor_id);
+        if (!sensor) {
+            console.warn(`Reading submitted for unknown sensor ID: ${sensor_id}`);
+            return res.status(404).json({ error: 'Sensor not found.' });
+        }
+
+        let processedValue = rawValue;
+        const refVal = sensor.reference_value;
+        const refOp = sensor.reference_operation;
+
+        // Apply reference value logic if applicable
+        if (refVal !== null && refVal !== 999 && refOp && (refOp === 'add' || refOp === 'subtract')) {
+             if (typeof rawValue === 'object' && rawValue !== null) {
+                // Find the first numeric value in the object to modify
+                const keyToModify = Object.keys(rawValue).find(k => typeof rawValue[k] === 'number');
+                if (keyToModify) {
+                    const originalNumericValue = rawValue[keyToModify];
+                    let calculatedNumericValue;
+                    if (refOp === 'subtract') {
+                        calculatedNumericValue = refVal - originalNumericValue;
+                    } else { // 'add'
+                        calculatedNumericValue = refVal + originalNumericValue;
+                    }
+                    processedValue = { ...rawValue, [keyToModify]: calculatedNumericValue };
+                }
+            } else if (typeof rawValue === 'number') {
+                if (refOp === 'subtract') {
+                    processedValue = refVal - rawValue;
+                } else { // 'add'
+                    processedValue = refVal + rawValue;
+                }
+            }
+        }
+        
         const timestamp = new Date().toISOString();
-        const valueStr = JSON.stringify(value);
+        const valueStr = JSON.stringify(processedValue);
 
         await db.run("INSERT INTO readings (sensor_id, value, timestamp) VALUES (?, ?, ?)", sensor_id, valueStr, timestamp);
         await db.run("UPDATE sensors SET value = ?, last_update = ? WHERE id = ?", valueStr, timestamp, sensor_id);
@@ -114,8 +148,7 @@ app.post('/api/submit-reading', agentAuth, async (req: express.Request, res: exp
     }
 });
 
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.get('/api/commands/:deviceId', agentAuth, (req: express.Request, res: express.Response) => {
+app.get('/api/commands/:deviceId', agentAuth, (req: Request, res: Response) => {
     const { deviceId } = req.params;
     const pendingCommands = commandQueue[deviceId]?.filter(cmd => cmd.status === 'pending') || [];
     if (pendingCommands.length > 0) {
@@ -126,8 +159,7 @@ app.get('/api/commands/:deviceId', agentAuth, (req: express.Request, res: expres
 });
 
 
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.post('/api/commands/:id/:status', agentAuth, async (req: express.Request, res: express.Response) => {
+app.post('/api/commands/:id/:status', agentAuth, async (req: Request, res: Response) => {
     const { id, status } = req.params;
     const commandId = parseInt(id, 10);
 
@@ -156,8 +188,7 @@ app.post('/api/commands/:id/:status', agentAuth, async (req: express.Request, re
 });
 
 
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: express.Request, res: express.Response) => {
+app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: Request, res: Response) => {
     const { cameraId } = req.params;
     const { image, filename } = req.body; // base64 image and filename
 
@@ -185,8 +216,7 @@ app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: express.R
 });
 
 // Endpoint for analysis photos
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.post('/api/analysis/upload-photo', agentAuth, async (req: express.Request, res: express.Response) => {
+app.post('/api/analysis/upload-photo', agentAuth, async (req: Request, res: Response) => {
     const { cameraId, image, filename } = req.body;
     try {
         const uploadsDir = path.join(__dirname, '..', 'uploads', 'analysis');
@@ -204,8 +234,7 @@ app.post('/api/analysis/upload-photo', agentAuth, async (req: express.Request, r
 
 
 // --- FRONTEND-FACING ENDPOINTS ---
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.get('/api/agent-status', (req: express.Request, res: express.Response) => {
+app.get('/api/agent-status', (req: Request, res: Response) => {
     // Add logic to check if lastUpdate is recent
     if (agentStatus.lastUpdate && (new Date().getTime() - new Date(agentStatus.lastUpdate).getTime()) > 30000) {
         agentStatus.status = 'offline';
@@ -214,8 +243,7 @@ app.get('/api/agent-status', (req: express.Request, res: express.Response) => {
 });
 
 // STATIONS
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.get('/api/stations', async (req: express.Request, res: express.Response) => {
+app.get('/api/stations', async (req: Request, res: Response) => {
     const stationsFromDb = await db.all(`
         SELECT 
             st.*,
@@ -234,8 +262,7 @@ app.get('/api/stations', async (req: express.Request, res: express.Response) => 
     }));
     res.json(stations);
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.post('/api/stations', async (req: express.Request, res: express.Response) => {
+app.post('/api/stations', async (req: Request, res: Response) => {
     const { id, name, location, locationCoords, selectedSensorIds = [], selectedCameraIds = [] } = req.body;
     await db.run(
         "INSERT INTO stations (id, name, location, lat, lng, last_update) VALUES (?, ?, ?, ?, ?, ?)",
@@ -249,8 +276,7 @@ app.post('/api/stations', async (req: express.Request, res: express.Response) =>
     }
     res.status(201).json({ id });
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.put('/api/stations/:id', async (req: express.Request, res: express.Response) => {
+app.put('/api/stations/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, location, locationCoords, status } = req.body;
     await db.run(
@@ -259,22 +285,19 @@ app.put('/api/stations/:id', async (req: express.Request, res: express.Response)
     );
     res.status(200).json({ id });
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.delete('/api/stations/:id', async (req: express.Request, res: express.Response) => {
+app.delete('/api/stations/:id', async (req: Request, res: Response) => {
     await db.run("DELETE FROM stations WHERE id = ?", req.params.id);
     res.status(204).send();
 });
 
 
 // SENSORS
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.get('/api/sensors', async (req: express.Request, res: express.Response) => {
+app.get('/api/sensors', async (req: Request, res: Response) => {
     const unassigned = req.query.unassigned === 'true';
     const query = unassigned
         ? "SELECT * FROM sensors WHERE station_id IS NULL OR station_id = ''"
         : "SELECT * FROM sensors";
     const sensors = await db.all(query);
-    // Map snake_case from DB to camelCase for frontend
     res.json(sensors.map(s => ({
         id: s.id,
         name: s.name,
@@ -289,37 +312,35 @@ app.get('/api/sensors', async (req: express.Request, res: express.Response) => {
         config: JSON.parse(s.config || '{}'),
         parser_config: JSON.parse(s.parser_config || '{}'),
         read_frequency: s.read_frequency,
+        referenceValue: s.reference_value,
+        referenceOperation: s.reference_operation,
     })));
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.post('/api/sensors', async (req: express.Request, res: express.Response) => {
-    const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive } = req.body;
+app.post('/api/sensors', async (req: Request, res: Response) => {
+    const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
     const id = `S${Date.now()}`;
     await db.run(
-        `INSERT INTO sensors (id, name, station_id, type, unit, status, interface, parser_config, config, read_frequency, is_active, last_update) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        id, name, stationId, type, unit, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfig, interfaceConfig, readFrequency, isActive, new Date().toISOString()
+        `INSERT INTO sensors (id, name, station_id, type, unit, status, interface, parser_config, config, read_frequency, is_active, last_update, reference_value, reference_operation) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, name, stationId, type, unit, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfig, interfaceConfig, readFrequency, isActive, new Date().toISOString(), referenceValue, referenceOperation
     );
     res.status(201).json({ id });
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.put('/api/sensors/:id', async (req: express.Request, res: express.Response) => {
+app.put('/api/sensors/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive } = req.body;
+    const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
     await db.run(
-        `UPDATE sensors SET name=?, station_id=?, type=?, unit=?, status=?, interface=?, parser_config=?, config=?, read_frequency=?, is_active=?
+        `UPDATE sensors SET name=?, station_id=?, type=?, unit=?, status=?, interface=?, parser_config=?, config=?, read_frequency=?, is_active=?, reference_value=?, reference_operation=?
          WHERE id = ?`,
-        name, stationId, type, unit, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfig, interfaceConfig, readFrequency, isActive, id
+        name, stationId, type, unit, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfig, interfaceConfig, readFrequency, isActive, referenceValue, referenceOperation, id
     );
     res.status(200).json({ id });
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.delete('/api/sensors/:id', async (req: express.Request, res: express.Response) => {
+app.delete('/api/sensors/:id', async (req: Request, res: Response) => {
     await db.run("DELETE FROM sensors WHERE id = ?", req.params.id);
     res.status(204).send();
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.post('/api/sensors/:id/read', async (req: express.Request, res: express.Response) => {
+app.post('/api/sensors/:id/read', async (req: Request, res: Response) => {
     const { id } = req.params;
     const sensor = await db.get("SELECT * FROM sensors WHERE id = ?", id);
     if (!sensor || !sensor.station_id) {
@@ -337,8 +358,7 @@ app.post('/api/sensors/:id/read', async (req: express.Request, res: express.Resp
 });
 
 // CAMERAS
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.get('/api/cameras', async (req: express.Request, res: express.Response) => {
+app.get('/api/cameras', async (req: Request, res: Response) => {
     const unassigned = req.query.unassigned === 'true';
     const query = unassigned
         ? "SELECT * FROM cameras WHERE station_id IS NULL OR station_id = ''"
@@ -358,8 +378,7 @@ app.get('/api/cameras', async (req: express.Request, res: express.Response) => {
         photos: JSON.parse(c.photos || '[]')
     })));
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.post('/api/cameras', async (req: express.Request, res: express.Response) => {
+app.post('/api/cameras', async (req: Request, res: Response) => {
     const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
     const id = `C${Date.now()}`;
     await db.run(
@@ -368,8 +387,7 @@ app.post('/api/cameras', async (req: express.Request, res: express.Response) => 
     );
     res.status(201).json({ id });
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.put('/api/cameras/:id', async (req: express.Request, res: express.Response) => {
+app.put('/api/cameras/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
     await db.run(
@@ -378,13 +396,11 @@ app.put('/api/cameras/:id', async (req: express.Request, res: express.Response) 
     );
     res.status(200).json({ id });
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.delete('/api/cameras/:id', async (req: express.Request, res: express.Response) => {
+app.delete('/api/cameras/:id', async (req: Request, res: Response) => {
     await db.run("DELETE FROM cameras WHERE id = ?", req.params.id);
     res.status(204).send();
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.post('/api/cameras/:id/capture', async (req: express.Request, res: express.Response) => {
+app.post('/api/cameras/:id/capture', async (req: Request, res: Response) => {
     const { id } = req.params;
     const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", id);
     if (!camera || !camera.station_id) {
@@ -402,8 +418,7 @@ app.post('/api/cameras/:id/capture', async (req: express.Request, res: express.R
 });
 
 // READINGS
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.get('/api/readings', async (req: express.Request, res: express.Response) => {
+app.get('/api/readings', async (req: Request, res: Response) => {
     const readings = await db.all(`
         SELECT r.id, r.sensor_id as sensorId, s.name as sensorName, s.type as sensorType, s.unit, s.interface, st.id as stationId, st.name as stationName, r.value, r.timestamp 
         FROM readings r
@@ -414,8 +429,7 @@ app.get('/api/readings', async (req: express.Request, res: express.Response) => 
     `);
     res.json(readings.map(r => ({ ...r, value: JSON.parse(r.value || 'null') })));
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.get('/api/readings/history', async (req: express.Request, res: express.Response) => {
+app.get('/api/readings/history', async (req: Request, res: Response) => {
     const { stationIds: stationIdsQuery, sensorTypes: sensorTypesQuery } = req.query;
 
     if (typeof stationIdsQuery !== 'string' || typeof sensorTypesQuery !== 'string' || stationIdsQuery.length === 0 || sensorTypesQuery.length === 0) {
@@ -443,8 +457,7 @@ app.get('/api/readings/history', async (req: express.Request, res: express.Respo
 
 
 // DEFINITIONS & SETTINGS
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.get('/api/definitions', async (req: express.Request, res: express.Response) => {
+app.get('/api/definitions', async (req: Request, res: Response) => {
     const [stationTypes, sensorTypes, cameraTypes] = await Promise.all([
         db.all("SELECT * FROM station_types"),
         db.all("SELECT * FROM sensor_types"),
@@ -452,57 +465,47 @@ app.get('/api/definitions', async (req: express.Request, res: express.Response) 
     ]);
     res.json({ stationTypes, sensorTypes, cameraTypes });
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.post('/api/definitions/:type', async (req: express.Request, res: express.Response) => {
+app.post('/api/definitions/:type', async (req: Request, res: Response) => {
     const { type } = req.params;
     const { name } = req.body;
     const result = await db.run(`INSERT INTO ${type} (name) VALUES (?)`, name);
     res.status(201).json({ id: result.lastID, name });
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.put('/api/definitions/:type/:id', async (req: express.Request, res: express.Response) => {
+app.put('/api/definitions/:type/:id', async (req: Request, res: Response) => {
     const { type, id } = req.params;
     const { name } = req.body;
     await db.run(`UPDATE ${type} SET name = ? WHERE id = ?`, name, id);
     res.status(200).json({ id, name });
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.delete('/api/definitions/:type/:id', async (req: express.Request, res: express.Response) => {
+app.delete('/api/definitions/:type/:id', async (req: Request, res: Response) => {
     const { type, id } = req.params;
     await db.run(`DELETE FROM ${type} WHERE id = ?`, id);
     res.status(204).send();
 });
 
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.get('/api/alert-rules', async (req: express.Request, res: express.Response) => res.json(await db.all("SELECT * FROM alert_rules")));
+app.get('/api/alert-rules', async (req: Request, res: Response) => res.json(await db.all("SELECT * FROM alert_rules")));
 
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.get('/api/settings/global_read_frequency', async (req: express.Request, res: express.Response) => {
+app.get('/api/settings/global_read_frequency', async (req: Request, res: Response) => {
     const setting = await db.get("SELECT value FROM global_settings WHERE key = 'global_read_frequency_minutes'");
     res.json(setting || { value: '0' });
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.put('/api/settings/global_read_frequency', async (req: express.Request, res: express.Response) => {
+app.put('/api/settings/global_read_frequency', async (req: Request, res: Response) => {
     const { value } = req.body;
     await db.run("UPDATE global_settings SET value = ? WHERE key = 'global_read_frequency_minutes'", value);
     res.status(200).send('OK');
 });
 
 // REPORTS
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.get('/api/reports', async (req: express.Request, res: express.Response) => res.json(await db.all("SELECT * FROM reports")));
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.delete('/api/reports/:id', async (req: express.Request, res: express.Response) => {
+app.get('/api/reports', async (req: Request, res: Response) => res.json(await db.all("SELECT * FROM reports")));
+app.delete('/api/reports/:id', async (req: Request, res: Response) => {
     await db.run("DELETE FROM reports WHERE id = ?", req.params.id);
     res.status(204).send();
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.get('/api/report-schedules', async (req: express.Request, res: express.Response) => {
+app.get('/api/report-schedules', async (req: Request, res: Response) => {
     const schedules = await db.all("SELECT * FROM report_schedules");
     res.json(schedules.map(s => ({...s, reportConfig: JSON.parse(s.report_config || '{}')})));
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.post('/api/report-schedules', async (req: express.Request, res: express.Response) => {
+app.post('/api/report-schedules', async (req: Request, res: Response) => {
     const { name, frequency, time, recipient, reportConfig, isEnabled } = req.body;
     const id = `SCH_${uuidv4()}`;
     await db.run(
@@ -511,36 +514,30 @@ app.post('/api/report-schedules', async (req: express.Request, res: express.Resp
     );
     res.status(201).json({ id });
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.put('/api/report-schedules/:id', async (req: express.Request, res: express.Response) => {
+app.put('/api/report-schedules/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { isEnabled } = req.body; // For now, only supports toggling
     await db.run("UPDATE report_schedules SET is_enabled = ? WHERE id = ?", isEnabled, id);
     res.status(200).send('OK');
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.delete('/api/report-schedules/:id', async (req: express.Request, res: express.Response) => {
+app.delete('/api/report-schedules/:id', async (req: Request, res: Response) => {
     await db.run("DELETE FROM report_schedules WHERE id = ?", req.params.id);
     res.status(204).send();
 });
 
 // NOTIFICATIONS
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.get('/api/notifications', async (req: express.Request, res: express.Response) => res.json(await db.all("SELECT * FROM notifications ORDER BY timestamp DESC")));
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.post('/api/notifications/mark-all-read', async (req: express.Request, res: express.Response) => {
+app.get('/api/notifications', async (req: Request, res: Response) => res.json(await db.all("SELECT * FROM notifications ORDER BY timestamp DESC")));
+app.post('/api/notifications/mark-all-read', async (req: Request, res: Response) => {
     await db.run("UPDATE notifications SET is_read = 0 WHERE is_read = 1");
     res.status(200).send('OK');
 });
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.delete('/api/notifications/clear-all', async (req: express.Request, res: express.Response) => {
+app.delete('/api/notifications/clear-all', async (req: Request, res: Response) => {
     await db.run("DELETE FROM notifications");
     res.status(204).send();
 });
 
 // ANALYSIS
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.post('/api/analysis/snow-depth', async (req: express.Request, res: express.Response) => {
+app.post('/api/analysis/snow-depth', async (req: Request, res: Response) => {
     const { cameraId, virtualSensorId } = req.body;
     const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", cameraId);
 
@@ -722,8 +719,7 @@ fs.access(path.join(publicPath, 'index.html')).catch(() => {
 app.use(express.static(publicPath));
 
 // Catch-all to serve index.html for any other request (for client-side routing)
-// Fix: Use express.Request and express.Response to avoid type collisions.
-app.get('*', (req: express.Request, res: express.Response) => {
+app.get('*', (req: Request, res: Response) => {
     // Exclude API routes from being caught by this
     if (req.path.startsWith('/api/')) {
         return res.status(404).send('API endpoint not found.');

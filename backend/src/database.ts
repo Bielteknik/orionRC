@@ -55,6 +55,8 @@ export async function migrate() {
             parser_config TEXT,
             config TEXT,
             read_frequency INTEGER DEFAULT 60,
+            reference_value REAL,
+            reference_operation TEXT,
             FOREIGN KEY(station_id) REFERENCES stations(id) ON DELETE SET NULL
         );
 

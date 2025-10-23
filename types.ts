@@ -81,6 +81,8 @@ export interface Sensor {
   config: any; // JSON object for interface config
   parser_config: any; // JSON object for parser config
   read_frequency: number;
+  referenceValue?: number;
+  referenceOperation?: 'add' | 'subtract' | 'none';
 }
 
 export enum CameraStatus {

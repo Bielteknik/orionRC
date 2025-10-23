@@ -36,6 +36,9 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
     const [isActive, setIsActive] = useState(true);
     const [error, setError] = useState('');
     
+    const [referenceValue, setReferenceValue] = useState('999');
+    const [referenceOperation, setReferenceOperation] = useState('none');
+
     const [interfaceConfigError, setInterfaceConfigError] = useState<string | null>(null);
     const [parserConfigError, setParserConfigError] = useState<string | null>(null);
     
@@ -68,6 +71,8 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
         setInterfaceConfigError(null);
         setParserConfigError(null);
         setSourceCameraId('');
+        setReferenceValue('999');
+        setReferenceOperation('none');
     };
 
     useEffect(() => {
@@ -82,6 +87,9 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
                 setInterfaceConfig(JSON.stringify(sensorToEdit.config, null, 2) || '{}');
                 setParserConfig(JSON.stringify(sensorToEdit.parser_config, null, 2) || '{}');
                 setReadFrequency(String(sensorToEdit.read_frequency || 600));
+                setReferenceValue(String(sensorToEdit.referenceValue ?? '999'));
+                setReferenceOperation(sensorToEdit.referenceOperation || 'none');
+
 
                 // If editing a snow sensor, parse the source camera ID
                 if (sensorToEdit.type === 'Kar Yüksekliği' && sensorToEdit.interface === 'virtual') {
@@ -189,6 +197,8 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
             readFrequency: parseInt(readFrequency, 10) || 600,
             status: isActive ? SensorStatus.Active : SensorStatus.Inactive,
             isActive,
+            referenceValue: parseFloat(referenceValue) || 999,
+            referenceOperation: referenceOperation,
         });
         handleClose();
     };
@@ -281,7 +291,25 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
                             </div>
                         ) : (
                             <>
-                                <div>
+                                <div className="border-t border-gray-200 pt-5 space-y-5">
+                                    <h4 className="text-base font-semibold text-gray-800">Kalibrasyon Ayarları (Opsiyonel)</h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5 items-end">
+                                        <div>
+                                            <label htmlFor="reference-value" className="block text-sm font-medium text-gray-700 mb-1.5">Referans Değeri</label>
+                                            <input type="number" id="reference-value" value={referenceValue} onChange={e => setReferenceValue(e.target.value)} className="w-full bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent" />
+                                             <p className="text-xs text-muted mt-1">"999" girilirse işlem yapılmaz.</p>
+                                        </div>
+                                         <div>
+                                            <label htmlFor="reference-operation" className="block text-sm font-medium text-gray-700 mb-1.5">Uygulanacak İşlem</label>
+                                            <select id="reference-operation" value={referenceOperation} onChange={e => setReferenceOperation(e.target.value)} className="w-full bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent">
+                                                <option value="none">İşlem Yok</option>
+                                                <option value="subtract">Referanstan Çıkar (Ref - Okunan)</option>
+                                                <option value="add">Referansa Ekle (Ref + Okunan)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="border-t border-gray-200 pt-5">
                                     <label htmlFor="interface-config" className="block text-sm font-medium text-gray-700 mb-1.5">Arayüz Yapılandırması (JSON)</label>
                                     <textarea id="interface-config" value={interfaceConfig} onChange={e => setInterfaceConfig(e.target.value)} rows={4} className={`w-full bg-secondary border rounded-md px-3 py-2 focus:outline-none focus:ring-2 font-mono text-sm ${interfaceConfigError ? 'border-danger focus:ring-danger' : 'border-gray-300 focus:ring-accent'}`}></textarea>
                                     {interfaceConfigError && <p className="text-xs text-danger mt-1.5">{interfaceConfigError}</p>}

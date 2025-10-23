@@ -184,8 +184,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStationDetails, stations, s
                                     <DataCard
                                         key={type}
                                         type={type === 'Rüzgar Hızı' ? 'Rüzgar' : type}
-                                        value={data.value}
-                                        unit={data.unit}
+                                        // Fix: Property 'value' and 'unit' does not exist on type 'unknown'. Cast data as any to access properties.
+                                        value={(data as any).value}
+                                        unit={(data as any).unit}
                                         trend={Trend.Stable}
                                     />
                                 ))
