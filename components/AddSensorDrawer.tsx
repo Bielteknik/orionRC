@@ -50,6 +50,12 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
     const title = sensorToEdit ? 'Sensör Ayarlarını Düzenle' : 'Yeni Sensör Ekle';
 
     useEffect(() => {
+        if (referenceValue === '999' || referenceValue === '') {
+            setReferenceOperation('none');
+        }
+    }, [referenceValue]);
+
+    useEffect(() => {
         const handleEsc = (event: KeyboardEvent) => {
             if (event.key === 'Escape') onClose();
         };
@@ -293,7 +299,7 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
                             <>
                                 <div className="border-t border-gray-200 pt-5 space-y-5">
                                     <h4 className="text-base font-semibold text-gray-800">Kalibrasyon Ayarları (Opsiyonel)</h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5 items-end">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5 items-start">
                                         <div>
                                             <label htmlFor="reference-value" className="block text-sm font-medium text-gray-700 mb-1.5">Referans Değeri</label>
                                             <input type="number" id="reference-value" value={referenceValue} onChange={e => setReferenceValue(e.target.value)} className="w-full bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent" />
@@ -301,7 +307,13 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
                                         </div>
                                          <div>
                                             <label htmlFor="reference-operation" className="block text-sm font-medium text-gray-700 mb-1.5">Uygulanacak İşlem</label>
-                                            <select id="reference-operation" value={referenceOperation} onChange={e => setReferenceOperation(e.target.value)} className="w-full bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent">
+                                            <select 
+                                                id="reference-operation" 
+                                                value={referenceOperation} 
+                                                onChange={e => setReferenceOperation(e.target.value)} 
+                                                className="w-full bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                                disabled={referenceValue === '999' || referenceValue === ''}
+                                            >
                                                 <option value="none">İşlem Yok</option>
                                                 <option value="subtract">Referanstan Çıkar (Ref - Okunan)</option>
                                                 <option value="add">Referansa Ekle (Ref + Okunan)</option>
