@@ -46,6 +46,9 @@ class Agent {
     private apiBaseUrl: string = '';
     private deviceId: string = '';
     private authToken: string = '';
+    
+    private running: boolean = false;
+    private timers: NodeJS.Timeout[] = [];
 
     constructor(localConfig: LocalConfig) {
         this.apiBaseUrl = `${localConfig.server.base_url}/api`;
@@ -64,18 +67,64 @@ class Agent {
     }
 
     public async start() {
+        this.running = true;
+        // Initial fetch, then start loops
         await this.fetchConfig();
         
-        setInterval(() => this.fetchConfig(), CONFIG_POLL_INTERVAL);
-        setInterval(() => this.processSensors(), SENSOR_READ_INTERVAL);
-        setInterval(() => this.checkForCommands(), COMMAND_POLL_INTERVAL);
+        this.configLoop();
+        this.sensorLoop();
+        this.commandLoop();
     }
     
     public shutdown() {
         console.log("\n🚫 Agent durduruluyor... Kaynaklar temizleniyor.");
+        this.running = false;
+        this.timers.forEach(clearTimeout);
+        console.log("✅ Zamanlayıcılar durduruldu.");
         // In the future, any open connections or hardware resources can be closed here.
-        // For now, the drivers are self-contained and don't hold open resources.
         console.log("✅ Güvenli çıkış tamamlandı.");
+    }
+
+    private async configLoop() {
+        if (!this.running) return;
+        try {
+            await this.fetchConfig();
+        } catch (e) {
+            console.error("Yapılandırma döngüsünde hata:", e);
+        } finally {
+            if (this.running) {
+                const timer = setTimeout(() => this.configLoop(), CONFIG_POLL_INTERVAL);
+                this.timers.push(timer);
+            }
+        }
+    }
+
+    private async sensorLoop() {
+        if (!this.running) return;
+        try {
+            await this.processSensors();
+        } catch (e) {
+            console.error("Sensör döngüsünde hata:", e);
+        } finally {
+            if (this.running) {
+                const timer = setTimeout(() => this.sensorLoop(), SENSOR_READ_INTERVAL);
+                this.timers.push(timer);
+            }
+        }
+    }
+
+    private async commandLoop() {
+        if (!this.running) return;
+        try {
+            await this.checkForCommands();
+        } catch (e) {
+            console.error("Komut döngüsünde hata:", e);
+        } finally {
+            if (this.running) {
+                const timer = setTimeout(() => this.commandLoop(), COMMAND_POLL_INTERVAL);
+                this.timers.push(timer);
+            }
+        }
     }
 
     private async fetchConfig() {
