@@ -42,13 +42,20 @@ Agent'ı çalıştırmadan önce, Raspberry Pi'nizin donanım iletişimi için d
     npm install
     ```
 
-3.  **Agent'ı Yapılandırma:**
+3.  **Ortam Değişkenleri Dosyası Oluştur (Opsiyonel):**
+    Eğer Yapay Zeka destekli kar yüksekliği analizi gibi özellikleri kullanacaksanız, bu dizinde `.env` adında bir dosya oluşturun ve içine API anahtarınızı ekleyin:
+    ```
+    API_KEY=YAPAY_ZEKA_API_ANAHTARINIZ
+    ```
+    Bu anahtarı Google AI Studio'dan alabilirsiniz. Bu değişkenin ayarlanmaması durumunda, yapay zeka özellikleri çalışmayacaktır.
+
+4.  **Agent'ı Yapılandırma:**
     Bu dizindeki `config.json` dosyasını düzenleyin.
     -   `server.base_url`: ORION backend sunucunuzun tam URL'si (örn: `https://sistem.alanadiniz.com`).
     -   `device.id`: Bu Raspberry Pi için benzersiz kimlik. Bu, ORION web arayüzünde istasyonu oluştururken belirlediğiniz "Cihaz ID" ile **aynı olmalıdır**.
     -   `device.token`: Kimlik doğrulama token'ı. Bu, backend'in `.env` dosyasındaki `DEVICE_AUTH_TOKEN` ile **aynı olmalıdır**.
 
-4.  **Derleme ve Çalıştırma:**
+5.  **Derleme ve Çalıştırma:**
     -   Önce, TypeScript kodunu derleyin:
         ```bash
         npm run build

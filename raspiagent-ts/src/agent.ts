@@ -4,7 +4,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-// Fix: Correct import of GoogleGenAI from '@google/genai' according to guidelines.
 import { GoogleGenAI } from "@google/genai";
 import {
     DeviceConfig,
@@ -14,6 +13,9 @@ import {
     AgentCommand,
     AgentState,
 } from './types.js';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const execAsync = promisify(exec);
 
@@ -332,7 +334,6 @@ class Agent {
             
             // 3. Call Gemini API
             console.log('   -> Gemini API ile analiz ediliyor...');
-            // Fix: Use new GoogleGenAI({apiKey: ...}) for initialization, per guidelines.
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const imagePart = {
                 inlineData: {
@@ -344,13 +345,11 @@ class Agent {
                 text: "Bu görüntüdeki kar ölçüm cetveline göre karla kaplı en yüksek sayısal değer nedir? Cevabını sadece `{\"snow_depth_cm\": SAYI}` formatında bir JSON olarak ver.",
             };
 
-            // Fix: Use correct model name ('gemini-2.5-flash') and modern API call structure (`ai.models.generateContent`).
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: { parts: [imagePart, textPart] },
             });
             
-            // Fix: Directly access the 'text' property from the response for simpler and more reliable text extraction.
             const resultText = response.text;
             if (!resultText) {
                 console.error('   -> HATA: Gemini API boş yanıt döndü.');
@@ -454,7 +453,6 @@ async function main() {
         const agent = new Agent(localConfig);
         
         // Handle graceful shutdown on Ctrl+C
-        // Fix: Property 'on' and 'exit' do not exist on type 'Process'. Cast to 'any' to bypass TypeScript type error.
         (process as any).on('SIGINT', () => {
             agent.shutdown();
             (process as any).exit(0);
@@ -462,13 +460,11 @@ async function main() {
 
         agent.start().catch(error => {
             console.error("Agent çalışırken kritik bir hata oluştu:", error);
-            // Fix: Cast process to 'any' to bypass TypeScript type error for 'exit'.
             (process as any).exit(1);
         });
 
     } catch (error) {
         console.error("Agent başlatılamadı. config.json dosyası okunamadı veya geçersiz.", error);
-        // Fix: Cast process to 'any' to bypass TypeScript type error for 'exit'.
         (process as any).exit(1);
     }
 }

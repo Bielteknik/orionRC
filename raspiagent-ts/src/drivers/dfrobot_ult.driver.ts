@@ -1,6 +1,5 @@
 import { ISensorDriver } from "../types.js";
 import { SerialPort } from 'serialport';
-// Fix: Import Buffer to resolve 'Cannot find name' error.
 import { Buffer } from 'buffer';
 
 /**
@@ -29,16 +28,13 @@ export default class DFRobotUltDriver implements ISensorDriver {
 
             console.log(`     -> DFRobot Lidar okunuyor... Port: ${port}, Baud: ${baudrate}`);
             
-            // Fix: Cast serialPort to 'any' to resolve method not found errors due to potential type mismatches.
             const serialPort: any = new SerialPort({
                 path: port,
                 baudRate: baudrate,
                 autoOpen: false,
             });
 
-            // Fix: Cannot find namespace 'NodeJS'. Use ReturnType for type safety.
             let timeout: ReturnType<typeof setTimeout> | null = null;
-            // Fix: Cannot find name 'Buffer'. It's now imported.
             let internalBuffer = Buffer.alloc(0);
 
             const cleanupAndResolve = (value: Record<string, any> | null) => {
@@ -59,7 +55,6 @@ export default class DFRobotUltDriver implements ISensorDriver {
             };
             
             const onData = (chunk: Buffer) => {
-                // Fix: Cannot find name 'Buffer'. It's now imported.
                 internalBuffer = Buffer.concat([internalBuffer, chunk]);
 
                 while (internalBuffer.length >= 4) {

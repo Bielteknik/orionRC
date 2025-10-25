@@ -25,7 +25,6 @@ export default class Hx711Driver implements ISensorDriver {
 
             console.log(`     -> HX711 okunuyor... Port: ${port}, Baud: ${baudrate}`);
             
-            // Fix: Cast serialPort to 'any' to resolve method not found errors due to potential type mismatches.
             const serialPort: any = new SerialPort({
                 path: port,
                 baudRate: baudrate,
@@ -36,7 +35,6 @@ export default class Hx711Driver implements ISensorDriver {
 
             let readAttempts = 0;
             const maxAttempts = 10; // Geçerli veri için en fazla kaç satır deneneceği
-            // Fix: Cannot find namespace 'NodeJS'. Use ReturnType for type safety.
             let timeout: ReturnType<typeof setTimeout> | null = null;
 
             // Portu ve dinleyicileri temizleyip Promise'i sonlandıran fonksiyon
