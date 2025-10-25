@@ -1,5 +1,5 @@
 // Fix: Use fully qualified express types (express.Request, express.Response) to avoid collision with global DOM types.
-import express, { Request, Response, NextFunction } from 'express';
+import express, { NextFunction } from 'express';
 import cors from 'cors';
 import { openDb, db, migrate } from './database.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -36,7 +36,7 @@ let commandQueue: { [deviceId: string]: any[] } = {};
 
 
 // --- AUTH MIDDLEWARE (simple token check) ---
-const agentAuth = (req: Request, res: Response, next: NextFunction) => {
+const agentAuth = (req: express.Request, res: express.Response, next: NextFunction) => {
     const token = req.headers.authorization?.split(' ')[1];
     // This token MUST match the one in the agent's config.json
     if (token && token === (process.env.DEVICE_AUTH_TOKEN || "EjderMeteo_Rpi_SecretKey_2025!")) { 
@@ -50,7 +50,7 @@ const agentAuth = (req: Request, res: Response, next: NextFunction) => {
 
 // --- AGENT-FACING ENDPOINTS ---
 
-app.get('/api/config/:deviceId', agentAuth, async (req: Request, res: Response) => {
+app.get('/api/config/:deviceId', agentAuth, async (req: express.Request, res: express.Response) => {
     try {
         const { deviceId } = req.params;
 
@@ -95,7 +95,7 @@ app.get('/api/config/:deviceId', agentAuth, async (req: Request, res: Response) 
     }
 });
 
-app.post('/api/submit-reading', agentAuth, async (req: Request, res: Response) => {
+app.post('/api/submit-reading', agentAuth, async (req: express.Request, res: express.Response) => {
     try {
         const { sensor: sensor_id, value: rawValue } = req.body;
 
@@ -146,7 +146,7 @@ app.post('/api/submit-reading', agentAuth, async (req: Request, res: Response) =
     }
 });
 
-app.get('/api/commands/:deviceId', agentAuth, (req: Request, res: Response) => {
+app.get('/api/commands/:deviceId', agentAuth, (req: express.Request, res: express.Response) => {
     const { deviceId } = req.params;
     const pendingCommands = commandQueue[deviceId]?.filter(cmd => cmd.status === 'pending') || [];
     if (pendingCommands.length > 0) {
@@ -157,7 +157,7 @@ app.get('/api/commands/:deviceId', agentAuth, (req: Request, res: Response) => {
 });
 
 
-app.post('/api/commands/:id/:status', agentAuth, async (req: Request, res: Response) => {
+app.post('/api/commands/:id/:status', agentAuth, async (req: express.Request, res: express.Response) => {
     const { id, status } = req.params;
     const commandId = parseInt(id, 10);
 
@@ -186,7 +186,7 @@ app.post('/api/commands/:id/:status', agentAuth, async (req: Request, res: Respo
 });
 
 
-app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: Request, res: Response) => {
+app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: express.Request, res: express.Response) => {
     const { cameraId } = req.params;
     const { image, filename } = req.body; // base64 image and filename
 
@@ -214,7 +214,7 @@ app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: Request, 
 });
 
 // Endpoint for analysis photos
-app.post('/api/analysis/upload-photo', agentAuth, async (req: Request, res: Response) => {
+app.post('/api/analysis/upload-photo', agentAuth, async (req: express.Request, res: express.Response) => {
     const { cameraId, image, filename } = req.body;
     try {
         const uploadsDir = path.join(__dirname, '..', 'uploads', 'analysis');
@@ -232,7 +232,7 @@ app.post('/api/analysis/upload-photo', agentAuth, async (req: Request, res: Resp
 
 
 // --- FRONTEND-FACING ENDPOINTS ---
-app.get('/api/agent-status', (req: Request, res: Response) => {
+app.get('/api/agent-status', (req: express.Request, res: express.Response) => {
     // Add logic to check if lastUpdate is recent
     if (agentStatus.lastUpdate && (new Date().getTime() - new Date(agentStatus.lastUpdate).getTime()) > 30000) {
         agentStatus.status = 'offline';
@@ -241,7 +241,7 @@ app.get('/api/agent-status', (req: Request, res: Response) => {
 });
 
 // STATIONS
-app.get('/api/stations', async (req: Request, res: Response) => {
+app.get('/api/stations', async (req: express.Request, res: express.Response) => {
     try {
         const stationsFromDb = await db.all(`
             SELECT 
@@ -265,7 +265,7 @@ app.get('/api/stations', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch stations." });
     }
 });
-app.post('/api/stations', async (req: Request, res: Response) => {
+app.post('/api/stations', async (req: express.Request, res: express.Response) => {
     try {
         const { id, name, location, locationCoords, selectedSensorIds = [], selectedCameraIds = [] } = req.body;
         await db.run(
@@ -284,7 +284,7 @@ app.post('/api/stations', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to create station." });
     }
 });
-app.put('/api/stations/:id', async (req: Request, res: Response) => {
+app.put('/api/stations/:id', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     try {
         const { name, location, locationCoords, status } = req.body;
@@ -298,7 +298,7 @@ app.put('/api/stations/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to update station." });
     }
 });
-app.delete('/api/stations/:id', async (req: Request, res: Response) => {
+app.delete('/api/stations/:id', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("DELETE FROM stations WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -310,7 +310,7 @@ app.delete('/api/stations/:id', async (req: Request, res: Response) => {
 
 
 // SENSORS
-app.get('/api/sensors', async (req: Request, res: Response) => {
+app.get('/api/sensors', async (req: express.Request, res: express.Response) => {
     try {
         const unassigned = req.query.unassigned === 'true';
         const query = unassigned
@@ -339,14 +339,18 @@ app.get('/api/sensors', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch sensors." });
     }
 });
-app.post('/api/sensors', async (req: Request, res: Response) => {
+app.post('/api/sensors', async (req: express.Request, res: express.Response) => {
     try {
         const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
         const id = `S${Date.now()}`;
+        // Fix: Ensure config objects are stored as strings to prevent DB errors.
+        const parserConfigStr = typeof parserConfig === 'string' ? parserConfig : JSON.stringify(parserConfig || {});
+        const interfaceConfigStr = typeof interfaceConfig === 'string' ? interfaceConfig : JSON.stringify(interfaceConfig || {});
+
         await db.run(
             `INSERT INTO sensors (id, name, station_id, type, unit, status, interface, parser_config, config, read_frequency, is_active, last_update, reference_value, reference_operation) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            id, name, stationId, type, unit, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfig, interfaceConfig, readFrequency, isActive, new Date().toISOString(), referenceValue, referenceOperation
+            id, name, stationId, type, unit, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfigStr, interfaceConfigStr, readFrequency, isActive, new Date().toISOString(), referenceValue, referenceOperation
         );
         res.status(201).json({ id });
     } catch (error) {
@@ -354,14 +358,18 @@ app.post('/api/sensors', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to create sensor." });
     }
 });
-app.put('/api/sensors/:id', async (req: Request, res: Response) => {
+app.put('/api/sensors/:id', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     try {
         const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
+        // Fix: Ensure config objects are stored as strings to prevent DB errors.
+        const parserConfigStr = typeof parserConfig === 'string' ? parserConfig : JSON.stringify(parserConfig || {});
+        const interfaceConfigStr = typeof interfaceConfig === 'string' ? interfaceConfig : JSON.stringify(interfaceConfig || {});
+
         await db.run(
             `UPDATE sensors SET name=?, station_id=?, type=?, unit=?, status=?, interface=?, parser_config=?, config=?, read_frequency=?, is_active=?, reference_value=?, reference_operation=?
              WHERE id = ?`,
-            name, stationId, type, unit, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfig, interfaceConfig, readFrequency, isActive, referenceValue, referenceOperation, id
+            name, stationId, type, unit, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfigStr, interfaceConfigStr, readFrequency, isActive, referenceValue, referenceOperation, id
         );
         res.status(200).json({ id });
     } catch (error) {
@@ -369,7 +377,7 @@ app.put('/api/sensors/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: 'Failed to update sensor.' });
     }
 });
-app.delete('/api/sensors/:id', async (req: Request, res: Response) => {
+app.delete('/api/sensors/:id', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("DELETE FROM sensors WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -378,7 +386,7 @@ app.delete('/api/sensors/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to delete sensor." });
     }
 });
-app.post('/api/sensors/:id/read', async (req: Request, res: Response) => {
+app.post('/api/sensors/:id/read', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     try {
         const sensor = await db.get("SELECT * FROM sensors WHERE id = ?", id);
@@ -401,7 +409,7 @@ app.post('/api/sensors/:id/read', async (req: Request, res: Response) => {
 });
 
 // CAMERAS
-app.get('/api/cameras', async (req: Request, res: Response) => {
+app.get('/api/cameras', async (req: express.Request, res: express.Response) => {
     try {
         const unassigned = req.query.unassigned === 'true';
         const query = unassigned
@@ -426,7 +434,7 @@ app.get('/api/cameras', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch cameras." });
     }
 });
-app.post('/api/cameras', async (req: Request, res: Response) => {
+app.post('/api/cameras', async (req: express.Request, res: express.Response) => {
     try {
         const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
         const id = `C${Date.now()}`;
@@ -440,7 +448,7 @@ app.post('/api/cameras', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to create camera." });
     }
 });
-app.put('/api/cameras/:id', async (req: Request, res: Response) => {
+app.put('/api/cameras/:id', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     try {
         const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
@@ -454,7 +462,7 @@ app.put('/api/cameras/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to update camera." });
     }
 });
-app.delete('/api/cameras/:id', async (req: Request, res: Response) => {
+app.delete('/api/cameras/:id', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("DELETE FROM cameras WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -463,7 +471,7 @@ app.delete('/api/cameras/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to delete camera." });
     }
 });
-app.post('/api/cameras/:id/capture', async (req: Request, res: Response) => {
+app.post('/api/cameras/:id/capture', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     try {
         const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", id);
@@ -486,7 +494,7 @@ app.post('/api/cameras/:id/capture', async (req: Request, res: Response) => {
 });
 
 // READINGS
-app.get('/api/readings', async (req: Request, res: Response) => {
+app.get('/api/readings', async (req: express.Request, res: express.Response) => {
     try {
         const readings = await db.all(`
             SELECT r.id, r.sensor_id as sensorId, s.name as sensorName, s.type as sensorType, s.unit, s.interface, st.id as stationId, st.name as stationName, r.value, r.timestamp 
@@ -502,7 +510,7 @@ app.get('/api/readings', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch readings." });
     }
 });
-app.get('/api/readings/history', async (req: Request, res: Response) => {
+app.get('/api/readings/history', async (req: express.Request, res: express.Response) => {
     const { stationIds: stationIdsQuery, sensorTypes: sensorTypesQuery } = req.query;
 
     if (typeof stationIdsQuery !== 'string' || typeof sensorTypesQuery !== 'string' || stationIdsQuery.length === 0 || sensorTypesQuery.length === 0) {
@@ -530,7 +538,7 @@ app.get('/api/readings/history', async (req: Request, res: Response) => {
 
 
 // DEFINITIONS & SETTINGS
-app.get('/api/definitions', async (req: Request, res: Response) => {
+app.get('/api/definitions', async (req: express.Request, res: express.Response) => {
     try {
         const [stationTypes, sensorTypes, cameraTypes] = await Promise.all([
             db.all("SELECT * FROM station_types"),
@@ -543,7 +551,7 @@ app.get('/api/definitions', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch definitions." });
     }
 });
-app.post('/api/definitions/:type', async (req: Request, res: Response) => {
+app.post('/api/definitions/:type', async (req: express.Request, res: express.Response) => {
     const { type } = req.params;
     try {
         const { name } = req.body;
@@ -554,7 +562,7 @@ app.post('/api/definitions/:type', async (req: Request, res: Response) => {
         res.status(500).json({ error: `Failed to create definition for ${type}.` });
     }
 });
-app.put('/api/definitions/:type/:id', async (req: Request, res: Response) => {
+app.put('/api/definitions/:type/:id', async (req: express.Request, res: express.Response) => {
     const { type, id } = req.params;
     try {
         const { name } = req.body;
@@ -565,7 +573,7 @@ app.put('/api/definitions/:type/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: `Failed to update definition.` });
     }
 });
-app.delete('/api/definitions/:type/:id', async (req: Request, res: Response) => {
+app.delete('/api/definitions/:type/:id', async (req: express.Request, res: express.Response) => {
     const { type, id } = req.params;
     try {
         await db.run(`DELETE FROM ${type} WHERE id = ?`, id);
@@ -576,7 +584,7 @@ app.delete('/api/definitions/:type/:id', async (req: Request, res: Response) => 
     }
 });
 
-app.get('/api/alert-rules', async (req: Request, res: Response) => {
+app.get('/api/alert-rules', async (req: express.Request, res: express.Response) => {
     try {
         res.json(await db.all("SELECT * FROM alert_rules"));
     } catch (error) {
@@ -585,7 +593,7 @@ app.get('/api/alert-rules', async (req: Request, res: Response) => {
     }
 });
 
-app.get('/api/settings/global_read_frequency', async (req: Request, res: Response) => {
+app.get('/api/settings/global_read_frequency', async (req: express.Request, res: express.Response) => {
     try {
         const setting = await db.get("SELECT value FROM global_settings WHERE key = 'global_read_frequency_minutes'");
         res.json(setting || { value: '0' });
@@ -594,7 +602,7 @@ app.get('/api/settings/global_read_frequency', async (req: Request, res: Respons
         res.status(500).json({ error: "Failed to get global read frequency." });
     }
 });
-app.put('/api/settings/global_read_frequency', async (req: Request, res: Response) => {
+app.put('/api/settings/global_read_frequency', async (req: express.Request, res: express.Response) => {
     try {
         const { value } = req.body;
         await db.run("UPDATE global_settings SET value = ? WHERE key = 'global_read_frequency_minutes'", value);
@@ -606,7 +614,7 @@ app.put('/api/settings/global_read_frequency', async (req: Request, res: Respons
 });
 
 // REPORTS
-app.get('/api/reports', async (req: Request, res: Response) => {
+app.get('/api/reports', async (req: express.Request, res: express.Response) => {
     try {
         res.json(await db.all("SELECT * FROM reports"));
     } catch (error) {
@@ -614,7 +622,7 @@ app.get('/api/reports', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch reports." });
     }
 });
-app.delete('/api/reports/:id', async (req: Request, res: Response) => {
+app.delete('/api/reports/:id', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("DELETE FROM reports WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -623,7 +631,7 @@ app.delete('/api/reports/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to delete report." });
     }
 });
-app.get('/api/report-schedules', async (req: Request, res: Response) => {
+app.get('/api/report-schedules', async (req: express.Request, res: express.Response) => {
     try {
         const schedules = await db.all("SELECT * FROM report_schedules");
         res.json(schedules.map(s => ({...s, reportConfig: JSON.parse(s.report_config || '{}')})));
@@ -632,7 +640,7 @@ app.get('/api/report-schedules', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch report schedules." });
     }
 });
-app.post('/api/report-schedules', async (req: Request, res: Response) => {
+app.post('/api/report-schedules', async (req: express.Request, res: express.Response) => {
     try {
         const { name, frequency, time, recipient, reportConfig, isEnabled } = req.body;
         const id = `SCH_${uuidv4()}`;
@@ -646,7 +654,7 @@ app.post('/api/report-schedules', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to create report schedule." });
     }
 });
-app.put('/api/report-schedules/:id', async (req: Request, res: Response) => {
+app.put('/api/report-schedules/:id', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     try {
         const { isEnabled } = req.body; // For now, only supports toggling
@@ -657,7 +665,7 @@ app.put('/api/report-schedules/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to update report schedule." });
     }
 });
-app.delete('/api/report-schedules/:id', async (req: Request, res: Response) => {
+app.delete('/api/report-schedules/:id', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("DELETE FROM report_schedules WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -668,7 +676,7 @@ app.delete('/api/report-schedules/:id', async (req: Request, res: Response) => {
 });
 
 // NOTIFICATIONS
-app.get('/api/notifications', async (req: Request, res: Response) => {
+app.get('/api/notifications', async (req: express.Request, res: express.Response) => {
     try {
         res.json(await db.all("SELECT * FROM notifications ORDER BY timestamp DESC"));
     } catch (error) {
@@ -676,7 +684,7 @@ app.get('/api/notifications', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch notifications." });
     }
 });
-app.post('/api/notifications/mark-all-read', async (req: Request, res: Response) => {
+app.post('/api/notifications/mark-all-read', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("UPDATE notifications SET is_read = 0 WHERE is_read = 1");
         res.status(200).send('OK');
@@ -685,7 +693,7 @@ app.post('/api/notifications/mark-all-read', async (req: Request, res: Response)
         res.status(500).json({ error: "Failed to mark all notifications as read." });
     }
 });
-app.delete('/api/notifications/clear-all', async (req: Request, res: Response) => {
+app.delete('/api/notifications/clear-all', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("DELETE FROM notifications");
         res.status(204).send();
@@ -696,7 +704,7 @@ app.delete('/api/notifications/clear-all', async (req: Request, res: Response) =
 });
 
 // ANALYSIS
-app.post('/api/analysis/snow-depth', async (req: Request, res: Response) => {
+app.post('/api/analysis/snow-depth', async (req: express.Request, res: express.Response) => {
     try {
         const { cameraId, virtualSensorId } = req.body;
         const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", cameraId);
@@ -883,7 +891,7 @@ fs.access(path.join(publicPath, 'index.html')).catch(() => {
 app.use(express.static(publicPath));
 
 // Catch-all to serve index.html for any other request (for client-side routing)
-app.get('*', (req: Request, res: Response) => {
+app.get('*', (req: express.Request, res: express.Response) => {
     // Exclude API routes from being caught by this
     if (req.path.startsWith('/api/')) {
         return res.status(404).send('API endpoint not found.');
