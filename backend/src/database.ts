@@ -3,7 +3,6 @@ import { open, Database } from 'sqlite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Fix: Define __dirname for ES modules to resolve path errors.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -128,6 +127,22 @@ export async function migrate() {
     `;
 
     await db.exec(schema);
+
+    // Add columns to sensors table if they don't exist, for backward compatibility
+    const addColumn = async (tableName: string, columnName: string, columnDef: string) => {
+        try {
+            const tableInfo = await db.all(`PRAGMA table_info(${tableName})`);
+            if (!tableInfo.some(col => col.name === columnName)) {
+                console.log(`Adding column '${columnName}' to table '${tableName}'...`);
+                await db.run(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDef}`);
+            }
+        } catch (e) {
+            console.error(`Failed to add column ${columnName} to ${tableName}`, e);
+        }
+    };
+
+    await addColumn('sensors', 'reference_value', 'REAL');
+    await addColumn('sensors', 'reference_operation', 'TEXT');
 
     // Seed global settings
     await db.run("INSERT OR IGNORE INTO global_settings (key, value) VALUES (?, ?)", 'global_read_frequency_minutes', '0');

@@ -1,7 +1,5 @@
-// Fix: Use fully qualified express types (express.Request, express.Response) to avoid collision with global DOM types.
-// FIX: Changed import to `import type` for Express Request, Response, and NextFunction to resolve type conflicts with global DOM types.
-import express from 'express';
-import type { Request, Response, NextFunction } from 'express';
+
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { openDb, db, migrate } from './database.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -345,7 +343,6 @@ app.post('/api/sensors', async (req: Request, res: Response) => {
     try {
         const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
         const id = `S${Date.now()}`;
-        // Fix: Ensure config objects are stored as strings to prevent DB errors.
         const parserConfigStr = typeof parserConfig === 'string' ? parserConfig : JSON.stringify(parserConfig || {});
         const interfaceConfigStr = typeof interfaceConfig === 'string' ? interfaceConfig : JSON.stringify(interfaceConfig || {});
 
@@ -364,7 +361,6 @@ app.put('/api/sensors/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
         const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
-        // Fix: Ensure config objects are stored as strings to prevent DB errors.
         const parserConfigStr = typeof parserConfig === 'string' ? parserConfig : JSON.stringify(parserConfig || {});
         const interfaceConfigStr = typeof interfaceConfig === 'string' ? interfaceConfig : JSON.stringify(interfaceConfig || {});
 

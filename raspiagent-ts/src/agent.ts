@@ -187,9 +187,29 @@ class Agent {
                     const reading = await driver.read(sensorConfig.config);
                     
                     if (reading !== null) {
-                        // The driver might return multiple values (e.g., temp and humidity).
-                        // The `sendReading` function will handle the entire object.
-                        await this.sendReading({ sensor: sensorConfig.id, value: reading });
+                        let valueToSend = reading;
+
+                        // For multi-value drivers like SHT3x or OpenWeather, extract the relevant value
+                        // based on the sensor's configured type.
+                        if (Object.keys(reading).length > 1) {
+                            const sensorType = sensorConfig.type.toLowerCase();
+                            let keyToExtract: string | undefined;
+                    
+                            if (sensorType.includes('sıcaklık') || sensorType.includes('temp')) {
+                                keyToExtract = Object.keys(reading).find(k => k.toLowerCase().includes('temp'));
+                            } else if (sensorType.includes('nem') || sensorType.includes('hum')) {
+                                keyToExtract = Object.keys(reading).find(k => k.toLowerCase().includes('hum'));
+                            }
+                            
+                            if (keyToExtract && reading[keyToExtract] !== undefined) {
+                                console.log(`     -> Çoklu değerden ayıklanan: { ${keyToExtract}: ${reading[keyToExtract]} }`);
+                                valueToSend = { [keyToExtract]: reading[keyToExtract] };
+                            } else {
+                                console.warn(`     -> UYARI: ${sensorConfig.name} (${sensorConfig.type}) için çoklu değerli yanıttan ilgili anahtar bulunamadı. Tam nesne gönderiliyor.`);
+                            }
+                        }
+                        
+                        await this.sendReading({ sensor: sensorConfig.id, value: valueToSend });
                     } else {
                         console.warn(`  -> UYARI: ${sensorConfig.name} sensöründen veri okunamadı (sürücü null döndü).`);
                     }
