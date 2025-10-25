@@ -73,7 +73,6 @@ const SensorCard: React.FC<{
                 }
             }
             const numericValue = Object.values(value).find(v => typeof v === 'number');
-            // Fix: Use a `typeof` guard to ensure numericValue is a number before calling toFixed.
             if (typeof numericValue === 'number') {
                 return numericValue.toFixed(1);
             }

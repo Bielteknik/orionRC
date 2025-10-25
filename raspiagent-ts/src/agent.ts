@@ -191,7 +191,7 @@ class Agent {
 
                         // For multi-value drivers like SHT3x or OpenWeather, extract the relevant value
                         // based on the sensor's configured type.
-                        if (Object.keys(reading).length > 1) {
+                        if (typeof reading === 'object' && Object.keys(reading).length > 1) {
                             const sensorType = sensorConfig.type.toLowerCase();
                             let keyToExtract: string | undefined;
                     

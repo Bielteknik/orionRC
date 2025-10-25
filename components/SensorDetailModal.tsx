@@ -8,7 +8,6 @@ interface SensorReading {
     unit: string;
     timestamp: string;
     sensorType: string;
-    // Fix: Make interface property optional to match the type in the parent component.
     interface?: string;
 }
 

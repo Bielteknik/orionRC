@@ -113,7 +113,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStationDetails, stations, s
                             }
                         } else {
                             const numericValue = Object.values(latestSensor.value).find(v => typeof v === 'number');
-                            // Fix: Use a type guard (`typeof`) to ensure `numericValue` is a number before calling `toFixed`.
                             if (typeof numericValue === 'number') {
                                 displayValue = numericValue.toFixed(1);
                             } else {
@@ -121,7 +120,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStationDetails, stations, s
                             }
                         }
                     } else {
-                        // Fix: Ensure value is a number before calling toFixed to prevent type errors and runtime errors with non-numeric values.
                         const numValue = Number(latestSensor.value);
                         if (isFinite(numValue)) {
                             displayValue = numValue.toFixed(1);
@@ -188,7 +186,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStationDetails, stations, s
                                     <DataCard
                                         key={type}
                                         type={type === 'Rüzgar Hızı' ? 'Rüzgar' : type}
-                                        // Fix: Property 'value' and 'unit' does not exist on type 'unknown'. Cast data as any to access properties.
                                         value={(data as any).value}
                                         unit={(data as any).unit}
                                         trend={Trend.Stable}

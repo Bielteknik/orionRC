@@ -128,7 +128,7 @@ export async function migrate() {
 
     await db.exec(schema);
 
-    // Add columns to sensors table if they don't exist, for backward compatibility
+    // Add columns to tables if they don't exist, for backward compatibility
     const addColumn = async (tableName: string, columnName: string, columnDef: string) => {
         try {
             const tableInfo = await db.all(`PRAGMA table_info(${tableName})`);
@@ -141,6 +141,11 @@ export async function migrate() {
         }
     };
 
+    // Columns needed by /submit-reading endpoint
+    await addColumn('sensors', 'value', 'TEXT');
+    await addColumn('sensors', 'last_update', 'TEXT');
+    
+    // Columns needed for sensor calibration logic
     await addColumn('sensors', 'reference_value', 'REAL');
     await addColumn('sensors', 'reference_operation', 'TEXT');
 

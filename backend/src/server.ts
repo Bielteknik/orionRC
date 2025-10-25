@@ -1,4 +1,7 @@
 
+
+
+
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { openDb, db, migrate } from './database.js';
@@ -7,7 +10,7 @@ import { DeviceConfig, SensorConfig, ReportSchedule } from './types.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
-import { Buffer } from 'buffer';
+// FIX: Removed unnecessary 'Buffer' import. It's a global in Node.js and importing it can cause type conflicts.
 import XLSX from 'xlsx';
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
@@ -36,6 +39,7 @@ let commandQueue: { [deviceId: string]: any[] } = {};
 
 
 // --- AUTH MIDDLEWARE (simple token check) ---
+// FIX: Explicitly type req, res, and next with types imported from express.
 const agentAuth = (req: Request, res: Response, next: NextFunction) => {
     const token = req.headers.authorization?.split(' ')[1];
     // This token MUST match the one in the agent's config.json
@@ -50,6 +54,7 @@ const agentAuth = (req: Request, res: Response, next: NextFunction) => {
 
 // --- AGENT-FACING ENDPOINTS ---
 
+// FIX: Explicitly type req and res.
 app.get('/api/config/:deviceId', agentAuth, async (req: Request, res: Response) => {
     try {
         const { deviceId } = req.params;
@@ -95,9 +100,16 @@ app.get('/api/config/:deviceId', agentAuth, async (req: Request, res: Response) 
     }
 });
 
+// FIX: Explicitly type req and res.
 app.post('/api/submit-reading', agentAuth, async (req: Request, res: Response) => {
     try {
         const { sensor: sensor_id, value: rawValue } = req.body;
+
+        // Validate incoming data to prevent database errors from malformed requests.
+        if (sensor_id === undefined || rawValue === undefined) {
+            console.warn(`Bad request for /submit-reading: 'sensor' or 'value' field is missing.`, req.body);
+            return res.status(400).json({ error: 'Bad Request: sensor and value fields are required.' });
+        }
 
         const sensor = await db.get("SELECT reference_value, reference_operation FROM sensors WHERE id = ?", sensor_id);
         if (!sensor) {
@@ -146,6 +158,7 @@ app.post('/api/submit-reading', agentAuth, async (req: Request, res: Response) =
     }
 });
 
+// FIX: Explicitly type req and res.
 app.get('/api/commands/:deviceId', agentAuth, (req: Request, res: Response) => {
     const { deviceId } = req.params;
     const pendingCommands = commandQueue[deviceId]?.filter(cmd => cmd.status === 'pending') || [];
@@ -157,6 +170,7 @@ app.get('/api/commands/:deviceId', agentAuth, (req: Request, res: Response) => {
 });
 
 
+// FIX: Explicitly type req and res.
 app.post('/api/commands/:id/:status', agentAuth, async (req: Request, res: Response) => {
     const { id, status } = req.params;
     const commandId = parseInt(id, 10);
@@ -186,6 +200,7 @@ app.post('/api/commands/:id/:status', agentAuth, async (req: Request, res: Respo
 });
 
 
+// FIX: Explicitly type req and res.
 app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: Request, res: Response) => {
     const { cameraId } = req.params;
     const { image, filename } = req.body; // base64 image and filename
@@ -214,6 +229,7 @@ app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: Request, 
 });
 
 // Endpoint for analysis photos
+// FIX: Explicitly type req and res.
 app.post('/api/analysis/upload-photo', agentAuth, async (req: Request, res: Response) => {
     const { cameraId, image, filename } = req.body;
     try {
@@ -232,6 +248,7 @@ app.post('/api/analysis/upload-photo', agentAuth, async (req: Request, res: Resp
 
 
 // --- FRONTEND-FACING ENDPOINTS ---
+// FIX: Explicitly type req and res.
 app.get('/api/agent-status', (req: Request, res: Response) => {
     // Add logic to check if lastUpdate is recent
     if (agentStatus.lastUpdate && (new Date().getTime() - new Date(agentStatus.lastUpdate).getTime()) > 30000) {
@@ -241,6 +258,7 @@ app.get('/api/agent-status', (req: Request, res: Response) => {
 });
 
 // STATIONS
+// FIX: Explicitly type req and res.
 app.get('/api/stations', async (req: Request, res: Response) => {
     try {
         const stationsFromDb = await db.all(`
@@ -265,6 +283,7 @@ app.get('/api/stations', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch stations." });
     }
 });
+// FIX: Explicitly type req and res.
 app.post('/api/stations', async (req: Request, res: Response) => {
     try {
         const { id, name, location, locationCoords, selectedSensorIds = [], selectedCameraIds = [] } = req.body;
@@ -284,6 +303,7 @@ app.post('/api/stations', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to create station." });
     }
 });
+// FIX: Explicitly type req and res.
 app.put('/api/stations/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
@@ -298,6 +318,7 @@ app.put('/api/stations/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to update station." });
     }
 });
+// FIX: Explicitly type req and res.
 app.delete('/api/stations/:id', async (req: Request, res: Response) => {
     try {
         await db.run("DELETE FROM stations WHERE id = ?", req.params.id);
@@ -310,6 +331,7 @@ app.delete('/api/stations/:id', async (req: Request, res: Response) => {
 
 
 // SENSORS
+// FIX: Explicitly type req and res.
 app.get('/api/sensors', async (req: Request, res: Response) => {
     try {
         const unassigned = req.query.unassigned === 'true';
@@ -339,6 +361,7 @@ app.get('/api/sensors', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch sensors." });
     }
 });
+// FIX: Explicitly type req and res.
 app.post('/api/sensors', async (req: Request, res: Response) => {
     try {
         const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
@@ -357,6 +380,7 @@ app.post('/api/sensors', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to create sensor." });
     }
 });
+// FIX: Explicitly type req and res.
 app.put('/api/sensors/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
@@ -375,6 +399,7 @@ app.put('/api/sensors/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: 'Failed to update sensor.' });
     }
 });
+// FIX: Explicitly type req and res.
 app.delete('/api/sensors/:id', async (req: Request, res: Response) => {
     try {
         await db.run("DELETE FROM sensors WHERE id = ?", req.params.id);
@@ -384,6 +409,7 @@ app.delete('/api/sensors/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to delete sensor." });
     }
 });
+// FIX: Explicitly type req and res.
 app.post('/api/sensors/:id/read', async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
@@ -407,6 +433,7 @@ app.post('/api/sensors/:id/read', async (req: Request, res: Response) => {
 });
 
 // CAMERAS
+// FIX: Explicitly type req and res.
 app.get('/api/cameras', async (req: Request, res: Response) => {
     try {
         const unassigned = req.query.unassigned === 'true';
@@ -432,6 +459,7 @@ app.get('/api/cameras', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch cameras." });
     }
 });
+// FIX: Explicitly type req and res.
 app.post('/api/cameras', async (req: Request, res: Response) => {
     try {
         const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
@@ -446,6 +474,7 @@ app.post('/api/cameras', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to create camera." });
     }
 });
+// FIX: Explicitly type req and res.
 app.put('/api/cameras/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
@@ -460,6 +489,7 @@ app.put('/api/cameras/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to update camera." });
     }
 });
+// FIX: Explicitly type req and res.
 app.delete('/api/cameras/:id', async (req: Request, res: Response) => {
     try {
         await db.run("DELETE FROM cameras WHERE id = ?", req.params.id);
@@ -469,6 +499,7 @@ app.delete('/api/cameras/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to delete camera." });
     }
 });
+// FIX: Explicitly type req and res.
 app.post('/api/cameras/:id/capture', async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
@@ -492,6 +523,7 @@ app.post('/api/cameras/:id/capture', async (req: Request, res: Response) => {
 });
 
 // READINGS
+// FIX: Explicitly type req and res.
 app.get('/api/readings', async (req: Request, res: Response) => {
     try {
         const readings = await db.all(`
@@ -508,6 +540,7 @@ app.get('/api/readings', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch readings." });
     }
 });
+// FIX: Explicitly type req and res.
 app.get('/api/readings/history', async (req: Request, res: Response) => {
     const { stationIds: stationIdsQuery, sensorTypes: sensorTypesQuery } = req.query;
 
@@ -536,6 +569,7 @@ app.get('/api/readings/history', async (req: Request, res: Response) => {
 
 
 // DEFINITIONS & SETTINGS
+// FIX: Explicitly type req and res.
 app.get('/api/definitions', async (req: Request, res: Response) => {
     try {
         const [stationTypes, sensorTypes, cameraTypes] = await Promise.all([
@@ -549,6 +583,7 @@ app.get('/api/definitions', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch definitions." });
     }
 });
+// FIX: Explicitly type req and res.
 app.post('/api/definitions/:type', async (req: Request, res: Response) => {
     const { type } = req.params;
     try {
@@ -560,6 +595,7 @@ app.post('/api/definitions/:type', async (req: Request, res: Response) => {
         res.status(500).json({ error: `Failed to create definition for ${type}.` });
     }
 });
+// FIX: Explicitly type req and res.
 app.put('/api/definitions/:type/:id', async (req: Request, res: Response) => {
     const { type, id } = req.params;
     try {
@@ -571,6 +607,7 @@ app.put('/api/definitions/:type/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: `Failed to update definition.` });
     }
 });
+// FIX: Explicitly type req and res.
 app.delete('/api/definitions/:type/:id', async (req: Request, res: Response) => {
     const { type, id } = req.params;
     try {
@@ -582,6 +619,7 @@ app.delete('/api/definitions/:type/:id', async (req: Request, res: Response) => 
     }
 });
 
+// FIX: Explicitly type req and res.
 app.get('/api/alert-rules', async (req: Request, res: Response) => {
     try {
         res.json(await db.all("SELECT * FROM alert_rules"));
@@ -591,6 +629,7 @@ app.get('/api/alert-rules', async (req: Request, res: Response) => {
     }
 });
 
+// FIX: Explicitly type req and res.
 app.get('/api/settings/global_read_frequency', async (req: Request, res: Response) => {
     try {
         const setting = await db.get("SELECT value FROM global_settings WHERE key = 'global_read_frequency_minutes'");
@@ -600,6 +639,7 @@ app.get('/api/settings/global_read_frequency', async (req: Request, res: Respons
         res.status(500).json({ error: "Failed to get global read frequency." });
     }
 });
+// FIX: Explicitly type req and res.
 app.put('/api/settings/global_read_frequency', async (req: Request, res: Response) => {
     try {
         const { value } = req.body;
@@ -612,6 +652,7 @@ app.put('/api/settings/global_read_frequency', async (req: Request, res: Respons
 });
 
 // REPORTS
+// FIX: Explicitly type req and res.
 app.get('/api/reports', async (req: Request, res: Response) => {
     try {
         res.json(await db.all("SELECT * FROM reports"));
@@ -620,6 +661,7 @@ app.get('/api/reports', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch reports." });
     }
 });
+// FIX: Explicitly type req and res.
 app.delete('/api/reports/:id', async (req: Request, res: Response) => {
     try {
         await db.run("DELETE FROM reports WHERE id = ?", req.params.id);
@@ -629,6 +671,7 @@ app.delete('/api/reports/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to delete report." });
     }
 });
+// FIX: Explicitly type req and res.
 app.get('/api/report-schedules', async (req: Request, res: Response) => {
     try {
         const schedules = await db.all("SELECT * FROM report_schedules");
@@ -638,6 +681,7 @@ app.get('/api/report-schedules', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch report schedules." });
     }
 });
+// FIX: Explicitly type req and res.
 app.post('/api/report-schedules', async (req: Request, res: Response) => {
     try {
         const { name, frequency, time, recipient, reportConfig, isEnabled } = req.body;
@@ -652,6 +696,7 @@ app.post('/api/report-schedules', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to create report schedule." });
     }
 });
+// FIX: Explicitly type req and res.
 app.put('/api/report-schedules/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
@@ -663,6 +708,7 @@ app.put('/api/report-schedules/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to update report schedule." });
     }
 });
+// FIX: Explicitly type req and res.
 app.delete('/api/report-schedules/:id', async (req: Request, res: Response) => {
     try {
         await db.run("DELETE FROM report_schedules WHERE id = ?", req.params.id);
@@ -674,6 +720,7 @@ app.delete('/api/report-schedules/:id', async (req: Request, res: Response) => {
 });
 
 // NOTIFICATIONS
+// FIX: Explicitly type req and res.
 app.get('/api/notifications', async (req: Request, res: Response) => {
     try {
         res.json(await db.all("SELECT * FROM notifications ORDER BY timestamp DESC"));
@@ -682,6 +729,7 @@ app.get('/api/notifications', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch notifications." });
     }
 });
+// FIX: Explicitly type req and res.
 app.post('/api/notifications/mark-all-read', async (req: Request, res: Response) => {
     try {
         await db.run("UPDATE notifications SET is_read = 0 WHERE is_read = 1");
@@ -691,6 +739,7 @@ app.post('/api/notifications/mark-all-read', async (req: Request, res: Response)
         res.status(500).json({ error: "Failed to mark all notifications as read." });
     }
 });
+// FIX: Explicitly type req and res.
 app.delete('/api/notifications/clear-all', async (req: Request, res: Response) => {
     try {
         await db.run("DELETE FROM notifications");
@@ -702,6 +751,7 @@ app.delete('/api/notifications/clear-all', async (req: Request, res: Response) =
 });
 
 // ANALYSIS
+// FIX: Explicitly type req and res.
 app.post('/api/analysis/snow-depth', async (req: Request, res: Response) => {
     try {
         const { cameraId, virtualSensorId } = req.body;
@@ -889,6 +939,7 @@ fs.access(path.join(publicPath, 'index.html')).catch(() => {
 app.use(express.static(publicPath));
 
 // Catch-all to serve index.html for any other request (for client-side routing)
+// FIX: Explicitly type req and res.
 app.get('*', (req: Request, res: Response) => {
     // Exclude API routes from being caught by this
     if (req.path.startsWith('/api/')) {

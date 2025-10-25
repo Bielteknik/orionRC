@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-// Fix: Corrected import path, removing unnecessary extension.
 import { sendMessageToGemini } from '../services/geminiService';
 import { ChatIcon, PaperAirplaneIcon } from './icons/Icons.tsx';
 
