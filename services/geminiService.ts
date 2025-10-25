@@ -1,11 +1,22 @@
 import { GoogleGenAI, Chat, GenerateContentResponse } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+let chatInstance: Chat | null = null;
 
-const getChat = () => ai.chats.create({
-  model: 'gemini-2.5-flash',
-  config: {
-    systemInstruction: `You are ORION Assistant, a helpful AI assistant for a sophisticated weather and environmental monitoring system. 
+const getChat = (): Chat => {
+    // This function will be called on first use and will either return
+    // an existing chat instance or create a new one.
+    if (chatInstance) {
+        return chatInstance;
+    }
+
+    // The constructor will throw an error if the API key is not provided.
+    // This error will be caught by the calling function.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    chatInstance = ai.chats.create({
+      model: 'gemini-2.5-flash',
+      config: {
+        systemInstruction: `You are ORION Assistant, a helpful AI assistant for a sophisticated weather and environmental monitoring system. 
     Your primary role is to help users understand data, identify trends, and manage their monitoring stations.
     - You have access to real-time data about stations, sensors (temperature, humidity, wind, snow depth, etc.), and cameras.
     - Be concise and direct in your answers.
@@ -14,10 +25,11 @@ const getChat = () => ai.chats.create({
     - Do not make up fake data if you can't access it, instead say something like "I cannot access live data at the moment, but I can help you analyze patterns or explain what certain metrics mean."
     - Respond in Turkish.
     `,
-  },
-});
+      },
+    });
 
-let chatInstance: Chat = getChat();
+    return chatInstance;
+};
 
 /**
  * Sends a message to the Gemini model and returns the response stream.
@@ -26,15 +38,15 @@ let chatInstance: Chat = getChat();
  */
 export async function sendMessageToGemini(message: string): Promise<AsyncGenerator<GenerateContentResponse>> {
     try {
-        // Fix: Return the result of sendMessageStream directly.
-        const result = await chatInstance.sendMessageStream({ message });
+        const chat = getChat();
+        const result = await chat.sendMessageStream({ message });
         return result;
     } catch (error) {
         console.error("Gemini chat error, restarting chat session:", error);
-        // If the chat session has an issue, try creating a new one
-        chatInstance = getChat();
-        // Fix: Return the result of sendMessageStream directly after restarting the chat.
-        const result = await chatInstance.sendMessageStream({ message });
+        // If the chat session has an issue (e.g., expired), reset and try again.
+        chatInstance = null;
+        const chat = getChat();
+        const result = await chat.sendMessageStream({ message });
         return result;
     }
 }

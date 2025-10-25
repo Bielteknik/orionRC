@@ -46,9 +46,13 @@ const SnowWaterEquivalentCalculator: React.FC = () => {
                 setExplanation(fullText + '...');
             }
             setExplanation(fullText);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to get explanation from Gemini:", error);
-            setExplanation("Açıklama alınırken bir hata oluştu.");
+            let errorMessage = "Açıklama alınırken bir hata oluştu.";
+            if (error.message && (error.message.includes('API Key') || error.message.includes('API key'))) {
+                errorMessage = "Yapay zeka özelliği için API anahtarı yapılandırılmamış.";
+            }
+            setExplanation(errorMessage);
         } finally {
             setIsExplaining(false);
         }
@@ -334,9 +338,13 @@ const AnomalyDetector: React.FC<{ stations: Station[], sensors: Sensor[] }> = ({
                 setAnalysis(fullText + "..."); // Add ellipsis for streaming effect
             }
             setAnalysis(fullText); // Set final text
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to get analysis from Gemini:", error);
-            setAnalysis("Analiz sırasında bir hata oluştu.");
+            let errorMessage = "Analiz sırasında bir hata oluştu.";
+            if (error.message && (error.message.includes('API Key') || error.message.includes('API key'))) {
+                errorMessage = "Yapay zeka özelliği için API anahtarı yapılandırılmamış.";
+            }
+            setAnalysis(errorMessage);
         } finally {
             setIsLoading(false);
         }

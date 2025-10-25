@@ -39,9 +39,13 @@ const GeminiAssistant: React.FC = () => {
                 return newMessages;
             });
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error("Gemini Error:", error);
-        setMessages(prev => [...prev, { sender: 'bot', text: 'Üzgünüm, bir sorunla karşılaştım. Lütfen daha sonra tekrar deneyin.' }]);
+        let errorMessage = 'Üzgünüm, bir sorunla karşılaştım. Lütfen daha sonra tekrar deneyin.';
+        if (error.message && (error.message.includes('API Key') || error.message.includes('API key'))) {
+            errorMessage = 'Yapay zeka asistanı için API anahtarı yapılandırılmamış. Lütfen sistem yöneticisi ile iletişime geçin.';
+        }
+        setMessages(prev => [...prev, { sender: 'bot', text: errorMessage }]);
     } finally {
         setIsLoading(false);
     }
