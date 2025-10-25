@@ -1,0 +1,9 @@
+{
+  "server": {
+    "base_url": "https://meteoroloji.ejderapi.com.tr"
+  },
+  "device": {
+    "id": "ejder3200-01",
+    "token": "EjderMeteo_Rpi_SecretKey_2025!"
+  }
+}

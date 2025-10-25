@@ -1,20 +1,18 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# ORION Gözlem Platformu
 
-# Run and deploy your AI Studio app
+This repository contains the source code for the ORION Observation Platform.
 
-This contains everything you need to run your app locally.
+## Project Structure
 
-View your app in AI Studio: https://ai.studio/apps/drive/1Uri-8sag0RYfDwDTsxlwOeUy9phRgn6I
+-   `/` (root): Contains the React-based user interface (frontend) for visualizing data and managing the system.
+-   `/backend`: The Node.js, Express, and TypeScript backend API. This is the central brain of the platform.
+-   `/raspiagent-ts`: The **TypeScript/Node.js** agent designed to run on a Raspberry Pi to read sensor data.
+-   `/raspiagent-py`: The **Python** agent designed to run on a Raspberry Pi, offering an alternative to the TypeScript agent.
 
-## Run Locally
+## Backend Service
 
-**Prerequisites:**  Node.js
+The backend service is the central hub. Please refer to the `README.md` file inside the `/backend` directory for instructions on how to set up and run the server.
 
+## IoT Agent
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+You can choose to run either the TypeScript or the Python agent on your Raspberry Pi. Both perform the same functions. Refer to the `README.md` file inside the respective agent's directory for detailed setup and running instructions.
