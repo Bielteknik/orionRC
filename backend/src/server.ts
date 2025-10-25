@@ -1,4 +1,5 @@
 
+
 // Fix: Use explicit Request and Response types from express to avoid collision with global types.
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
@@ -244,190 +245,265 @@ app.get('/api/agent-status', (req: Request, res: Response) => {
 
 // STATIONS
 app.get('/api/stations', async (req: Request, res: Response) => {
-    const stationsFromDb = await db.all(`
-        SELECT 
-            st.*,
-            COUNT(DISTINCT s.id) as sensor_count,
-            COUNT(DISTINCT c.id) as camera_count
-        FROM stations st
-        LEFT JOIN sensors s ON s.station_id = st.id
-        LEFT JOIN cameras c ON c.station_id = st.id
-        GROUP BY st.id
-    `);
-    const stations = stationsFromDb.map(s => ({
-        ...s,
-        sensorCount: s.sensor_count,
-        cameraCount: s.camera_count,
-        locationCoords: { lat: s.lat, lng: s.lng },
-    }));
-    res.json(stations);
+    try {
+        const stationsFromDb = await db.all(`
+            SELECT 
+                st.*,
+                COUNT(DISTINCT s.id) as sensor_count,
+                COUNT(DISTINCT c.id) as camera_count
+            FROM stations st
+            LEFT JOIN sensors s ON s.station_id = st.id
+            LEFT JOIN cameras c ON c.station_id = st.id
+            GROUP BY st.id
+        `);
+        const stations = stationsFromDb.map(s => ({
+            ...s,
+            sensorCount: s.sensor_count,
+            cameraCount: s.camera_count,
+            locationCoords: { lat: s.lat, lng: s.lng },
+        }));
+        res.json(stations);
+    } catch (error) {
+        console.error("Error fetching stations:", error);
+        res.status(500).json({ error: "Failed to fetch stations." });
+    }
 });
 app.post('/api/stations', async (req: Request, res: Response) => {
-    const { id, name, location, locationCoords, selectedSensorIds = [], selectedCameraIds = [] } = req.body;
-    await db.run(
-        "INSERT INTO stations (id, name, location, lat, lng, last_update) VALUES (?, ?, ?, ?, ?, ?)",
-        id, name, location, locationCoords.lat, locationCoords.lng, new Date().toISOString()
-    );
-    for (const sensorId of selectedSensorIds) {
-        await db.run("UPDATE sensors SET station_id = ? WHERE id = ?", id, sensorId);
+    try {
+        const { id, name, location, locationCoords, selectedSensorIds = [], selectedCameraIds = [] } = req.body;
+        await db.run(
+            "INSERT INTO stations (id, name, location, lat, lng, last_update) VALUES (?, ?, ?, ?, ?, ?)",
+            id, name, location, locationCoords.lat, locationCoords.lng, new Date().toISOString()
+        );
+        for (const sensorId of selectedSensorIds) {
+            await db.run("UPDATE sensors SET station_id = ? WHERE id = ?", id, sensorId);
+        }
+        for (const cameraId of selectedCameraIds) {
+            await db.run("UPDATE cameras SET station_id = ? WHERE id = ?", id, cameraId);
+        }
+        res.status(201).json({ id });
+    } catch (error) {
+        console.error("Error creating station:", error);
+        res.status(500).json({ error: "Failed to create station." });
     }
-    for (const cameraId of selectedCameraIds) {
-        await db.run("UPDATE cameras SET station_id = ? WHERE id = ?", id, cameraId);
-    }
-    res.status(201).json({ id });
 });
 app.put('/api/stations/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, location, locationCoords, status } = req.body;
-    await db.run(
-        "UPDATE stations SET name = ?, location = ?, lat = ?, lng = ?, status = ? WHERE id = ?",
-        name, location, locationCoords.lat, locationCoords.lng, status, id
-    );
-    res.status(200).json({ id });
+    try {
+        const { name, location, locationCoords, status } = req.body;
+        await db.run(
+            "UPDATE stations SET name = ?, location = ?, lat = ?, lng = ?, status = ? WHERE id = ?",
+            name, location, locationCoords.lat, locationCoords.lng, status, id
+        );
+        res.status(200).json({ id });
+    } catch (error) {
+        console.error(`Error updating station ${id}:`, error);
+        res.status(500).json({ error: "Failed to update station." });
+    }
 });
 app.delete('/api/stations/:id', async (req: Request, res: Response) => {
-    await db.run("DELETE FROM stations WHERE id = ?", req.params.id);
-    res.status(204).send();
+    try {
+        await db.run("DELETE FROM stations WHERE id = ?", req.params.id);
+        res.status(204).send();
+    } catch (error) {
+        console.error(`Error deleting station ${req.params.id}:`, error);
+        res.status(500).json({ error: "Failed to delete station." });
+    }
 });
 
 
 // SENSORS
 app.get('/api/sensors', async (req: Request, res: Response) => {
-    const unassigned = req.query.unassigned === 'true';
-    const query = unassigned
-        ? "SELECT * FROM sensors WHERE station_id IS NULL OR station_id = ''"
-        : "SELECT * FROM sensors";
-    const sensors = await db.all(query);
-    res.json(sensors.map(s => ({
-        id: s.id,
-        name: s.name,
-        type: s.type,
-        stationId: s.station_id,
-        status: s.status,
-        value: JSON.parse(s.value || 'null'),
-        unit: s.unit,
-        battery: s.battery,
-        lastUpdate: s.last_update,
-        interface: s.interface,
-        config: JSON.parse(s.config || '{}'),
-        parser_config: JSON.parse(s.parser_config || '{}'),
-        read_frequency: s.read_frequency,
-        referenceValue: s.reference_value,
-        referenceOperation: s.reference_operation,
-    })));
+    try {
+        const unassigned = req.query.unassigned === 'true';
+        const query = unassigned
+            ? "SELECT * FROM sensors WHERE station_id IS NULL OR station_id = ''"
+            : "SELECT * FROM sensors";
+        const sensors = await db.all(query);
+        res.json(sensors.map(s => ({
+            id: s.id,
+            name: s.name,
+            type: s.type,
+            stationId: s.station_id,
+            status: s.status,
+            value: JSON.parse(s.value || 'null'),
+            unit: s.unit,
+            battery: s.battery,
+            lastUpdate: s.last_update,
+            interface: s.interface,
+            config: JSON.parse(s.config || '{}'),
+            parser_config: JSON.parse(s.parser_config || '{}'),
+            read_frequency: s.read_frequency,
+            referenceValue: s.reference_value,
+            referenceOperation: s.reference_operation,
+        })));
+    } catch (error) {
+        console.error("Error fetching sensors:", error);
+        res.status(500).json({ error: "Failed to fetch sensors." });
+    }
 });
 app.post('/api/sensors', async (req: Request, res: Response) => {
-    const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
-    const id = `S${Date.now()}`;
-    await db.run(
-        `INSERT INTO sensors (id, name, station_id, type, unit, status, interface, parser_config, config, read_frequency, is_active, last_update, reference_value, reference_operation) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        id, name, stationId, type, unit, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfig, interfaceConfig, readFrequency, isActive, new Date().toISOString(), referenceValue, referenceOperation
-    );
-    res.status(201).json({ id });
+    try {
+        const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
+        const id = `S${Date.now()}`;
+        await db.run(
+            `INSERT INTO sensors (id, name, station_id, type, unit, status, interface, parser_config, config, read_frequency, is_active, last_update, reference_value, reference_operation) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            id, name, stationId, type, unit, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfig, interfaceConfig, readFrequency, isActive, new Date().toISOString(), referenceValue, referenceOperation
+        );
+        res.status(201).json({ id });
+    } catch (error) {
+        console.error("Error creating sensor:", error);
+        res.status(500).json({ error: "Failed to create sensor." });
+    }
 });
 app.put('/api/sensors/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
-    await db.run(
-        `UPDATE sensors SET name=?, station_id=?, type=?, unit=?, status=?, interface=?, parser_config=?, config=?, read_frequency=?, is_active=?, reference_value=?, reference_operation=?
-         WHERE id = ?`,
-        name, stationId, type, unit, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfig, interfaceConfig, readFrequency, isActive, referenceValue, referenceOperation, id
-    );
-    res.status(200).json({ id });
+    try {
+        const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
+        await db.run(
+            `UPDATE sensors SET name=?, station_id=?, type=?, unit=?, status=?, interface=?, parser_config=?, config=?, read_frequency=?, is_active=?, reference_value=?, reference_operation=?
+             WHERE id = ?`,
+            name, stationId, type, unit, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfig, interfaceConfig, readFrequency, isActive, referenceValue, referenceOperation, id
+        );
+        res.status(200).json({ id });
+    } catch (error) {
+        console.error(`Error updating sensor with ID ${id}:`, error);
+        res.status(500).json({ error: 'Failed to update sensor.' });
+    }
 });
 app.delete('/api/sensors/:id', async (req: Request, res: Response) => {
-    await db.run("DELETE FROM sensors WHERE id = ?", req.params.id);
-    res.status(204).send();
+    try {
+        await db.run("DELETE FROM sensors WHERE id = ?", req.params.id);
+        res.status(204).send();
+    } catch (error) {
+        console.error(`Error deleting sensor ${req.params.id}:`, error);
+        res.status(500).json({ error: "Failed to delete sensor." });
+    }
 });
 app.post('/api/sensors/:id/read', async (req: Request, res: Response) => {
     const { id } = req.params;
-    const sensor = await db.get("SELECT * FROM sensors WHERE id = ?", id);
-    if (!sensor || !sensor.station_id) {
-        return res.status(404).json({ error: 'Sensor not found or not assigned to a station.' });
+    try {
+        const sensor = await db.get("SELECT * FROM sensors WHERE id = ?", id);
+        if (!sensor || !sensor.station_id) {
+            return res.status(404).json({ error: 'Sensor not found or not assigned to a station.' });
+        }
+        const command = {
+            id: Date.now(),
+            command_type: 'FORCE_READ_SENSOR',
+            payload: { sensor_id: id },
+            status: 'pending'
+        };
+        if (!commandQueue[sensor.station_id]) commandQueue[sensor.station_id] = [];
+        commandQueue[sensor.station_id].push(command);
+        res.status(202).send('Read command queued');
+    } catch (error) {
+        console.error(`Error queueing read command for sensor ${id}:`, error);
+        res.status(500).json({ error: "Failed to queue read command." });
     }
-    const command = {
-        id: Date.now(),
-        command_type: 'FORCE_READ_SENSOR',
-        payload: { sensor_id: id },
-        status: 'pending'
-    };
-    if (!commandQueue[sensor.station_id]) commandQueue[sensor.station_id] = [];
-    commandQueue[sensor.station_id].push(command);
-    res.status(202).send('Read command queued');
 });
 
 // CAMERAS
 app.get('/api/cameras', async (req: Request, res: Response) => {
-    const unassigned = req.query.unassigned === 'true';
-    const query = unassigned
-        ? "SELECT * FROM cameras WHERE station_id IS NULL OR station_id = ''"
-        : "SELECT * FROM cameras";
-    const cameras = await db.all(query);
-     // Map snake_case from DB to camelCase for frontend
-    res.json(cameras.map(c => ({
-        id: c.id,
-        name: c.name,
-        stationId: c.station_id,
-        status: c.status,
-        streamUrl: c.stream_url,
-        rtspUrl: c.rtsp_url,
-        cameraType: c.camera_type,
-        viewDirection: c.view_direction,
-        fps: c.fps,
-        photos: JSON.parse(c.photos || '[]')
-    })));
+    try {
+        const unassigned = req.query.unassigned === 'true';
+        const query = unassigned
+            ? "SELECT * FROM cameras WHERE station_id IS NULL OR station_id = ''"
+            : "SELECT * FROM cameras";
+        const cameras = await db.all(query);
+         // Map snake_case from DB to camelCase for frontend
+        res.json(cameras.map(c => ({
+            id: c.id,
+            name: c.name,
+            stationId: c.station_id,
+            status: c.status,
+            streamUrl: c.stream_url,
+            rtspUrl: c.rtsp_url,
+            cameraType: c.camera_type,
+            viewDirection: c.view_direction,
+            fps: c.fps,
+            photos: JSON.parse(c.photos || '[]')
+        })));
+    } catch (error) {
+        console.error("Error fetching cameras:", error);
+        res.status(500).json({ error: "Failed to fetch cameras." });
+    }
 });
 app.post('/api/cameras', async (req: Request, res: Response) => {
-    const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
-    const id = `C${Date.now()}`;
-    await db.run(
-        "INSERT INTO cameras (id, name, station_id, status, view_direction, rtsp_url, camera_type, photos) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        id, name, stationId, status, viewDirection, rtspUrl, cameraType, '[]'
-    );
-    res.status(201).json({ id });
+    try {
+        const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
+        const id = `C${Date.now()}`;
+        await db.run(
+            "INSERT INTO cameras (id, name, station_id, status, view_direction, rtsp_url, camera_type, photos) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            id, name, stationId, status, viewDirection, rtspUrl, cameraType, '[]'
+        );
+        res.status(201).json({ id });
+    } catch (error) {
+        console.error("Error creating camera:", error);
+        res.status(500).json({ error: "Failed to create camera." });
+    }
 });
 app.put('/api/cameras/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
-    await db.run(
-        "UPDATE cameras SET name = ?, station_id = ?, status = ?, view_direction = ?, rtsp_url = ?, camera_type = ? WHERE id = ?",
-        name, stationId, status, viewDirection, rtspUrl, cameraType, id
-    );
-    res.status(200).json({ id });
+    try {
+        const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
+        await db.run(
+            "UPDATE cameras SET name = ?, station_id = ?, status = ?, view_direction = ?, rtsp_url = ?, camera_type = ? WHERE id = ?",
+            name, stationId, status, viewDirection, rtspUrl, cameraType, id
+        );
+        res.status(200).json({ id });
+    } catch (error) {
+        console.error(`Error updating camera ${id}:`, error);
+        res.status(500).json({ error: "Failed to update camera." });
+    }
 });
 app.delete('/api/cameras/:id', async (req: Request, res: Response) => {
-    await db.run("DELETE FROM cameras WHERE id = ?", req.params.id);
-    res.status(204).send();
+    try {
+        await db.run("DELETE FROM cameras WHERE id = ?", req.params.id);
+        res.status(204).send();
+    } catch (error) {
+        console.error(`Error deleting camera ${req.params.id}:`, error);
+        res.status(500).json({ error: "Failed to delete camera." });
+    }
 });
 app.post('/api/cameras/:id/capture', async (req: Request, res: Response) => {
     const { id } = req.params;
-    const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", id);
-    if (!camera || !camera.station_id) {
-        return res.status(404).json({ error: 'Camera not found or not assigned to a station.' });
+    try {
+        const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", id);
+        if (!camera || !camera.station_id) {
+            return res.status(404).json({ error: 'Camera not found or not assigned to a station.' });
+        }
+        const command = {
+            id: Date.now(),
+            command_type: 'CAPTURE_IMAGE',
+            payload: { camera_id: id },
+            status: 'pending'
+        };
+        if (!commandQueue[camera.station_id]) commandQueue[camera.station_id] = [];
+        commandQueue[camera.station_id].push(command);
+        res.status(202).send('Capture command queued');
+    } catch (error) {
+        console.error(`Error queueing capture command for camera ${id}:`, error);
+        res.status(500).json({ error: "Failed to queue capture command." });
     }
-    const command = {
-        id: Date.now(),
-        command_type: 'CAPTURE_IMAGE',
-        payload: { camera_id: id },
-        status: 'pending'
-    };
-    if (!commandQueue[camera.station_id]) commandQueue[camera.station_id] = [];
-    commandQueue[camera.station_id].push(command);
-    res.status(202).send('Capture command queued');
 });
 
 // READINGS
 app.get('/api/readings', async (req: Request, res: Response) => {
-    const readings = await db.all(`
-        SELECT r.id, r.sensor_id as sensorId, s.name as sensorName, s.type as sensorType, s.unit, s.interface, st.id as stationId, st.name as stationName, r.value, r.timestamp 
-        FROM readings r
-        JOIN sensors s ON r.sensor_id = s.id
-        JOIN stations st ON s.station_id = st.id
-        ORDER BY r.timestamp DESC
-        LIMIT 100
-    `);
-    res.json(readings.map(r => ({ ...r, value: JSON.parse(r.value || 'null') })));
+    try {
+        const readings = await db.all(`
+            SELECT r.id, r.sensor_id as sensorId, s.name as sensorName, s.type as sensorType, s.unit, s.interface, st.id as stationId, st.name as stationName, r.value, r.timestamp 
+            FROM readings r
+            JOIN sensors s ON r.sensor_id = s.id
+            JOIN stations st ON s.station_id = st.id
+            ORDER BY r.timestamp DESC
+            LIMIT 100
+        `);
+        res.json(readings.map(r => ({ ...r, value: JSON.parse(r.value || 'null') })));
+    } catch (error) {
+        console.error("Error fetching readings:", error);
+        res.status(500).json({ error: "Failed to fetch readings." });
+    }
 });
 app.get('/api/readings/history', async (req: Request, res: Response) => {
     const { stationIds: stationIdsQuery, sensorTypes: sensorTypesQuery } = req.query;
@@ -458,106 +534,197 @@ app.get('/api/readings/history', async (req: Request, res: Response) => {
 
 // DEFINITIONS & SETTINGS
 app.get('/api/definitions', async (req: Request, res: Response) => {
-    const [stationTypes, sensorTypes, cameraTypes] = await Promise.all([
-        db.all("SELECT * FROM station_types"),
-        db.all("SELECT * FROM sensor_types"),
-        db.all("SELECT * FROM camera_types"),
-    ]);
-    res.json({ stationTypes, sensorTypes, cameraTypes });
+    try {
+        const [stationTypes, sensorTypes, cameraTypes] = await Promise.all([
+            db.all("SELECT * FROM station_types"),
+            db.all("SELECT * FROM sensor_types"),
+            db.all("SELECT * FROM camera_types"),
+        ]);
+        res.json({ stationTypes, sensorTypes, cameraTypes });
+    } catch (error) {
+        console.error("Error fetching definitions:", error);
+        res.status(500).json({ error: "Failed to fetch definitions." });
+    }
 });
 app.post('/api/definitions/:type', async (req: Request, res: Response) => {
     const { type } = req.params;
-    const { name } = req.body;
-    const result = await db.run(`INSERT INTO ${type} (name) VALUES (?)`, name);
-    res.status(201).json({ id: result.lastID, name });
+    try {
+        const { name } = req.body;
+        const result = await db.run(`INSERT INTO ${type} (name) VALUES (?)`, name);
+        res.status(201).json({ id: result.lastID, name });
+    } catch (error) {
+        console.error(`Error creating definition for ${type}:`, error);
+        res.status(500).json({ error: `Failed to create definition for ${type}.` });
+    }
 });
 app.put('/api/definitions/:type/:id', async (req: Request, res: Response) => {
     const { type, id } = req.params;
-    const { name } = req.body;
-    await db.run(`UPDATE ${type} SET name = ? WHERE id = ?`, name, id);
-    res.status(200).json({ id, name });
+    try {
+        const { name } = req.body;
+        await db.run(`UPDATE ${type} SET name = ? WHERE id = ?`, name, id);
+        res.status(200).json({ id, name });
+    } catch (error) {
+        console.error(`Error updating definition for ${type} with id ${id}:`, error);
+        res.status(500).json({ error: `Failed to update definition.` });
+    }
 });
 app.delete('/api/definitions/:type/:id', async (req: Request, res: Response) => {
     const { type, id } = req.params;
-    await db.run(`DELETE FROM ${type} WHERE id = ?`, id);
-    res.status(204).send();
+    try {
+        await db.run(`DELETE FROM ${type} WHERE id = ?`, id);
+        res.status(204).send();
+    } catch (error) {
+        console.error(`Error deleting definition for ${type} with id ${id}:`, error);
+        res.status(500).json({ error: `Failed to delete definition.` });
+    }
 });
 
-app.get('/api/alert-rules', async (req: Request, res: Response) => res.json(await db.all("SELECT * FROM alert_rules")));
+app.get('/api/alert-rules', async (req: Request, res: Response) => {
+    try {
+        res.json(await db.all("SELECT * FROM alert_rules"));
+    } catch (error) {
+        console.error("Error fetching alert rules:", error);
+        res.status(500).json({ error: "Failed to fetch alert rules." });
+    }
+});
 
 app.get('/api/settings/global_read_frequency', async (req: Request, res: Response) => {
-    const setting = await db.get("SELECT value FROM global_settings WHERE key = 'global_read_frequency_minutes'");
-    res.json(setting || { value: '0' });
+    try {
+        const setting = await db.get("SELECT value FROM global_settings WHERE key = 'global_read_frequency_minutes'");
+        res.json(setting || { value: '0' });
+    } catch (error) {
+        console.error("Error getting global read frequency:", error);
+        res.status(500).json({ error: "Failed to get global read frequency." });
+    }
 });
 app.put('/api/settings/global_read_frequency', async (req: Request, res: Response) => {
-    const { value } = req.body;
-    await db.run("UPDATE global_settings SET value = ? WHERE key = 'global_read_frequency_minutes'", value);
-    res.status(200).send('OK');
+    try {
+        const { value } = req.body;
+        await db.run("UPDATE global_settings SET value = ? WHERE key = 'global_read_frequency_minutes'", value);
+        res.status(200).send('OK');
+    } catch (error) {
+        console.error("Error setting global read frequency:", error);
+        res.status(500).json({ error: "Failed to set global read frequency." });
+    }
 });
 
 // REPORTS
-app.get('/api/reports', async (req: Request, res: Response) => res.json(await db.all("SELECT * FROM reports")));
+app.get('/api/reports', async (req: Request, res: Response) => {
+    try {
+        res.json(await db.all("SELECT * FROM reports"));
+    } catch (error) {
+        console.error("Error fetching reports:", error);
+        res.status(500).json({ error: "Failed to fetch reports." });
+    }
+});
 app.delete('/api/reports/:id', async (req: Request, res: Response) => {
-    await db.run("DELETE FROM reports WHERE id = ?", req.params.id);
-    res.status(204).send();
+    try {
+        await db.run("DELETE FROM reports WHERE id = ?", req.params.id);
+        res.status(204).send();
+    } catch (error) {
+        console.error(`Error deleting report ${req.params.id}:`, error);
+        res.status(500).json({ error: "Failed to delete report." });
+    }
 });
 app.get('/api/report-schedules', async (req: Request, res: Response) => {
-    const schedules = await db.all("SELECT * FROM report_schedules");
-    res.json(schedules.map(s => ({...s, reportConfig: JSON.parse(s.report_config || '{}')})));
+    try {
+        const schedules = await db.all("SELECT * FROM report_schedules");
+        res.json(schedules.map(s => ({...s, reportConfig: JSON.parse(s.report_config || '{}')})));
+    } catch (error) {
+        console.error("Error fetching report schedules:", error);
+        res.status(500).json({ error: "Failed to fetch report schedules." });
+    }
 });
 app.post('/api/report-schedules', async (req: Request, res: Response) => {
-    const { name, frequency, time, recipient, reportConfig, isEnabled } = req.body;
-    const id = `SCH_${uuidv4()}`;
-    await db.run(
-        `INSERT INTO report_schedules (id, name, frequency, time, recipient, report_config, is_enabled) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        id, name, frequency, time, recipient, JSON.stringify(reportConfig), isEnabled
-    );
-    res.status(201).json({ id });
+    try {
+        const { name, frequency, time, recipient, reportConfig, isEnabled } = req.body;
+        const id = `SCH_${uuidv4()}`;
+        await db.run(
+            `INSERT INTO report_schedules (id, name, frequency, time, recipient, report_config, is_enabled) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            id, name, frequency, time, recipient, JSON.stringify(reportConfig), isEnabled
+        );
+        res.status(201).json({ id });
+    } catch (error) {
+        console.error("Error creating report schedule:", error);
+        res.status(500).json({ error: "Failed to create report schedule." });
+    }
 });
 app.put('/api/report-schedules/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { isEnabled } = req.body; // For now, only supports toggling
-    await db.run("UPDATE report_schedules SET is_enabled = ? WHERE id = ?", isEnabled, id);
-    res.status(200).send('OK');
+    try {
+        const { isEnabled } = req.body; // For now, only supports toggling
+        await db.run("UPDATE report_schedules SET is_enabled = ? WHERE id = ?", isEnabled, id);
+        res.status(200).send('OK');
+    } catch (error) {
+        console.error(`Error updating report schedule ${id}:`, error);
+        res.status(500).json({ error: "Failed to update report schedule." });
+    }
 });
 app.delete('/api/report-schedules/:id', async (req: Request, res: Response) => {
-    await db.run("DELETE FROM report_schedules WHERE id = ?", req.params.id);
-    res.status(204).send();
+    try {
+        await db.run("DELETE FROM report_schedules WHERE id = ?", req.params.id);
+        res.status(204).send();
+    } catch (error) {
+        console.error(`Error deleting report schedule ${req.params.id}:`, error);
+        res.status(500).json({ error: "Failed to delete report schedule." });
+    }
 });
 
 // NOTIFICATIONS
-app.get('/api/notifications', async (req: Request, res: Response) => res.json(await db.all("SELECT * FROM notifications ORDER BY timestamp DESC")));
+app.get('/api/notifications', async (req: Request, res: Response) => {
+    try {
+        res.json(await db.all("SELECT * FROM notifications ORDER BY timestamp DESC"));
+    } catch (error) {
+        console.error("Error fetching notifications:", error);
+        res.status(500).json({ error: "Failed to fetch notifications." });
+    }
+});
 app.post('/api/notifications/mark-all-read', async (req: Request, res: Response) => {
-    await db.run("UPDATE notifications SET is_read = 0 WHERE is_read = 1");
-    res.status(200).send('OK');
+    try {
+        await db.run("UPDATE notifications SET is_read = 0 WHERE is_read = 1");
+        res.status(200).send('OK');
+    } catch (error) {
+        console.error("Error marking all notifications as read:", error);
+        res.status(500).json({ error: "Failed to mark all notifications as read." });
+    }
 });
 app.delete('/api/notifications/clear-all', async (req: Request, res: Response) => {
-    await db.run("DELETE FROM notifications");
-    res.status(204).send();
+    try {
+        await db.run("DELETE FROM notifications");
+        res.status(204).send();
+    } catch (error) {
+        console.error("Error clearing all notifications:", error);
+        res.status(500).json({ error: "Failed to clear all notifications." });
+    }
 });
 
 // ANALYSIS
 app.post('/api/analysis/snow-depth', async (req: Request, res: Response) => {
-    const { cameraId, virtualSensorId } = req.body;
-    const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", cameraId);
+    try {
+        const { cameraId, virtualSensorId } = req.body;
+        const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", cameraId);
 
-    if (!camera || !camera.station_id) {
-        return res.status(404).json({ error: 'Camera not found or not assigned to a station.' });
+        if (!camera || !camera.station_id) {
+            return res.status(404).json({ error: 'Camera not found or not assigned to a station.' });
+        }
+
+        const command = {
+            id: Date.now(),
+            command_type: 'ANALYZE_SNOW_DEPTH',
+            payload: { camera_id: cameraId, virtual_sensor_id: virtualSensorId },
+            status: 'pending'
+        };
+
+        if (!commandQueue[camera.station_id]) {
+            commandQueue[camera.station_id] = [];
+        }
+        commandQueue[camera.station_id].push(command);
+
+        res.status(202).json({ message: 'Snow depth analysis command queued.' });
+    } catch (error) {
+        console.error("Error queueing snow depth analysis command:", error);
+        res.status(500).json({ error: "Failed to queue snow depth analysis command." });
     }
-
-    const command = {
-        id: Date.now(),
-        command_type: 'ANALYZE_SNOW_DEPTH',
-        payload: { camera_id: cameraId, virtual_sensor_id: virtualSensorId },
-        status: 'pending'
-    };
-
-    if (!commandQueue[camera.station_id]) {
-        commandQueue[camera.station_id] = [];
-    }
-    commandQueue[camera.station_id].push(command);
-
-    res.status(202).json({ message: 'Snow depth analysis command queued.' });
 });
 
 
