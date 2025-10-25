@@ -1,18 +1,18 @@
 # ORION Gözlem Platformu
 
-This repository contains the source code for the ORION Observation Platform.
+Bu depo, ORION Gözlem Platformu'nun kaynak kodunu içermektedir.
 
-## Project Structure
+## Proje Yapısı
 
--   `/` (root): Contains the React-based user interface (frontend) for visualizing data and managing the system.
--   `/backend`: The Node.js, Express, and TypeScript backend API. This is the central brain of the platform.
--   `/raspiagent-ts`: The **TypeScript/Node.js** agent designed to run on a Raspberry Pi to read sensor data.
--   `/raspiagent-py`: The **Python** agent designed to run on a Raspberry Pi, offering an alternative to the TypeScript agent.
+-   `/` (kök): Verileri görselleştirmek ve sistemi yönetmek için React tabanlı kullanıcı arayüzünü (frontend) içerir.
+-   `/backend`: Node.js, Express ve TypeScript ile yazılmış backend API'si. Bu, platformun merkezi beynidir.
+-   `/raspiagent-ts`: Sensör verilerini okumak için bir Raspberry Pi üzerinde çalışmak üzere tasarlanmış **TypeScript/Node.js** tabanlı agent.
+-   `/raspiagent-py`: TypeScript agent'ına bir alternatif sunan, Raspberry Pi üzerinde çalışmak üzere tasarlanmış **Python** agent'ı. (Bu örnekte sadece TS agent'ı bulunmaktadır.)
 
-## Backend Service
+## Backend Servisi
 
-The backend service is the central hub. Please refer to the `README.md` file inside the `/backend` directory for instructions on how to set up and run the server.
+Backend servisi merkezi hub'dır. Sunucunun nasıl kurulacağı ve çalıştırılacağı ile ilgili talimatlar için lütfen `/backend` dizinindeki `README.md` dosyasına başvurun.
 
 ## IoT Agent
 
-You can choose to run either the TypeScript or the Python agent on your Raspberry Pi. Both perform the same functions. Refer to the `README.md` file inside the respective agent's directory for detailed setup and running instructions.
+Raspberry Pi'nizde TypeScript veya Python agent'ını çalıştırmayı seçebilirsiniz. Her ikisi de aynı işlevleri yerine getirir. Ayrıntılı kurulum ve çalıştırma talimatları için ilgili agent dizinindeki `README.md` dosyasına bakın.

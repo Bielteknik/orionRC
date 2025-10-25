@@ -1,5 +1,5 @@
 import React from 'react';
-import { Page } from '../../types.ts';
+import { Page } from '../../types';
 import { 
     DashboardIcon, 
     StationIcon, 
@@ -9,7 +9,7 @@ import {
     ReportsIcon, 
     CloudIcon,
     BrainIcon
-} from '../icons/Icons.tsx';
+} from '../icons/Icons';
 
 interface SidebarProps {
   currentPage: Page;
@@ -19,12 +19,11 @@ interface SidebarProps {
 interface NavItemProps {
   page: Page;
   icon: React.ReactNode;
-  label: string;
   currentPage: Page;
   onClick: (page: Page) => void;
 }
 
-const NavItem: React.FC<NavItemProps> = ({ page, icon, label, currentPage, onClick }) => (
+const NavItem: React.FC<NavItemProps> = ({ page, icon, currentPage, onClick }) => (
     <li>
         <button
             onClick={() => onClick(page)}
@@ -35,24 +34,24 @@ const NavItem: React.FC<NavItemProps> = ({ page, icon, label, currentPage, onCli
             }`}
         >
             {icon}
-            <span>{label}</span>
+            <span>{page}</span>
         </button>
     </li>
 );
 
 const Sidebar: React.FC<SidebarProps> = ({ currentPage, setCurrentPage }) => {
     const navItems = [
-        { page: Page.Dashboard, icon: <DashboardIcon className="w-5 h-5" />, label: Page.Dashboard },
-        { page: Page.Analysis, icon: <BrainIcon className="w-5 h-5" />, label: Page.Analysis },
-        { page: Page.Stations, icon: <StationIcon className="w-5 h-5" />, label: Page.Stations },
-        { page: Page.Sensors, icon: <SensorIcon className="w-5 h-5" />, label: Page.Sensors },
-        { page: Page.Cameras, icon: <CameraIcon className="w-5 h-5" />, label: Page.Cameras },
-        { page: Page.Reports, icon: <ReportsIcon className="w-5 h-5" />, label: Page.Reports },
-        { page: Page.Definitions, icon: <DefinitionsIcon className="w-5 h-5" />, label: Page.Definitions },
+        { page: Page.Dashboard, icon: <DashboardIcon className="w-5 h-5" /> },
+        { page: Page.Analysis, icon: <BrainIcon className="w-5 h-5" /> },
+        { page: Page.Stations, icon: <StationIcon className="w-5 h-5" /> },
+        { page: Page.Sensors, icon: <SensorIcon className="w-5 h-5" /> },
+        { page: Page.Cameras, icon: <CameraIcon className="w-5 h-5" /> },
+        { page: Page.Reports, icon: <ReportsIcon className="w-5 h-5" /> },
+        { page: Page.Definitions, icon: <DefinitionsIcon className="w-5 h-5" /> },
     ];
 
     return (
-        <aside className="w-64 bg-primary dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col flex-shrink-0">
+        <aside className="hidden lg:flex w-64 bg-primary dark:bg-dark-primary border-r border-gray-200 dark:border-gray-700 flex-col flex-shrink-0">
             <div className="flex items-center justify-center h-16 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
                 <div className="flex items-center space-x-2">
                     <CloudIcon className="w-8 h-8 text-accent" />
@@ -66,7 +65,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setCurrentPage }) => {
                             key={item.page}
                             page={item.page}
                             icon={item.icon}
-                            label={item.label}
                             currentPage={currentPage}
                             onClick={setCurrentPage}
                         />

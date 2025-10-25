@@ -114,13 +114,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStationDetails, stations, s
                         } else {
                             const numericValue = Object.values(latestSensor.value).find(v => typeof v === 'number');
                             // Fix: Use a type guard (`typeof`) to ensure `numericValue` is a number before calling `toFixed`.
-                            displayValue = typeof numericValue === 'number' ? Number(numericValue.toFixed(1)) : '--';
+                            displayValue = typeof numericValue === 'number' ? numericValue.toFixed(1) : '--';
                         }
                     } else {
                         // Fix: Ensure value is a number before calling toFixed to prevent type errors and runtime errors with non-numeric values.
                         const numValue = Number(latestSensor.value);
                         if (isFinite(numValue)) {
-                            displayValue = Number(numValue.toFixed(1));
+                            displayValue = numValue.toFixed(1);
                         }
                     }
                 }

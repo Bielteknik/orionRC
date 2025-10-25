@@ -1,7 +1,7 @@
 {
-  "name": "meteoroloji-backend",
+  "name": "orion-backend",
   "version": "1.0.0",
-  "description": "Backend API for the Meteorology Observation Platform.",
+  "description": "Backend API for the ORION Observation Platform.",
   "main": "dist/server.js",
   "type": "module",
   "scripts": {
@@ -10,10 +10,7 @@
     "dev": "nodemon src/server.ts"
   },
   "dependencies": {
-    "@babel/core": "^7.24.7",
-    "@babel/preset-react": "^7.24.7",
-    "@babel/preset-typescript": "^7.24.7",
-    "@google/genai": "^1.23.0",
+    "@google/genai": "^0.2.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
@@ -24,7 +21,6 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "@types/babel__core": "^7.20.5",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^20.12.12",

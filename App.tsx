@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Page, Notification, Station, Sensor } from './types.ts';
-// Fix: Corrected import paths, removing unnecessary extensions.
+import { Page, Notification, Station, Sensor } from './types';
 import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
 import Dashboard from './pages/Dashboard';
@@ -15,7 +14,7 @@ import CameraDetail from './pages/CameraDetail';
 import { ThemeProvider } from './components/ThemeContext';
 import Notifications from './pages/Notifications';
 import GeminiAssistant from './components/GeminiAssistant';
-import { getNotifications, markAllNotificationsAsRead, getAgentStatus, getStations, getSensors } from './services/apiService.ts';
+import { getNotifications, markAllNotificationsAsRead, getAgentStatus, getStations, getSensors } from './services/apiService';
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.Dashboard);
@@ -25,62 +24,40 @@ const App: React.FC = () => {
   const [agentStatus, setAgentStatus] = useState<{ status: string; lastUpdate: string | null }>({ status: 'offline', lastUpdate: null });
   const [stations, setStations] = useState<Station[]>([]);
   const [sensors, setSensors] = useState<Sensor[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-
-  const fetchNotifications = useCallback(async () => {
+  const refreshAllData = useCallback(async () => {
     try {
-        const freshNotifications = await getNotifications();
-        setNotifications(freshNotifications);
-    } catch (error) {
-        console.error("Failed to fetch notifications:", error);
-    }
-  }, []);
-
-  const fetchAgentStatus = useCallback(async () => {
-    try {
-        const status = await getAgentStatus();
-        setAgentStatus(status);
-    } catch (error) {
-        console.error("Failed to fetch agent status:", error);
-    }
-  }, []);
-
-  const fetchMainData = useCallback(async () => {
-    try {
-      const [stationsData, sensorsData] = await Promise.all([getStations(), getSensors()]);
+      const [notificationsData, agentStatusData, stationsData, sensorsData] = await Promise.all([
+        getNotifications(),
+        getAgentStatus(),
+        getStations(),
+        getSensors()
+      ]);
+      setNotifications(notificationsData);
+      setAgentStatus(agentStatusData);
       setStations(stationsData);
       setSensors(sensorsData);
     } catch (error) {
-      console.error("Failed to fetch main data (stations, sensors):", error);
+      console.error("Veri yenileme sırasında hata oluştu:", error);
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
-
   useEffect(() => {
-    fetchNotifications();
-    fetchAgentStatus();
-    fetchMainData();
-    const notificationInterval = setInterval(fetchNotifications, 20000); 
-    const agentStatusInterval = setInterval(fetchAgentStatus, 15000);
-    const mainDataInterval = setInterval(fetchMainData, 30000);
-    return () => {
-      clearInterval(notificationInterval);
-      clearInterval(agentStatusInterval);
-      clearInterval(mainDataInterval);
-    }
-  }, [fetchNotifications, fetchAgentStatus, fetchMainData]);
+    refreshAllData();
+    const intervalId = setInterval(refreshAllData, 20000); // Poll every 20 seconds
+    return () => clearInterval(intervalId);
+  }, [refreshAllData]);
 
   const handleMarkAllAsRead = async () => {
     try {
-        await markAllNotificationsAsRead();
-        fetchNotifications(); // Refresh notifications after marking
+      await markAllNotificationsAsRead();
+      refreshAllData();
     } catch (error) {
-        console.error("Failed to mark all notifications as read:", error);
+      console.error("Tümünü okundu olarak işaretleme başarısız:", error);
     }
-  };
-
-  const handleViewAllNotifications = () => {
-    setCurrentPage(Page.Notifications);
   };
 
   const handleSetCurrentPage = (page: Page) => {
@@ -90,52 +67,60 @@ const App: React.FC = () => {
   };
 
   const handleViewStationDetails = (stationId: string) => {
-    setCurrentPage(Page.Stations);
+    setCurrentPage(Page.Stations); // Switch to stations page context
     setViewingStationId(stationId);
   };
+  
+  const handleViewCamera = (cameraId: string) => {
+    // Can be called from anywhere, e.g., StationDetail
+    setViewingCameraId(cameraId);
+  }
 
   const renderPage = () => {
     if (viewingCameraId) {
       return <CameraDetail cameraId={viewingCameraId} onBack={() => setViewingCameraId(null)} />;
     }
     if (currentPage === Page.Stations && viewingStationId) {
-      return <StationDetail stationId={viewingStationId} onBack={() => setViewingStationId(null)} onViewCamera={setViewingCameraId} />;
+      return <StationDetail stationId={viewingStationId} onBack={() => setViewingStationId(null)} onViewCamera={handleViewCamera} />;
     }
     switch (currentPage) {
       case Page.Dashboard:
+        // Fix: Removed isLoading prop as the component calculates its own loading state.
         return <Dashboard onViewStationDetails={handleViewStationDetails} stations={stations} sensors={sensors} />;
       case Page.Analysis:
         return <Analysis stations={stations} sensors={sensors} />;
       case Page.Stations:
-        return <Stations onViewDetails={setViewingStationId} />;
+        return <Stations onViewDetails={handleViewStationDetails} />;
       case Page.Sensors:
         return <Sensors />;
       case Page.Cameras:
-        return <Cameras onViewDetails={setViewingCameraId} />;
+        return <Cameras onViewDetails={handleViewCamera} />;
       case Page.Definitions:
         return <Definitions />;
       case Page.Reports:
         return <Reports />;
       case Page.Notifications:
-        return <Notifications notifications={notifications} setNotifications={setNotifications} onRefresh={fetchNotifications} />;
+        // Fix: Pass the required setNotifications prop to the Notifications component.
+        return <Notifications notifications={notifications} setNotifications={setNotifications} onRefresh={refreshAllData} />;
       default:
+        // Fix: Removed isLoading prop as the component calculates its own loading state.
         return <Dashboard onViewStationDetails={handleViewStationDetails} stations={stations} sensors={sensors} />;
     }
   };
 
   return (
     <ThemeProvider>
-      <div className="flex h-screen font-sans">
+      <div className="flex h-screen bg-secondary dark:bg-dark-secondary font-sans">
         <Sidebar currentPage={currentPage} setCurrentPage={handleSetCurrentPage} />
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header 
-              currentPage={currentPage}
+              currentPage={viewingStationId ? 'İstasyon Detayı' : viewingCameraId ? 'Kamera Detayı' : currentPage}
               notifications={notifications}
               onMarkAllNotificationsAsRead={handleMarkAllAsRead}
-              onViewAllNotifications={handleViewAllNotifications}
+              onViewAllNotifications={() => handleSetCurrentPage(Page.Notifications)}
               agentStatus={agentStatus}
           />
-          <main className="flex-1 overflow-x-hidden overflow-y-auto px-4 md:px-6 lg:px-8 pt-4 pb-8">
+          <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-6 lg:p-8">
             {renderPage()}
           </main>
         </div>

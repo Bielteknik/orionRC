@@ -19,6 +19,10 @@
         padding: 0;
         height: 100%;
         width: 100%;
+        background-color: #F9FAFB;
+      }
+      html.dark body {
+        background-color: #111827;
       }
       #root, #root > div {
         height: 100%;
@@ -33,11 +37,15 @@
             colors: {
               'primary': '#FFFFFF',
               'secondary': '#F9FAFB',
-              'accent': '#E95420',
+              'accent': '#F97316', // Changed to a brighter orange
               'muted': '#6B7281',
               'danger': '#EF4444',
               'success': '#22C55E',
               'warning': '#F59E0B',
+              'dark': {
+                'primary': '#1F2937',
+                'secondary': '#111827',
+              },
               'ubuntu-purple': '#5E2750',
               'ubuntu-orange': '#E95420',
             },
@@ -52,37 +60,37 @@
     <script type="importmap">
 {
   "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "util": "https://aistudiocdn.com/util@^0.12.5",
-    "recharts": "https://aistudiocdn.com/recharts@^3.3.0",
-    "url": "https://aistudiocdn.com/url@^0.11.4",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.25.0",
-    "axios": "https://aistudiocdn.com/axios@^1.12.2",
-    "dotenv": "https://aistudiocdn.com/dotenv@^17.2.3",
-    "cors": "https://aistudiocdn.com/cors@^2.8.5",
-    "express": "https://aistudiocdn.com/express@^5.1.0",
-    "fs/": "https://aistudiocdn.com/fs@^0.0.1-security/",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "buffer": "https://aistudiocdn.com/buffer@^6.0.3",
-    "path": "https://aistudiocdn.com/path@^0.12.7",
-    "child_process": "https://aistudiocdn.com/child_process@^1.0.2",
-    "sqlite": "https://aistudiocdn.com/sqlite@^5.1.1",
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "axios": "https://esm.sh/axios@1.6.8",
+    "recharts": "https://esm.sh/recharts@2.12.6",
+    "@google/genai": "https://esm.sh/@google/genai@0.2.1",
     "sqlite3": "https://aistudiocdn.com/sqlite3@^5.1.7",
-    "@babel/core": "https://aistudiocdn.com/@babel/core@^7.28.4",
+    "sqlite": "https://aistudiocdn.com/sqlite@^5.1.1",
+    "path": "https://aistudiocdn.com/path@^0.12.7",
+    "url": "https://aistudiocdn.com/url@^0.11.4",
+    "express": "https://aistudiocdn.com/express@^5.1.0",
+    "cors": "https://aistudiocdn.com/cors@^2.8.5",
+    "uuid": "https://aistudiocdn.com/uuid@^13.0.0",
+    "fs/": "https://aistudiocdn.com/fs@^0.0.1-security/",
+    "buffer": "https://aistudiocdn.com/buffer@^6.0.3",
+    "xlsx": "https://aistudiocdn.com/xlsx@^0.18.5",
+    "nodemailer": "https://aistudiocdn.com/nodemailer@^7.0.10",
+    "dotenv": "https://aistudiocdn.com/dotenv@^17.2.3",
+    "child_process": "https://aistudiocdn.com/child_process@^1.0.2",
+    "util": "https://aistudiocdn.com/util@^0.12.5",
     "serialport": "https://aistudiocdn.com/serialport@^13.0.0",
     "@serialport/parser-readline": "https://aistudiocdn.com/@serialport/parser-readline@^13.0.0",
     "i2c-bus": "https://aistudiocdn.com/i2c-bus@^5.2.3",
-    "vite": "https://aistudiocdn.com/vite@^7.1.10",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.0.4",
-    "uuid": "https://aistudiocdn.com/uuid@^13.0.0",
-    "xlsx": "https://aistudiocdn.com/xlsx@^0.18.5",
-    "nodemailer": "https://aistudiocdn.com/nodemailer@^7.0.9"
+    "vite": "https://aistudiocdn.com/vite@^7.1.12",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/"
   }
 }
 </script>
   </head>
-  <body class="bg-secondary dark:bg-gray-900">
+  <body>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

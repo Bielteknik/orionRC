@@ -1,61 +1,68 @@
 # ORION Gözlem Platformu - TypeScript Agent
 
-This is the **TypeScript/Node.js** based agent designed to run on a Raspberry Pi. It connects to the ORION backend, fetches its configuration, reads data from connected hardware sensors, and executes commands sent from the server.
+Bu, bir Raspberry Pi üzerinde çalışmak üzere tasarlanmış **TypeScript/Node.js** tabanlı agent yazılımıdır. ORION backend'ine bağlanır, yapılandırmasını alır, bağlı donanım sensörlerinden verileri okur ve sunucudan gönderilen komutları yürütür.
 
-## Raspberry Pi Setup
+## Raspberry Pi Kurulumu
 
-Before running the agent, ensure your Raspberry Pi is configured correctly for hardware communication.
+Agent'ı çalıştırmadan önce, Raspberry Pi'nizin donanım iletişimi için doğru şekilde yapılandırıldığından emin olun.
 
-1.  **Enable Interfaces:**
-    Run `sudo raspi-config` in your terminal.
-    -   Navigate to `3 Interface Options`.
-    -   Enable `I2C`.
-    -   Enable `Serial Port`. When asked if you would like a login shell to be accessible over serial, answer **No**. When asked if you would like the serial port hardware to be enabled, answer **Yes**.
-    -   Select `Finish` and reboot when prompted.
+1.  **Arayüzleri Etkinleştirme:**
+    Terminalde `sudo raspi-config` komutunu çalıştırın.
+    -   `3 Interface Options` menüsüne gidin.
+    -   `I1 I2C`'yi etkinleştirin.
+    -   `I3 Serial Port`'u seçin. "Would you like a login shell to be accessible over serial?" sorusuna **Hayır (No)**, "Would you like the serial port hardware to be enabled?" sorusuna **Evet (Yes)** yanıtını verin.
+    -   `Finish` seçeneği ile çıkın ve istendiğinde yeniden başlatın.
 
-2.  **User Permissions:**
-    To allow the agent to access hardware ports without needing `sudo`, your user must be a member of the correct groups. Replace `<username>` with your actual username (e.g., `pi`).
+2.  **Kullanıcı İzinleri:**
+    Agent'ın `sudo` olmadan donanım portlarına erişmesine izin vermek için, kullanıcınızın doğru gruplara üye olması gerekir. `<username>` yerine kendi kullanıcı adınızı yazın (örn: `pi`).
     ```bash
     sudo usermod -a -G dialout,i2c <username>
     ```
-    **Important:** You must **reboot** your Raspberry Pi (or log out and log back in) for these group changes to take effect.
+    **Önemli:** Bu grup değişikliklerinin etkili olması için Raspberry Pi'nizi **yeniden başlatmanız** (veya oturumu kapatıp yeniden açmanız) gerekir.
 
-3.  **Check I2C Devices:**
-    After connecting your I2C sensors (like the SHT3x), you can verify that the Raspberry Pi detects them by running:
+3.  **I2C Cihazlarını Kontrol Etme:**
+    I2C sensörlerinizi (SHT3x gibi) bağladıktan sonra, Raspberry Pi'nin onları algıladığını şu komutla doğrulayabilirsiniz:
     ```bash
     i2cdetect -y 1
     ```
-    You should see a hexadecimal number (e.g., `44`) in the output grid. If not, double-check your wiring.
+    Çıktı tablosunda onaltılık bir sayı (örn: `44`) görmelisiniz. Görmüyorsanız, kablo bağlantılarınızı kontrol edin.
 
-## Agent Installation and Running
+## Agent Kurulumu ve Çalıştırma
 
-1.  **Install Node.js:**
-    It's recommended to use Node.js v18 or later.
+1.  **Node.js Kurulumu:**
+    Node.js v18 veya daha yeni bir sürümün kullanılması önerilir.
     ```bash
     curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
     sudo apt-get install -y nodejs
     ```
 
-2.  **Install Dependencies:**
-    Navigate to this directory (`raspiagent-ts`) on your Raspberry Pi and run:
+2.  **Bağımlılıkları Yükleme:**
+    Raspberry Pi'nizde bu dizine (`raspiagent-ts`) gidin ve şunu çalıştırın:
     ```bash
     npm install
     ```
 
-3.  **Configure the Agent:**
-    Edit the `config.json` file in this directory.
-    -   `server.base_url`: The full URL of your ORION backend server (e.g., `https://your-domain.com`).
-    -   `device.id`: The unique ID for this Raspberry Pi. This **must match** the "Cihaz ID" you set when creating the station in the ORION web interface.
-    -   `device.token`: The authentication token. This **must match** the `DEVICE_AUTH_TOKEN` in your backend's `.env` file.
+3.  **Agent'ı Yapılandırma:**
+    Bu dizindeki `config.json` dosyasını düzenleyin.
+    -   `server.base_url`: ORION backend sunucunuzun tam URL'si (örn: `https://sistem.alanadiniz.com`).
+    -   `device.id`: Bu Raspberry Pi için benzersiz kimlik. Bu, ORION web arayüzünde istasyonu oluştururken belirlediğiniz "Cihaz ID" ile **aynı olmalıdır**.
+    -   `device.token`: Kimlik doğrulama token'ı. Bu, backend'in `.env` dosyasındaki `DEVICE_AUTH_TOKEN` ile **aynı olmalıdır**.
 
-4.  **Build and Run:**
-    -   First, compile the TypeScript code:
+4.  **Derleme ve Çalıştırma:**
+    -   Önce, TypeScript kodunu derleyin:
         ```bash
         npm run build
         ```
-    -   Then, run the compiled agent:
+    -   Ardından, derlenmiş agent'ı çalıştırın:
         ```bash
         npm start
         ```
+    -   Agent'ı arkaplanda sürekli çalıştırmak için `pm2` gibi bir araç kullanmanız önerilir:
+        ```bash
+        sudo npm install pm2 -g
+        pm2 start dist/agent.js --name orion-agent
+        pm2 startup # Otomatik başlangıç için
+        pm2 save
+        ```
 
-The agent will now connect to the server, fetch its configuration, and start reading sensor data.
+Agent artık sunucuya bağlanacak, yapılandırmasını alacak ve sensör verilerini okumaya başlayacaktır.

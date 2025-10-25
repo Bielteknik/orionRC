@@ -51,12 +51,11 @@ export interface Station {
   cameraCount: number;
   activeAlerts: number;
   lastUpdate: string;
-  // Detail page specific fields
-  systemHealth: number;
-  avgBattery: number;
-  dataFlow: number;
-  activeSensorCount: number;
-  onlineCameraCount: number;
+  systemHealth?: number;
+  avgBattery?: number;
+  dataFlow?: number;
+  activeSensorCount?: number;
+  onlineCameraCount?: number;
 }
 
 export enum SensorStatus {
@@ -103,11 +102,6 @@ export interface Camera {
   photos: string[];
 }
 
-export interface SensorDataPoint {
-  time: string;
-  value: number;
-}
-
 export interface ReportConfig {
   reportName: string;
   reportType: 'Günlük' | 'Haftalık' | 'Aylık';
@@ -144,14 +138,11 @@ export interface ReportSchedule {
     lastRun?: string;
 }
 
-export type WidgetType = 'dataCard' | 'sensorChart' | 'windRose' | 'temperatureScatter' | 'humidityArea' | 'windSpeedBar' | 'multiStationCompare';
+export type WidgetType = 'dataCard' | 'sensorChart' | 'windRose';
 
 export interface WidgetConfig {
     id: string;
     type: WidgetType;
-    // For dataCard: { title: string, sensorType: string }
-    // For sensorChart: { sensorType: string }
-    // For windRose: {}
     config: any; 
-    gridArea: string; // e.g. '1 / 1 / 2 / 2' for row-start/col-start/row-end/col-end
+    gridArea: string;
 }
