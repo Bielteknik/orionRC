@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-// Fix: Import GoogleGenAI from '@google/genai' correctly
+// Fix: Correct import of GoogleGenAI from '@google/genai' according to guidelines.
 import { GoogleGenAI } from "@google/genai";
 import {
     DeviceConfig,
@@ -332,7 +332,7 @@ class Agent {
             
             // 3. Call Gemini API
             console.log('   -> Gemini API ile analiz ediliyor...');
-            // Fix: Use new GoogleGenAI({apiKey: ...}) for initialization.
+            // Fix: Use new GoogleGenAI({apiKey: ...}) for initialization, per guidelines.
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const imagePart = {
                 inlineData: {
@@ -344,7 +344,7 @@ class Agent {
                 text: "Bu görüntüdeki kar ölçüm cetveline göre karla kaplı en yüksek sayısal değer nedir? Cevabını sadece `{\"snow_depth_cm\": SAYI}` formatında bir JSON olarak ver.",
             };
 
-            // Fix: Use correct model name 'gemini-2.5-flash' for image analysis and correct API call structure.
+            // Fix: Use correct model name ('gemini-2.5-flash') and modern API call structure (`ai.models.generateContent`).
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: { parts: [imagePart, textPart] },

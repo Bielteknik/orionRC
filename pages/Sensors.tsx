@@ -60,24 +60,35 @@ const SensorCard: React.FC<{
     };
 
     const displayValue = useMemo(() => {
-        if (sensor.value === null || sensor.value === undefined) return 'N/A';
-
-        if (typeof sensor.value === 'object') {
-            // Handle OpenWeather sensors which return a combined object
-            if (sensor.interface === 'openweather') {
-                if (sensor.type === 'Sıcaklık' && sensor.value.temperature !== undefined) {
-                    return sensor.value.temperature;
+        const { value, type, interface: sensorInterface } = sensor;
+        if (value === null || value === undefined) return 'N/A';
+    
+        if (typeof value === 'object') {
+            if (sensorInterface === 'openweather') {
+                if (type === 'Sıcaklık' && typeof value.temperature === 'number') {
+                    return value.temperature.toFixed(1);
                 }
-                if (sensor.type === 'Nem' && sensor.value.humidity !== undefined) {
-                    return sensor.value.humidity;
+                if (type === 'Nem' && typeof value.humidity === 'number') {
+                    return value.humidity.toFixed(1);
                 }
             }
-            // Fallback for other complex objects (like snow depth)
-            const numericValue = Object.values(sensor.value).find(v => typeof v === 'number');
-            return numericValue !== undefined ? numericValue : 'N/A';
+            const numericValue = Object.values(value).find(v => typeof v === 'number');
+            // Fix: Use a `typeof` guard to ensure numericValue is a number before calling toFixed.
+            if (typeof numericValue === 'number') {
+                return numericValue.toFixed(1);
+            }
+            return 'N/A';
         }
-
-        return sensor.value;
+    
+        // For non-objects, try to format as a number if possible, otherwise just convert to string.
+        const numValue = Number(value);
+        if (!isNaN(numValue) && isFinite(numValue)) {
+            // Format to 1 decimal place, but don't add .0 for integers.
+            return String(parseFloat(numValue.toFixed(1)));
+        }
+    
+        // For any other primitive type like a non-numeric string or boolean, convert to string to be safe.
+        return String(value);
     }, [sensor]);
 
     return (

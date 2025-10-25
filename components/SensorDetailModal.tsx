@@ -92,12 +92,18 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {latestReadings.map(reading => (
-                                        <tr key={reading.id} className="border-b border-gray-200 hover:bg-gray-50">
-                                            <td className="px-6 py-3 font-mono text-gray-800">{new Date(reading.timestamp).toLocaleString('tr-TR')}</td>
-                                            <td className="px-6 py-3 text-right font-semibold text-gray-900">{`${formatDisplayValue(reading)} ${reading.unit || ''}`}</td>
-                                        </tr>
-                                    ))}
+                                    {latestReadings.map(reading => {
+                                        const date = new Date(reading.timestamp);
+                                        const displayTimestamp = !isNaN(date.getTime())
+                                            ? date.toLocaleString('tr-TR')
+                                            : reading.timestamp;
+                                        return (
+                                            <tr key={reading.id} className="border-b border-gray-200 hover:bg-gray-50">
+                                                <td className="px-6 py-3 font-mono text-gray-800">{displayTimestamp}</td>
+                                                <td className="px-6 py-3 text-right font-semibold text-gray-900">{`${formatDisplayValue(reading)} ${reading.unit || ''}`}</td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         ) : (

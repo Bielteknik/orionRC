@@ -85,7 +85,6 @@ const App: React.FC = () => {
     }
     switch (currentPage) {
       case Page.Dashboard:
-        // Fix: Removed isLoading prop as the component calculates its own loading state.
         return <Dashboard onViewStationDetails={handleViewStationDetails} stations={stations} sensors={sensors} />;
       case Page.Analysis:
         return <Analysis stations={stations} sensors={sensors} />;
@@ -100,10 +99,8 @@ const App: React.FC = () => {
       case Page.Reports:
         return <Reports />;
       case Page.Notifications:
-        // Fix: Pass the required setNotifications prop to the Notifications component.
         return <Notifications notifications={notifications} setNotifications={setNotifications} onRefresh={refreshAllData} />;
       default:
-        // Fix: Removed isLoading prop as the component calculates its own loading state.
         return <Dashboard onViewStationDetails={handleViewStationDetails} stations={stations} sensors={sensors} />;
     }
   };

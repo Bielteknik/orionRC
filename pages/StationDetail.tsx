@@ -32,6 +32,7 @@ const ITEMS_PER_PAGE_SENSORS = 6;
 const formatTimeAgo = (isoString: string | undefined): string => {
     if (!isoString) return 'bilinmiyor';
     const date = new Date(isoString);
+    if (isNaN(date.getTime())) return 'geçersiz tarih';
     const now = new Date();
     const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
@@ -343,14 +344,21 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
                           </tr>
                         </thead>
                         <tbody>
-                          {paginatedSensorReadings.map(reading => (
-                            <tr key={reading.id} className="border-b border-gray-200 hover:bg-gray-50">
-                              <td className="px-6 py-4 font-mono text-gray-800">{reading.timestamp}</td>
-                              <td className="px-6 py-4 font-medium text-gray-900">{reading.sensorName}</td>
-                              <td className="px-6 py-4">{reading.sensorType}</td>
-                              <td className="px-6 py-4 text-right font-semibold text-gray-900">{`${formatReadingValue(reading)} ${reading.unit || ''}`}</td>
-                            </tr>
-                          ))}
+                          {paginatedSensorReadings.map(reading => {
+                            const date = new Date(reading.timestamp);
+                            const displayTimestamp = !isNaN(date.getTime())
+                                ? date.toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                                : reading.timestamp;
+
+                            return (
+                                <tr key={reading.id} className="border-b border-gray-200 hover:bg-gray-50">
+                                  <td className="px-6 py-4 font-mono text-gray-800">{displayTimestamp}</td>
+                                  <td className="px-6 py-4 font-medium text-gray-900">{reading.sensorName}</td>
+                                  <td className="px-6 py-4">{reading.sensorType}</td>
+                                  <td className="px-6 py-4 text-right font-semibold text-gray-900">{`${formatReadingValue(reading)} ${reading.unit || ''}`}</td>
+                                </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

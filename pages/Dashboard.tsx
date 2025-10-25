@@ -106,15 +106,19 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStationDetails, stations, s
                 if (latestSensor.value !== null && latestSensor.value !== undefined) {
                     if (typeof latestSensor.value === 'object') {
                         if (latestSensor.interface === 'openweather') {
-                            if (type === 'Sıcaklık' && latestSensor.value.temperature !== undefined) {
-                                displayValue = latestSensor.value.temperature;
-                            } else if (type === 'Nem' && latestSensor.value.humidity !== undefined) {
-                                displayValue = latestSensor.value.humidity;
+                            if (type === 'Sıcaklık' && typeof latestSensor.value.temperature === 'number') {
+                                displayValue = latestSensor.value.temperature.toFixed(1);
+                            } else if (type === 'Nem' && typeof latestSensor.value.humidity === 'number') {
+                                displayValue = latestSensor.value.humidity.toFixed(1);
                             }
                         } else {
                             const numericValue = Object.values(latestSensor.value).find(v => typeof v === 'number');
                             // Fix: Use a type guard (`typeof`) to ensure `numericValue` is a number before calling `toFixed`.
-                            displayValue = typeof numericValue === 'number' ? numericValue.toFixed(1) : '--';
+                            if (typeof numericValue === 'number') {
+                                displayValue = numericValue.toFixed(1);
+                            } else {
+                                displayValue = '--';
+                            }
                         }
                     } else {
                         // Fix: Ensure value is a number before calling toFixed to prevent type errors and runtime errors with non-numeric values.
