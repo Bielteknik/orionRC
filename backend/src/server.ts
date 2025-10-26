@@ -2,6 +2,8 @@
 
 
 
+
+
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { openDb, db, migrate } from './database.js';
@@ -55,7 +57,8 @@ const agentAuth = (req: Request, res: Response, next: NextFunction) => {
 // --- AGENT-FACING ENDPOINTS ---
 
 // FIX: Explicitly type req and res.
-app.get('/api/config/:deviceId', agentAuth, async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.get('/api/config/:deviceId', agentAuth, async (req, res) => {
     try {
         const { deviceId } = req.params;
 
@@ -101,7 +104,8 @@ app.get('/api/config/:deviceId', agentAuth, async (req: Request, res: Response) 
 });
 
 // FIX: Explicitly type req and res.
-app.post('/api/submit-reading', agentAuth, async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.post('/api/submit-reading', agentAuth, async (req, res) => {
     try {
         const { sensor: sensor_id, value: rawValue } = req.body;
 
@@ -159,7 +163,8 @@ app.post('/api/submit-reading', agentAuth, async (req: Request, res: Response) =
 });
 
 // FIX: Explicitly type req and res.
-app.get('/api/commands/:deviceId', agentAuth, (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.get('/api/commands/:deviceId', agentAuth, (req, res) => {
     const { deviceId } = req.params;
     const pendingCommands = commandQueue[deviceId]?.filter(cmd => cmd.status === 'pending') || [];
     if (pendingCommands.length > 0) {
@@ -171,7 +176,8 @@ app.get('/api/commands/:deviceId', agentAuth, (req: Request, res: Response) => {
 
 
 // FIX: Explicitly type req and res.
-app.post('/api/commands/:id/:status', agentAuth, async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.post('/api/commands/:id/:status', agentAuth, async (req, res) => {
     const { id, status } = req.params;
     const commandId = parseInt(id, 10);
 
@@ -201,7 +207,8 @@ app.post('/api/commands/:id/:status', agentAuth, async (req: Request, res: Respo
 
 
 // FIX: Explicitly type req and res.
-app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req, res) => {
     const { cameraId } = req.params;
     const { image, filename } = req.body; // base64 image and filename
 
@@ -230,7 +237,8 @@ app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: Request, 
 
 // Endpoint for analysis photos
 // FIX: Explicitly type req and res.
-app.post('/api/analysis/upload-photo', agentAuth, async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.post('/api/analysis/upload-photo', agentAuth, async (req, res) => {
     const { cameraId, image, filename } = req.body;
     try {
         const uploadsDir = path.join(__dirname, '..', 'uploads', 'analysis');
@@ -249,7 +257,8 @@ app.post('/api/analysis/upload-photo', agentAuth, async (req: Request, res: Resp
 
 // --- FRONTEND-FACING ENDPOINTS ---
 // FIX: Explicitly type req and res.
-app.get('/api/agent-status', (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.get('/api/agent-status', (req, res) => {
     // Add logic to check if lastUpdate is recent
     if (agentStatus.lastUpdate && (new Date().getTime() - new Date(agentStatus.lastUpdate).getTime()) > 30000) {
         agentStatus.status = 'offline';
@@ -259,7 +268,8 @@ app.get('/api/agent-status', (req: Request, res: Response) => {
 
 // STATIONS
 // FIX: Explicitly type req and res.
-app.get('/api/stations', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.get('/api/stations', async (req, res) => {
     try {
         const stationsFromDb = await db.all(`
             SELECT 
@@ -284,7 +294,8 @@ app.get('/api/stations', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.post('/api/stations', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.post('/api/stations', async (req, res) => {
     try {
         const { id, name, location, locationCoords, selectedSensorIds = [], selectedCameraIds = [] } = req.body;
         await db.run(
@@ -304,7 +315,8 @@ app.post('/api/stations', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.put('/api/stations/:id', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.put('/api/stations/:id', async (req, res) => {
     const { id } = req.params;
     try {
         const { name, location, locationCoords, status } = req.body;
@@ -319,7 +331,8 @@ app.put('/api/stations/:id', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.delete('/api/stations/:id', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.delete('/api/stations/:id', async (req, res) => {
     try {
         await db.run("DELETE FROM stations WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -332,7 +345,8 @@ app.delete('/api/stations/:id', async (req: Request, res: Response) => {
 
 // SENSORS
 // FIX: Explicitly type req and res.
-app.get('/api/sensors', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.get('/api/sensors', async (req, res) => {
     try {
         const unassigned = req.query.unassigned === 'true';
         const query = unassigned
@@ -362,7 +376,8 @@ app.get('/api/sensors', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.post('/api/sensors', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.post('/api/sensors', async (req, res) => {
     try {
         const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
         const id = `S${Date.now()}`;
@@ -381,7 +396,8 @@ app.post('/api/sensors', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.put('/api/sensors/:id', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.put('/api/sensors/:id', async (req, res) => {
     const { id } = req.params;
     try {
         const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
@@ -400,7 +416,8 @@ app.put('/api/sensors/:id', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.delete('/api/sensors/:id', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.delete('/api/sensors/:id', async (req, res) => {
     try {
         await db.run("DELETE FROM sensors WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -410,7 +427,8 @@ app.delete('/api/sensors/:id', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.post('/api/sensors/:id/read', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.post('/api/sensors/:id/read', async (req, res) => {
     const { id } = req.params;
     try {
         const sensor = await db.get("SELECT * FROM sensors WHERE id = ?", id);
@@ -434,7 +452,8 @@ app.post('/api/sensors/:id/read', async (req: Request, res: Response) => {
 
 // CAMERAS
 // FIX: Explicitly type req and res.
-app.get('/api/cameras', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.get('/api/cameras', async (req, res) => {
     try {
         const unassigned = req.query.unassigned === 'true';
         const query = unassigned
@@ -460,7 +479,8 @@ app.get('/api/cameras', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.post('/api/cameras', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.post('/api/cameras', async (req, res) => {
     try {
         const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
         const id = `C${Date.now()}`;
@@ -475,7 +495,8 @@ app.post('/api/cameras', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.put('/api/cameras/:id', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.put('/api/cameras/:id', async (req, res) => {
     const { id } = req.params;
     try {
         const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
@@ -490,7 +511,8 @@ app.put('/api/cameras/:id', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.delete('/api/cameras/:id', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.delete('/api/cameras/:id', async (req, res) => {
     try {
         await db.run("DELETE FROM cameras WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -500,7 +522,8 @@ app.delete('/api/cameras/:id', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.post('/api/cameras/:id/capture', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.post('/api/cameras/:id/capture', async (req, res) => {
     const { id } = req.params;
     try {
         const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", id);
@@ -524,7 +547,8 @@ app.post('/api/cameras/:id/capture', async (req: Request, res: Response) => {
 
 // READINGS
 // FIX: Explicitly type req and res.
-app.get('/api/readings', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.get('/api/readings', async (req, res) => {
     try {
         const readings = await db.all(`
             SELECT r.id, r.sensor_id as sensorId, s.name as sensorName, s.type as sensorType, s.unit, s.interface, st.id as stationId, st.name as stationName, r.value, r.timestamp 
@@ -541,7 +565,8 @@ app.get('/api/readings', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.get('/api/readings/history', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.get('/api/readings/history', async (req, res) => {
     const { stationIds: stationIdsQuery, sensorTypes: sensorTypesQuery } = req.query;
 
     if (typeof stationIdsQuery !== 'string' || typeof sensorTypesQuery !== 'string' || stationIdsQuery.length === 0 || sensorTypesQuery.length === 0) {
@@ -570,7 +595,8 @@ app.get('/api/readings/history', async (req: Request, res: Response) => {
 
 // DEFINITIONS & SETTINGS
 // FIX: Explicitly type req and res.
-app.get('/api/definitions', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.get('/api/definitions', async (req, res) => {
     try {
         const [stationTypes, sensorTypes, cameraTypes] = await Promise.all([
             db.all("SELECT * FROM station_types"),
@@ -584,7 +610,8 @@ app.get('/api/definitions', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.post('/api/definitions/:type', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.post('/api/definitions/:type', async (req, res) => {
     const { type } = req.params;
     try {
         const { name } = req.body;
@@ -596,7 +623,8 @@ app.post('/api/definitions/:type', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.put('/api/definitions/:type/:id', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.put('/api/definitions/:type/:id', async (req, res) => {
     const { type, id } = req.params;
     try {
         const { name } = req.body;
@@ -608,7 +636,8 @@ app.put('/api/definitions/:type/:id', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.delete('/api/definitions/:type/:id', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.delete('/api/definitions/:type/:id', async (req, res) => {
     const { type, id } = req.params;
     try {
         await db.run(`DELETE FROM ${type} WHERE id = ?`, id);
@@ -620,7 +649,8 @@ app.delete('/api/definitions/:type/:id', async (req: Request, res: Response) => 
 });
 
 // FIX: Explicitly type req and res.
-app.get('/api/alert-rules', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.get('/api/alert-rules', async (req, res) => {
     try {
         res.json(await db.all("SELECT * FROM alert_rules"));
     } catch (error) {
@@ -630,7 +660,8 @@ app.get('/api/alert-rules', async (req: Request, res: Response) => {
 });
 
 // FIX: Explicitly type req and res.
-app.get('/api/settings/global_read_frequency', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.get('/api/settings/global_read_frequency', async (req, res) => {
     try {
         const setting = await db.get("SELECT value FROM global_settings WHERE key = 'global_read_frequency_minutes'");
         res.json(setting || { value: '0' });
@@ -640,7 +671,8 @@ app.get('/api/settings/global_read_frequency', async (req: Request, res: Respons
     }
 });
 // FIX: Explicitly type req and res.
-app.put('/api/settings/global_read_frequency', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.put('/api/settings/global_read_frequency', async (req, res) => {
     try {
         const { value } = req.body;
         await db.run("UPDATE global_settings SET value = ? WHERE key = 'global_read_frequency_minutes'", value);
@@ -653,7 +685,8 @@ app.put('/api/settings/global_read_frequency', async (req: Request, res: Respons
 
 // REPORTS
 // FIX: Explicitly type req and res.
-app.get('/api/reports', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.get('/api/reports', async (req, res) => {
     try {
         res.json(await db.all("SELECT * FROM reports"));
     } catch (error) {
@@ -662,7 +695,8 @@ app.get('/api/reports', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.delete('/api/reports/:id', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.delete('/api/reports/:id', async (req, res) => {
     try {
         await db.run("DELETE FROM reports WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -672,7 +706,8 @@ app.delete('/api/reports/:id', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.get('/api/report-schedules', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.get('/api/report-schedules', async (req, res) => {
     try {
         const schedules = await db.all("SELECT * FROM report_schedules");
         res.json(schedules.map(s => ({...s, reportConfig: JSON.parse(s.report_config || '{}')})));
@@ -682,7 +717,8 @@ app.get('/api/report-schedules', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.post('/api/report-schedules', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.post('/api/report-schedules', async (req, res) => {
     try {
         const { name, frequency, time, recipient, reportConfig, isEnabled } = req.body;
         const id = `SCH_${uuidv4()}`;
@@ -697,7 +733,8 @@ app.post('/api/report-schedules', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.put('/api/report-schedules/:id', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.put('/api/report-schedules/:id', async (req, res) => {
     const { id } = req.params;
     try {
         const { isEnabled } = req.body; // For now, only supports toggling
@@ -709,7 +746,8 @@ app.put('/api/report-schedules/:id', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.delete('/api/report-schedules/:id', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.delete('/api/report-schedules/:id', async (req, res) => {
     try {
         await db.run("DELETE FROM report_schedules WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -721,7 +759,8 @@ app.delete('/api/report-schedules/:id', async (req: Request, res: Response) => {
 
 // NOTIFICATIONS
 // FIX: Explicitly type req and res.
-app.get('/api/notifications', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.get('/api/notifications', async (req, res) => {
     try {
         res.json(await db.all("SELECT * FROM notifications ORDER BY timestamp DESC"));
     } catch (error) {
@@ -730,7 +769,8 @@ app.get('/api/notifications', async (req: Request, res: Response) => {
     }
 });
 // FIX: Explicitly type req and res.
-app.post('/api/notifications/mark-all-read', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.post('/api/notifications/mark-all-read', async (req, res) => {
     try {
         await db.run("UPDATE notifications SET is_read = 0 WHERE is_read = 1");
         res.status(200).send('OK');
@@ -740,7 +780,8 @@ app.post('/api/notifications/mark-all-read', async (req: Request, res: Response)
     }
 });
 // FIX: Explicitly type req and res.
-app.delete('/api/notifications/clear-all', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.delete('/api/notifications/clear-all', async (req, res) => {
     try {
         await db.run("DELETE FROM notifications");
         res.status(204).send();
@@ -752,7 +793,8 @@ app.delete('/api/notifications/clear-all', async (req: Request, res: Response) =
 
 // ANALYSIS
 // FIX: Explicitly type req and res.
-app.post('/api/analysis/snow-depth', async (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.post('/api/analysis/snow-depth', async (req, res) => {
     try {
         const { cameraId, virtualSensorId } = req.body;
         const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", cameraId);
@@ -940,7 +982,8 @@ app.use(express.static(publicPath));
 
 // Catch-all to serve index.html for any other request (for client-side routing)
 // FIX: Explicitly type req and res.
-app.get('*', (req: Request, res: Response) => {
+// Remove explicit Request and Response types to allow Express to infer them correctly and avoid conflicts with global types.
+app.get('*', (req, res) => {
     // Exclude API routes from being caught by this
     if (req.path.startsWith('/api/')) {
         return res.status(404).send('API endpoint not found.');

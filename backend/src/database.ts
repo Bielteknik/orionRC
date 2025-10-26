@@ -144,6 +144,8 @@ export async function migrate() {
     // Columns needed by /submit-reading endpoint
     await addColumn('sensors', 'value', 'TEXT');
     await addColumn('sensors', 'last_update', 'TEXT');
+    // **THE FIX**: Ensure the 'readings' table also has the 'value' column, which might be missing in old DB files.
+    await addColumn('readings', 'value', 'TEXT NOT NULL DEFAULT \'{}\'');
     
     // Columns needed for sensor calibration logic
     await addColumn('sensors', 'reference_value', 'REAL');
