@@ -125,41 +125,54 @@ const SensorCorrelationChart: React.FC<{ stations: Station[], sensors: Sensor[] 
         };
         setIsLoading(true);
         try {
-            const history = await getReadingsHistory({ stationIds: [selectedStation], sensorTypes: [sensor1, sensor2]});
-            
+            const history = await getReadingsHistory({ stationIds: [selectedStation], sensorTypes: [sensor1, sensor2] });
+
             const dataMap = new Map<string, any>();
 
             history.forEach(reading => {
-                const timestamp = new Date(reading.timestamp).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-                
-                if (!dataMap.has(timestamp)) {
-                    dataMap.set(timestamp, { timestamp });
+                const date = new Date(reading.timestamp);
+                // Verileri dakika bazında gruplamak için saniyeleri sıfırla
+                date.setSeconds(0, 0);
+                const groupKey = date.toISOString(); // Sıralanabilir, benzersiz anahtar
+
+                if (!dataMap.has(groupKey)) {
+                    dataMap.set(groupKey, {
+                        // Grafikte gösterilecek formatlanmış zaman
+                        timestamp: date.toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                    });
                 }
 
-                const entry = dataMap.get(timestamp);
-                const value = (typeof reading.value === 'object' && reading.value !== null) 
-                    ? Object.values(reading.value)[0] 
+                const entry = dataMap.get(groupKey)!;
+                const rawValue = (typeof reading.value === 'object' && reading.value !== null)
+                    ? Object.values(reading.value).find(v => typeof v === 'number') // Nesne içindeki ilk sayısal değeri bul
                     : reading.value;
 
-                if (reading.sensorType === sensor1) {
-                    entry[sensor1] = value;
-                }
-                if (reading.sensorType === sensor2) {
-                    entry[sensor2] = value;
+                const numericValue = parseFloat(rawValue);
+
+                if (!isNaN(numericValue)) {
+                    if (reading.sensorType === sensor1) {
+                        entry[sensor1] = numericValue;
+                    }
+                    if (reading.sensorType === sensor2) {
+                        entry[sensor2] = numericValue;
+                    }
                 }
             });
 
-            const processedData = Array.from(dataMap.values())
-              .sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+            // Anahtarları (ISO tarihleri) sıralayarak verilerin doğru kronolojik sırada olmasını sağla
+            const sortedKeys = Array.from(dataMap.keys()).sort();
+            const processedData = sortedKeys.map(key => dataMap.get(key));
 
             setChartData(processedData);
 
         } catch (error) {
-            console.error("Failed to fetch correlation data:", error);
+            console.error("Korelasyon verisi alınamadı:", error);
+            setChartData([]); // Hata durumunda grafiği temizle
         } finally {
             setIsLoading(false);
         }
     }, [selectedStation, sensor1, sensor2]);
+
 
     useEffect(() => {
         fetchData();

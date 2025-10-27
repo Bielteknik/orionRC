@@ -3,7 +3,8 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
     // Load env file based on `mode` in the current working directory.
-    const env = loadEnv(mode, process.cwd(), '');
+    // FIX: Cast `process` to `any` to work around a type definition issue where `process.cwd` is not found.
+    const env = loadEnv(mode, (process as any).cwd(), '');
     return {
       server: {
         port: 3000,
@@ -11,11 +12,11 @@ export default defineConfig(({ mode }) => {
         proxy: {
           // Proxy API requests to the backend server during development
           '/api': {
-            target: 'http://localhost:8000', // Your Express server's address
+            target: 'http://127.0.0.1:8000', // Your Express server's address
             changeOrigin: true,
           },
           '/uploads': {
-            target: 'http://localhost:8000', // Proxy image requests
+            target: 'http://127.0.0.1:8000', // Proxy image requests
             changeOrigin: true,
           }
         }

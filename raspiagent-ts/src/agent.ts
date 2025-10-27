@@ -48,7 +48,8 @@ class Agent {
     private authToken: string = '';
     
     private running: boolean = false;
-    private timers: NodeJS.Timeout[] = [];
+    // FIX: Replaced NodeJS.Timeout with ReturnType<typeof setTimeout> to avoid dependency on Node.js-specific types which are not correctly resolved.
+    private timers: ReturnType<typeof setTimeout>[] = [];
 
     constructor(localConfig: LocalConfig) {
         this.apiBaseUrl = `${localConfig.server.base_url}/api`;
