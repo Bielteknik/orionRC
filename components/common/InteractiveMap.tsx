@@ -15,36 +15,32 @@ interface InteractiveMapProps {
 
 const InteractiveMap: React.FC<InteractiveMapProps> = ({ lat, lng, zoom, stationName, statusText, statusClassName, lastUpdate }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any>(null); // Harita örneğini tutmak için
+  const mapRef = useRef<any>(null);
+  const markerRef = useRef<any>(null);
+  const popupRef = useRef<any>(null);
 
+  // Sadece bileşen yüklendiğinde haritayı bir kez oluştur
   useEffect(() => {
     if (mapContainerRef.current && !mapRef.current) {
       const map = L.map(mapContainerRef.current, {
         scrollWheelZoom: true,
         zoomControl: true,
         attributionControl: false
-      }).setView([lat, lng], zoom);
+      });
       mapRef.current = map;
 
-      // Define Tile Layers
+      const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+	      attribution: 'Tiles &copy; Esri'
+      });
+      satelliteLayer.addTo(map);
+
       const streetLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
         subdomains: 'abcd',
         maxZoom: 20
       });
 
-      const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-	      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-      });
-      
-      // Add default layer to map
-      satelliteLayer.addTo(map);
-
-      // Add Layer Control
-      const baseMaps = {
-        "Sokak": streetLayer,
-        "Uydu": satelliteLayer
-      };
+      const baseMaps = { "Sokak": streetLayer, "Uydu": satelliteLayer };
       L.control.layers(baseMaps).addTo(map);
       
       const customIcon = L.divIcon({
@@ -56,8 +52,32 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({ lat, lng, zoom, station
       });
 
       const marker = L.marker([lat, lng], { icon: customIcon }).addTo(map);
+      markerRef.current = marker;
+
+      const popup = L.popup({ minWidth: 200, closeButton: true });
+      marker.bindPopup(popup);
+      popupRef.current = popup;
       
-      const popupContent = `
+      setTimeout(() => map.invalidateSize(), 100);
+    }
+
+    // Bileşen kaldırıldığında haritayı temizle
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, []); // Boş bağımlılık dizisi ile bu effect'in sadece bir kez çalışmasını sağla
+
+  // Prop'lar değiştiğinde haritayı güncelle
+  useEffect(() => {
+    if (!mapRef.current || !markerRef.current || !popupRef.current) return;
+
+    mapRef.current.setView([lat, lng], zoom);
+    markerRef.current.setLatLng([lat, lng]);
+      
+    const popupContent = `
         <div class="space-y-2 text-sm">
           <h3 class="font-bold text-base text-gray-900 -mb-1">${stationName}</h3>
           <div class="flex items-center justify-between">
@@ -70,22 +90,14 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({ lat, lng, zoom, station
           </div>
         </div>
       `;
-      
-      marker.bindPopup(popupContent).openPopup();
+    popupRef.current.setContent(popupContent);
 
-      // Fix for map container resizing issue after initial render
-      setTimeout(() => {
-          map.invalidateSize();
-      }, 100);
+    // Popup'ın açık olduğundan emin ol
+    if (!markerRef.current.isPopupOpen()) {
+        markerRef.current.openPopup();
     }
-
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-    };
   }, [lat, lng, zoom, stationName, statusText, statusClassName, lastUpdate]);
+
 
   return (
     <>
@@ -134,7 +146,7 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({ lat, lng, zoom, station
             .leaflet-control-layers-base label {
                 font-weight: 500;
                 display: flex;
-                align-items: center;
+                align-items-center;
                 gap: 8px;
             }
             .leaflet-control-layers-selector {
