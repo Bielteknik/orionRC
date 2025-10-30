@@ -34,6 +34,7 @@ export interface AgentCommand {
         camera_id?: string;
         virtual_sensor_id?: string;
         sensor_id?: string;
+        analysis_type?: 'gemini' | 'opencv';
     };
 }
 

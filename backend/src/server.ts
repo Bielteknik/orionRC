@@ -1,6 +1,10 @@
+
+
+
 // Use fully qualified express types to avoid conflict with global DOM types.
 // FIX: Use aliased imports for express types to prevent conflicts with global DOM types (e.g., from Jest or other libraries).
-import express, { Request as ExpressRequest, Response as ExpressResponse, NextFunction as ExpressNextFunction } from 'express';
+// FIX: Added Express type to explicitly type the app constant.
+import express, { Express, Request as ExpressRequest, Response as ExpressResponse, NextFunction as ExpressNextFunction } from 'express';
 import cors from 'cors';
 import { openDb, db, migrate } from './database.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -19,7 +23,8 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const app = express();
+// FIX: Explicitly type app as Express to fix type conflicts.
+const app: Express = express();
 const port = process.env.PORT || 8000;
 
 // Helper to safely parse JSON that might be invalid or empty
@@ -566,7 +571,17 @@ app.get('/api/readings/history', async (req: ExpressRequest, res: ExpressRespons
         const sensorTypeList = sensorTypesQuery.split(',').map(t => `'${t.trim()}'`).join(',');
 
         const readings = await db.all(`
-            SELECT r.timestamp, s.type as sensorType, r.value FROM readings r
+            SELECT 
+                r.id, 
+                r.timestamp, 
+                s.id as sensorId,
+                s.name as sensorName,
+                s.station_id as stationId, 
+                s.type as sensorType, 
+                s.interface, 
+                s.unit, 
+                r.value 
+            FROM readings r
             JOIN sensors s ON r.sensor_id = s.id
             WHERE s.station_id IN (${stationIdList})
             AND s.type IN (${sensorTypeList})
@@ -770,7 +785,7 @@ app.delete('/api/notifications/clear-all', async (req: ExpressRequest, res: Expr
 // FIX: Replaced Request and Response with aliased Express types
 app.post('/api/analysis/snow-depth', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
-        const { cameraId, virtualSensorId } = req.body;
+        const { cameraId, virtualSensorId, analysisType } = req.body;
         const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", cameraId);
 
         if (!camera || !camera.station_id) {
@@ -780,7 +795,11 @@ app.post('/api/analysis/snow-depth', async (req: ExpressRequest, res: ExpressRes
         const command = {
             id: Date.now(),
             command_type: 'ANALYZE_SNOW_DEPTH',
-            payload: { camera_id: cameraId, virtual_sensor_id: virtualSensorId },
+            payload: { 
+                camera_id: cameraId, 
+                virtual_sensor_id: virtualSensorId,
+                analysis_type: analysisType, // 'gemini' or 'opencv'
+            },
             status: 'pending'
         };
 

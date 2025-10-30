@@ -289,11 +289,17 @@ class Agent {
                     success = await this.captureImage(command.payload.camera_id);
                     break;
                 case 'ANALYZE_SNOW_DEPTH':
-                     if (!command.payload?.camera_id || !command.payload?.virtual_sensor_id) {
-                        console.error("Analyze snow depth command is missing 'camera_id' or 'virtual_sensor_id'.");
+                     if (!command.payload?.camera_id || !command.payload?.virtual_sensor_id || !command.payload.analysis_type) {
+                        console.error("Analyze snow depth command is missing 'camera_id', 'virtual_sensor_id' or 'analysis_type'.");
                         break;
                     }
-                    success = await this.analyzeSnowDepth(command.payload.camera_id, command.payload.virtual_sensor_id);
+                    if(command.payload.analysis_type === 'gemini') {
+                        success = await this.analyzeSnowDepthWithGemini(command.payload.camera_id, command.payload.virtual_sensor_id);
+                    } else if (command.payload.analysis_type === 'opencv') {
+                        success = await this.analyzeSnowDepthWithOpenCV(command.payload.camera_id, command.payload.virtual_sensor_id);
+                    } else {
+                        console.error(`Bilinmeyen analiz tipi: ${command.payload.analysis_type}`);
+                    }
                     break;
                 case 'FORCE_READ_SENSOR':
                     if (!command.payload?.sensor_id) {
@@ -372,7 +378,7 @@ class Agent {
         }
     }
 
-    private async analyzeSnowDepth(cameraId: string, virtualSensorId: string): Promise<boolean> {
+    private async analyzeSnowDepthWithGemini(cameraId: string, virtualSensorId: string): Promise<boolean> {
         const cameraConfig = this.config?.cameras.find(c => c.id === cameraId);
         if (!cameraConfig || !cameraConfig.rtsp_url) {
             console.error(`Analiz için kamera bulunamadı veya RTSP URL'si eksik: ${cameraId}`);
@@ -384,10 +390,10 @@ class Agent {
             return false;
         }
 
-        console.log(`❄️  Kar derinliği analizi başlatılıyor... Kamera: ${cameraId}`);
+        console.log(`❄️  Kar derinliği analizi başlatılıyor (Gemini)... Kamera: ${cameraId}`);
         
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const filename = `ANALYSIS_${timestamp}_${cameraId}.jpg`;
+        const filename = `ANALYSIS_GEMINI_${timestamp}_${cameraId}.jpg`;
         const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
         const filepath = path.join(UPLOADS_DIR, filename);
 
@@ -469,6 +475,74 @@ class Agent {
             }
         }
     }
+
+    private async analyzeSnowDepthWithOpenCV(cameraId: string, virtualSensorId: string): Promise<boolean> {
+        const cameraConfig = this.config?.cameras.find(c => c.id === cameraId);
+        if (!cameraConfig || !cameraConfig.rtsp_url) {
+            console.error(`OpenCV analizi için kamera bulunamadı veya RTSP URL'si eksik: ${cameraId}`);
+            return false;
+        }
+
+        console.log(`❄️  Kar derinliği analizi başlatılıyor (OpenCV)... Kamera: ${cameraId}`);
+
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `ANALYSIS_OCV_${timestamp}_${cameraId}.jpg`;
+        const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
+        const filepath = path.join(UPLOADS_DIR, filename);
+        const scriptPath = path.join(__dirname, 'scripts', 'snow_depth_opencv.py');
+
+        try {
+            // 1. Capture image
+            await fs.mkdir(UPLOADS_DIR, { recursive: true });
+            const ffmpegCommand = `ffmpeg -i "${cameraConfig.rtsp_url}" -vframes 1 -y "${filepath}"`;
+            await execAsync(ffmpegCommand);
+            console.log(`   -> Analiz için görüntü kaydedildi: ${filepath}`);
+
+            // 2. Execute Python script
+            console.log(`   -> OpenCV script'i çalıştırılıyor: ${scriptPath}`);
+            const { stdout, stderr } = await execAsync(`python3 "${scriptPath}" "${filepath}"`);
+            
+            if (stderr) {
+                console.error(`   -> HATA: OpenCV script hatası: ${stderr}`);
+                // Continue, as stdout might still have a partial result or error message
+            }
+            
+            console.log(`   -> OpenCV Yanıtı: ${stdout}`);
+
+            // 3. Parse result and send
+            const resultJson = JSON.parse(stdout.trim());
+            if (resultJson.error) {
+                throw new Error(resultJson.error);
+            }
+
+            const snowDepth = resultJson.snow_depth_cm;
+             if (typeof snowDepth !== 'number') {
+                throw new Error('OpenCV script\'inden sayısal bir kar yüksekliği değeri alınamadı.');
+            }
+
+            console.log(`   -> Analiz Sonucu: ${snowDepth} cm`);
+
+            await this.sendReading({
+                sensor: virtualSensorId,
+                value: { snow_depth_cm: snowDepth }
+            });
+
+            return true;
+
+        } catch (error) {
+            console.error(`HATA: Kar derinliği (OpenCV) analizi başarısız oldu:`, error);
+            return false;
+        } finally {
+             try {
+                await fs.unlink(filepath);
+            } catch (unlinkError: any) {
+                if (unlinkError.code !== 'ENOENT') {
+                    console.warn(`Geçici analiz dosyası silinemedi: ${filepath}`, unlinkError);
+                }
+            }
+        }
+    }
+
 
     private async forceReadSensor(sensorId: string): Promise<boolean> {
         const sensorConfig = this.config?.sensors.find(s => s.id === sensorId);

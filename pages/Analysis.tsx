@@ -26,68 +26,111 @@ const formatTimeAgo = (isoString: string | undefined): string => {
     return `${hours} sa önce`;
 };
 
+const getNumericValue = (value: any): number | null => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number') return value;
+    if (typeof value === 'object') {
+        const numeric = Object.values(value).find(v => typeof v === 'number');
+        return typeof numeric === 'number' ? numeric : null;
+    }
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? null : parsed;
+}
 
 const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sensor[], cameras: Camera[] }> = ({ stations, sensors, cameras }) => {
     const [selectedStationId, setSelectedStationId] = useState<string>('');
-    const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false);
+    const [isLoadingAnalysis, setIsLoadingAnalysis] = useState<'gemini' | 'opencv' | false>(false);
     const [interpretation, setInterpretation] = useState('');
     const [isLoadingInterpretation, setIsLoadingInterpretation] = useState(false);
     const [analysisMessage, setAnalysisMessage] = useState('');
+    
+    // States for selecting specific virtual sensors
+    const [selectedGeminiSensorId, setSelectedGeminiSensorId] = useState<string>('');
+    const [selectedOpenCVSensorId, setSelectedOpenCVSensorId] = useState<string>('');
+
+
+    const virtualSensors = useMemo(() => 
+        sensors.filter(s => s.stationId === selectedStationId && s.type === 'Kar Yüksekliği' && s.interface === 'virtual'),
+        [sensors, selectedStationId]
+    );
 
     useEffect(() => {
         if(stations.length > 0 && !selectedStationId) {
-            const firstStationWithBothSensors = stations.find(station => {
-                const hasUltrasonic = sensors.some(s => s.stationId === station.id && s.type === 'Mesafe');
-                const hasAi = sensors.some(s => s.stationId === station.id && s.type === 'Kar Yüksekliği');
-                return hasUltrasonic && hasAi;
-            });
-            setSelectedStationId(firstStationWithBothSensors?.id || stations[0]?.id || '');
+            setSelectedStationId(stations[0]?.id || '');
         }
-    }, [stations, sensors, selectedStationId]);
+        if (virtualSensors.length > 0) {
+            if (!selectedGeminiSensorId) setSelectedGeminiSensorId(virtualSensors[0].id);
+            if (!selectedOpenCVSensorId) setSelectedOpenCVSensorId(virtualSensors[0].id);
+        }
+    }, [stations, selectedStationId, virtualSensors, selectedGeminiSensorId, selectedOpenCVSensorId]);
 
-    const { ultrasonicSensor, aiSensor, sourceCamera } = useMemo(() => {
-        if (!selectedStationId) return { ultrasonicSensor: null, aiSensor: null, sourceCamera: null };
+    const { ultrasonicSensor, geminiSensor, openCVSensor, geminiSourceCamera, openCVSourceCamera } = useMemo(() => {
+        if (!selectedStationId) return { ultrasonicSensor: null, geminiSensor: null, openCVSensor: null, geminiSourceCamera: null, openCVSourceCamera: null };
         
-        const uSensor = sensors.find(s => s.stationId === selectedStationId && (s.type === 'Mesafe' || s.type === 'Kar Yüksekliği'));
-        const aSensor = sensors.find(s => s.stationId === selectedStationId && s.type === 'Kar Yüksekliği' && s.interface === 'virtual');
-        let sCamera = null;
-        if(aSensor && aSensor.config && aSensor.config.source_camera_id) {
-            sCamera = cameras.find(c => c.id === aSensor.config.source_camera_id);
+        const uSensor = sensors.find(s => s.stationId === selectedStationId && s.type === 'Mesafe' && s.interface !== 'virtual');
+        const gSensor = sensors.find(s => s.id === selectedGeminiSensorId);
+        const oSensor = sensors.find(s => s.id === selectedOpenCVSensorId);
+
+        const findCamera = (sensor: Sensor | undefined) => {
+            if(sensor && sensor.config && sensor.config.source_camera_id) {
+                return cameras.find(c => c.id === sensor.config.source_camera_id);
+            }
+            return null;
         }
 
-        return { ultrasonicSensor: uSensor || null, aiSensor: aSensor || null, sourceCamera: sCamera || null };
-    }, [selectedStationId, sensors, cameras]);
+        return { 
+            ultrasonicSensor: uSensor || null, 
+            geminiSensor: gSensor || null, 
+            openCVSensor: oSensor || null,
+            geminiSourceCamera: findCamera(gSensor),
+            openCVSourceCamera: findCamera(oSensor)
+        };
+    }, [selectedStationId, sensors, cameras, selectedGeminiSensorId, selectedOpenCVSensorId]);
 
-    const handleTriggerAnalysis = async () => {
-        if (!aiSensor || !sourceCamera) return;
-        setIsLoadingAnalysis(true);
+    const handleTriggerAnalysis = async (type: 'gemini' | 'opencv') => {
+        const sensor = type === 'gemini' ? geminiSensor : openCVSensor;
+        const camera = type === 'gemini' ? geminiSourceCamera : openCVSourceCamera;
+
+        if (!sensor || !camera) {
+            setAnalysisMessage(`${type.toUpperCase()} analizi için sensör veya kamera yapılandırılmamış.`);
+            return;
+        }
+        setIsLoadingAnalysis(type);
         setAnalysisMessage('');
         try {
-            await analyzeSnowDepth(sourceCamera.id, aiSensor.id);
-            setAnalysisMessage('Analiz başlatıldı. Sonuçlar birkaç dakika içinde yansıyacaktır.');
+            await analyzeSnowDepth(camera.id, sensor.id, type);
+            setAnalysisMessage(`${type.toUpperCase()} analizi başlatıldı. Sonuçlar birkaç dakika içinde yansıyacaktır.`);
             setTimeout(() => setAnalysisMessage(''), 10000);
         } catch (error) {
             console.error(error);
-            setAnalysisMessage('Analiz tetiklenirken bir hata oluştu.');
+            setAnalysisMessage(`${type.toUpperCase()} analizi tetiklenirken bir hata oluştu.`);
         } finally {
             setIsLoadingAnalysis(false);
         }
     };
     
-    const rawUltrasonicValue = ultrasonicSensor?.value;
-    const ultrasonicValue = (rawUltrasonicValue && typeof rawUltrasonicValue === 'object' && rawUltrasonicValue.distance_cm !== undefined) 
-        ? rawUltrasonicValue.distance_cm 
-        : (typeof rawUltrasonicValue === 'number' ? rawUltrasonicValue : null);
-
-    const aiValue = (aiSensor?.value && typeof aiSensor.value === 'object' && aiSensor.value.snow_depth_cm !== undefined) ? aiSensor.value.snow_depth_cm : null;
+    const ultrasonicValue = getNumericValue(ultrasonicSensor?.value);
+    const geminiValue = getNumericValue(geminiSensor?.value);
+    const openCVValue = getNumericValue(openCVSensor?.value);
 
     const handleInterpret = async () => {
-        if (ultrasonicValue === null || aiValue === null) return;
         setIsLoadingInterpretation(true);
         setInterpretation('');
-        const difference = Math.abs(ultrasonicValue - aiValue).toFixed(1);
+        const diff_gemini = (ultrasonicValue !== null && geminiValue !== null) ? Math.abs(ultrasonicValue - geminiValue).toFixed(1) : "hesaplanamadı";
+        const diff_opencv = (ultrasonicValue !== null && openCVValue !== null) ? Math.abs(ultrasonicValue - openCVValue).toFixed(1) : "hesaplanamadı";
+
         try {
-            const prompt = `Sen bir meteoroloji ve sensör veri analistisin. Bir istasyonda kar yüksekliği iki farklı yöntemle ölçülüyor: Ultrasonik sensör ve bir cetvel görüntüsünü analiz eden yapay zeka. Ultrasonik sensör ${ultrasonicValue} cm, yapay zeka ise ${aiValue} cm ölçtü. Aradaki ${difference} cm'lik farkın olası nedenlerini (sensör kalibrasyonu, karın yüzeyindeki pürüzler, görüş koşulları, cetvelin okunmasındaki olası hatalar vb.) analiz et ve hangi verinin daha güvenilir olabileceğine dair kısa, maddeler halinde bir yorum yap.`;
+            const prompt = `Sen bir meteoroloji ve sensör veri analistisin. Bir istasyonda kar yüksekliği üç farklı yöntemle ölçülüyor:
+1.  **Ultrasonik Sensör:** ${ultrasonicValue ?? 'Veri Yok'} cm
+2.  **Yapay Zeka (Gemini):** ${geminiValue ?? 'Veri Yok'} cm
+3.  **Görüntü İşleme (OpenCV):** ${openCVValue ?? 'Veri Yok'} cm
+
+Hesaplanan farklar:
+- Ultrasonik ve Gemini arası fark: ${diff_gemini} cm
+- Ultrasonik ve OpenCV arası fark: ${diff_opencv} cm
+
+Bu üç ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (örn: sensör kalibrasyonu, kar yüzeyinin pürüzlü olması, görüş koşulları, algoritma hassasiyeti vb.) analiz et. Hangi ölçümün daha güvenilir olabileceğine dair kısa, maddeler halinde bir uzman yorumu yap.`;
+            
             const stream = await sendMessageToGemini(prompt);
             let fullText = '';
             for await (const chunk of stream) {
@@ -101,545 +144,420 @@ const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sen
         }
     };
     
-    const difference = (ultrasonicValue !== null && aiValue !== null) ? Math.abs(ultrasonicValue - aiValue) : null;
-    let diffColor = 'text-gray-800 dark:text-gray-200';
-    if (difference !== null) {
-        if (difference > 10) diffColor = 'text-danger';
-        else if (difference > 5) diffColor = 'text-warning';
-        else diffColor = 'text-success';
+    const diffGemini = (ultrasonicValue !== null && geminiValue !== null) ? Math.abs(ultrasonicValue - geminiValue) : null;
+    const diffOpenCV = (ultrasonicValue !== null && openCVValue !== null) ? Math.abs(ultrasonicValue - openCVValue) : null;
+    
+    const getDiffColor = (diff: number | null) => {
+        if (diff === null) return 'text-gray-800 dark:text-gray-200';
+        if (diff > 10) return 'text-danger';
+        if (diff > 5) return 'text-warning';
+        return 'text-success';
     }
 
     return (
         <Card>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Karşılaştırmalı Kar Yüksekliği Analizi</h3>
-            <p className="text-sm text-muted mb-4">Ultrasonik sensör verileri ile yapay zeka destekli görüntü analizi sonuçlarını karşılaştırın.</p>
+            <p className="text-sm text-muted mb-4">Fiziksel sensör verilerini, iki farklı görüntü işleme tekniğinin sonuçlarıyla karşılaştırın.</p>
             
             <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">İstasyon Seçin</label>
                 <select value={selectedStationId} onChange={e => setSelectedStationId(e.target.value)} className="input-base max-w-sm">
-                    {stations.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                     {stations.length > 0 ? stations.map(s => <option key={s.id} value={s.id}>{s.name}</option>) : <option>Yükleniyor...</option>}
                 </select>
             </div>
 
-            {!ultrasonicSensor || !aiSensor ? (
-                <div className="text-center py-10 text-muted border border-dashed rounded-lg">
-                    <p>Seçilen istasyonda karşılaştırma için gerekli sensörler (Mesafe ve Kar Yüksekliği) bulunamadı.</p>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                {/* Ultrasonic Sensor */}
+                <div className="p-4 rounded-lg bg-secondary dark:bg-gray-700/50 border dark:border-gray-700 h-full flex flex-col justify-between">
+                    <div className="flex items-center gap-2"><RefreshIcon className="w-5 h-5 text-muted" /><h4 className="font-semibold text-gray-800 dark:text-gray-200">Ultrasonik Sensör</h4></div>
+                    {ultrasonicSensor ? (
+                        <>
+                            <div className="text-center my-4"><p className="text-6xl font-bold text-gray-900 dark:text-gray-100">{ultrasonicValue?.toFixed(1) ?? '--'}<span className="text-3xl text-muted ml-1">cm</span></p></div>
+                            <p className="text-xs text-center text-muted">Son Güncelleme: {formatTimeAgo(ultrasonicSensor.lastUpdate)}</p>
+                        </>
+                    ) : <div className="text-center py-10 text-muted">Mesafe sensörü bulunamadı.</div>}
                 </div>
-            ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-                    {/* Ultrasonic Sensor */}
-                    <div className="p-4 rounded-lg bg-secondary dark:bg-gray-700/50 border dark:border-gray-700 space-y-3 h-full flex flex-col">
-                        <div className="flex items-center gap-2">
-                            <RefreshIcon className="w-5 h-5 text-muted" />
-                            <h4 className="font-semibold text-gray-800 dark:text-gray-200">Ultrasonik Sensör</h4>
-                        </div>
-                        <div className="text-center flex-grow flex flex-col justify-center">
-                            <p className="text-5xl font-bold text-gray-900 dark:text-gray-100">{ultrasonicValue !== null ? ultrasonicValue.toFixed(1) : '--'}</p>
-                            <p className="text-sm text-muted">cm</p>
-                        </div>
-                        <div className="text-xs text-muted text-center border-t dark:border-gray-600 pt-2">{ultrasonicSensor.name} | Son güncelleme: {formatTimeAgo(ultrasonicSensor.lastUpdate)}</div>
-                    </div>
 
-                    {/* AI Sensor */}
-                    <div className="p-4 rounded-lg bg-secondary dark:bg-gray-700/50 border dark:border-gray-700 space-y-3 h-full flex flex-col">
-                        <div className="flex items-center gap-2">
-                            <BrainIcon className="w-5 h-5 text-muted" />
-                            <h4 className="font-semibold text-gray-800 dark:text-gray-200">Yapay Zeka Analizi</h4>
+                {/* AI & OpenCV Analysis */}
+                <div className="space-y-4">
+                    <h4 className="font-semibold text-gray-800 dark:text-gray-200 text-center">Görüntü İşleme Analizleri</h4>
+                    {/* Gemini Card */}
+                    <div className="p-4 rounded-lg bg-secondary dark:bg-gray-700/50 border dark:border-gray-700 space-y-2">
+                        <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-2"><BrainIcon className="w-5 h-5 text-muted" /><h5 className="font-semibold text-gray-800 dark:text-gray-200">Yapay Zeka (Gemini)</h5></div>
+                            <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{geminiValue?.toFixed(1) ?? '--'}<span className="text-xl text-muted ml-1">cm</span></p>
                         </div>
-                        <div className="text-center flex-grow flex flex-col justify-center">
-                            <p className="text-5xl font-bold text-gray-900 dark:text-gray-100">{aiValue !== null ? aiValue.toFixed(1) : '--'}</p>
-                            <p className="text-sm text-muted">cm</p>
-                        </div>
-                        {sourceCamera && sourceCamera.photos?.length > 0 && (
-                            <div className="relative group">
-                                <img src={sourceCamera.photos[0]} alt="Kaynak Kamera Görüntüsü" className="rounded-md w-full h-24 object-cover"/>
-                                <div className="absolute top-1 right-1 bg-black/50 p-1 rounded-full text-white cursor-pointer">
-                                    <InfoIcon className="w-3 h-3"/>
-                                </div>
-                                <div className="absolute bottom-full mb-2 right-0 w-48 p-2 text-xs text-white bg-black rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                    Bu görüntü, analiz için kullanılan kameranın galerisindeki en son fotoğraftır ve son analize ait olmayabilir.
-                                </div>
-                            </div>
-                        )}
-                        <div className="text-xs text-muted text-center border-t dark:border-gray-600 pt-2">{aiSensor.name} | Son güncelleme: {formatTimeAgo(aiSensor.lastUpdate)}</div>
-                        <button onClick={handleTriggerAnalysis} disabled={isLoadingAnalysis} className="btn-primary w-full flex items-center justify-center gap-2">
-                           <svg className={`w-5 h-5 ${isLoadingAnalysis ? 'animate-spin' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 18.657A8 8 0 109.293 5.343m8.364 13.314L20 21m-2.343-2.343l-3.536 3.536"/></svg>
-                            {isLoadingAnalysis ? 'Analiz Başlatılıyor...' : 'Yeni Analiz Tetikle'}
-                        </button>
-                        {analysisMessage && <p className="text-xs text-center text-muted mt-2">{analysisMessage}</p>}
+                         <select value={selectedGeminiSensorId} onChange={e => setSelectedGeminiSensorId(e.target.value)} className="w-full text-xs p-1 input-base" disabled={virtualSensors.length === 0}><option value="" disabled>Sanal Sensör Seç</option>{virtualSensors.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
+                        {geminiSourceCamera && <img src={geminiSourceCamera.photos?.[0] || `https://picsum.photos/seed/${geminiSourceCamera.id}/200`} alt="kamera görüntüsü" className="w-full h-20 object-cover rounded-md border dark:border-gray-700"/>}
+                        <button onClick={() => handleTriggerAnalysis('gemini')} disabled={isLoadingAnalysis === 'gemini'} className="btn-secondary w-full text-sm"> {isLoadingAnalysis === 'gemini' ? 'Tetikleniyor...' : 'Gemini ile Analiz Et'}</button>
                     </div>
-
-                    {/* Comparison */}
-                    <div className="p-4 rounded-lg bg-blue-50 dark:bg-gray-900/30 border border-blue-200 dark:border-blue-800 space-y-3 h-full flex flex-col">
-                         <h4 className="font-semibold text-gray-800 dark:text-gray-200 text-center">Fark Analizi</h4>
-                         <div className="text-center flex-grow flex flex-col justify-center">
-                            <p className={`text-5xl font-bold ${diffColor}`}>{difference !== null ? difference.toFixed(1) : '--'}</p>
-                            <p className="text-sm text-muted">cm fark</p>
+                     {/* OpenCV Card */}
+                    <div className="p-4 rounded-lg bg-secondary dark:bg-gray-700/50 border dark:border-gray-700 space-y-2">
+                         <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-2"><BrainIcon className="w-5 h-5 text-muted" /><h5 className="font-semibold text-gray-800 dark:text-gray-200">Görüntü İşleme (OpenCV)</h5></div>
+                            <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{openCVValue?.toFixed(1) ?? '--'}<span className="text-xl text-muted ml-1">cm</span></p>
                         </div>
-                         <button onClick={handleInterpret} disabled={isLoadingInterpretation || ultrasonicValue === null || aiValue === null} className="w-full btn-secondary flex items-center justify-center gap-2">
-                            <BrainIcon className="w-5 h-5"/>
-                            {isLoadingInterpretation ? 'Yorumlanıyor...' : 'Farkı Yorumla'}
-                         </button>
-                         {interpretation && (
-                            <div className="text-sm mt-2 p-2 bg-white/50 dark:bg-black/20 rounded max-h-40 overflow-y-auto text-gray-700 dark:text-gray-300 text-xs whitespace-pre-wrap">{interpretation.replace("...", "")}</div>
-                         )}
+                        <select value={selectedOpenCVSensorId} onChange={e => setSelectedOpenCVSensorId(e.target.value)} className="w-full text-xs p-1 input-base" disabled={virtualSensors.length === 0}><option value="" disabled>Sanal Sensör Seç</option>{virtualSensors.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
+                        <button onClick={() => handleTriggerAnalysis('opencv')} disabled={isLoadingAnalysis === 'opencv'} className="btn-secondary w-full text-sm">{isLoadingAnalysis === 'opencv' ? 'Tetikleniyor...' : 'OpenCV ile Analiz Et'}</button>
                     </div>
                 </div>
-            )}
-        </Card>
-    );
-};
 
-
-const SnowWaterEquivalentCalculator: React.FC = () => {
-    const [snowHeight, setSnowHeight] = useState('');
-    const [snowDensity, setSnowDensity] = useState('150'); // Avg density kg/m³
-    const [swe, setSwe] = useState<number | null>(null);
-    const [explanation, setExplanation] = useState('');
-    const [isExplaining, setIsExplaining] = useState(false);
-
-    useEffect(() => {
-        if (snowHeight && snowDensity) {
-            const heightInMeters = parseFloat(snowHeight) / 100;
-            const density = parseFloat(snowDensity);
-            if (!isNaN(heightInMeters) && !isNaN(density)) {
-                // SWE (mm) = Snow Depth (m) * Snow Density (kg/m³)
-                setSwe(heightInMeters * density);
-            }
-        } else {
-            setSwe(null);
-        }
-    }, [snowHeight, snowDensity]);
-    
-    const handleExplain = async () => {
-        if (swe === null) return;
-        setIsExplaining(true);
-        setExplanation('');
-        try {
-            const prompt = `Bir meteoroloji uzmanı gibi, ${snowHeight} cm kar yüksekliği ve ${snowDensity} kg/m³ yoğunluk ile hesaplanan ${swe.toFixed(2)} mm Kar Su Eşdeğeri'nin (SWE) ne anlama geldiğini, tarım ve su kaynakları için önemini basit ve anlaşılır bir dille açıkla.`;
-            const stream = await sendMessageToGemini(prompt);
-            let fullText = '';
-            for await (const chunk of stream) {
-                fullText += chunk.text;
-                setExplanation(fullText);
-            }
-        } catch (error: any) {
-            console.error("Failed to get explanation from Gemini:", error);
-            let errorMessage = "Açıklama alınırken bir hata oluştu.";
-            if (error.message && (error.message.includes('API Key') || error.message.includes('API key'))) {
-                errorMessage = "Yapay zeka özelliği için API anahtarı yapılandırılmamış.";
-            }
-            setExplanation(errorMessage);
-        } finally {
-            setIsExplaining(false);
-        }
-    };
-
-    return (
-        <Card>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Kar Su Eşdeğeri (SWE) Hesaplayıcı</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Kar Yüksekliği (cm)</label>
-                    <input type="number" value={snowHeight} onChange={e => setSnowHeight(e.target.value)} className="mt-1 w-full input-base" placeholder="Örn: 85" />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Kar Yoğunluğu (kg/m³)</label>
-                    <input type="number" value={snowDensity} onChange={e => setSnowDensity(e.target.value)} className="mt-1 w-full input-base" />
-                </div>
-                <div className="p-4 rounded-lg bg-secondary dark:bg-gray-700 text-center">
-                    <p className="text-sm text-muted dark:text-gray-400">Hesaplanan SWE</p>
-                    <p className="text-3xl font-bold text-gray-800 dark:text-gray-200">{swe !== null ? `${swe.toFixed(2)}` : '--'}<span className="text-lg ml-1">mm</span></p>
+                {/* Comparison & Actions */}
+                <div className="p-4 rounded-lg bg-blue-50 dark:bg-gray-900/40 border border-blue-200 dark:border-blue-800 space-y-4 h-full flex flex-col">
+                     <h4 className="font-semibold text-center text-gray-800 dark:text-gray-200">Fark Analizi</h4>
+                     <div className="flex-grow space-y-4">
+                        <div className="text-center bg-white dark:bg-gray-800 p-2 rounded-md">
+                            <p className="text-xs text-muted">Ultrasonik vs Gemini Farkı</p>
+                            <p className={`text-2xl font-bold ${getDiffColor(diffGemini)}`}>{diffGemini?.toFixed(1) ?? '--'} <span className="text-base">cm</span></p>
+                        </div>
+                        <div className="text-center bg-white dark:bg-gray-800 p-2 rounded-md">
+                            <p className="text-xs text-muted">Ultrasonik vs OpenCV Farkı</p>
+                            <p className={`text-2xl font-bold ${getDiffColor(diffOpenCV)}`}>{diffOpenCV?.toFixed(1) ?? '--'} <span className="text-base">cm</span></p>
+                        </div>
+                     </div>
+                     <button onClick={handleInterpret} disabled={isLoadingInterpretation} className="btn-primary w-full mt-auto"> {isLoadingInterpretation ? 'Yorumlanıyor...' : 'Farkları Yorumla'}</button>
+                     {analysisMessage && <p className="text-xs text-center text-accent pt-2">{analysisMessage}</p>}
+                     {interpretation && (
+                        <div className="text-xs text-muted p-2 bg-primary dark:bg-gray-800 rounded-md border dark:border-gray-600 max-h-32 overflow-y-auto mt-2">
+                            {isLoadingInterpretation && !interpretation ? '...' : interpretation}
+                        </div>
+                     )}
                 </div>
             </div>
-            {swe !== null && (
-                 <div className="mt-4">
-                    <button onClick={handleExplain} disabled={isExplaining} className="btn-primary flex items-center gap-2">
-                        <BrainIcon className="w-5 h-5"/>
-                        {isExplaining ? 'Açıklanıyor...' : 'Yapay Zeka ile Açıkla'}
-                    </button>
-                    {(explanation || isExplaining) && (
-                        <div className="mt-3 p-3 bg-secondary dark:bg-gray-700 rounded-md border dark:border-gray-600 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{explanation}</div>
-                    )}
-                </div>
-            )}
-        </Card>
-    );
-};
-
-const SensorCorrelationChart: React.FC<{ stations: Station[], sensors: Sensor[] }> = ({ stations, sensors }) => {
-    const { theme } = useTheme();
-    const [selectedStation, setSelectedStation] = useState<string>('');
-    const [sensor1, setSensor1] = useState<string>('');
-    const [sensor2, setSensor2] = useState<string>('');
-    const [chartData, setChartData] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
-    
-    const availableSensorTypes = useMemo(() => {
-        if (!selectedStation) return [];
-        const stationSensors = sensors.filter(s => s.stationId === selectedStation);
-        return [...new Set(stationSensors.map(s => s.type))];
-    }, [selectedStation, sensors]);
-
-    useEffect(() => {
-        if (stations.length > 0 && !selectedStation) setSelectedStation(stations[0].id);
-    }, [stations, selectedStation]);
-
-    useEffect(() => {
-        if (availableSensorTypes.length >= 2) {
-            setSensor1(availableSensorTypes[0]);
-            setSensor2(availableSensorTypes[1]);
-        } else {
-            setSensor1('');
-            setSensor2('');
-        }
-    }, [availableSensorTypes]);
-
-    const fetchData = useCallback(async () => {
-        if (!selectedStation || !sensor1 || !sensor2) {
-            setChartData([]);
-            return;
-        };
-        setIsLoading(true);
-        try {
-            const history = await getReadingsHistory({ stationIds: [selectedStation], sensorTypes: [sensor1, sensor2] });
-
-            const dataMap = new Map<string, any>();
-
-            history.forEach(reading => {
-                const date = new Date(reading.timestamp);
-                // Verileri dakika bazında gruplamak için saniyeleri sıfırla
-                date.setSeconds(0, 0);
-                const groupKey = date.toISOString(); // Sıralanabilir, benzersiz anahtar
-
-                if (!dataMap.has(groupKey)) {
-                    dataMap.set(groupKey, {
-                        // Grafikte gösterilecek formatlanmış zaman
-                        timestamp: date.toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-                    });
-                }
-
-                const entry = dataMap.get(groupKey)!;
-                const rawValue = (typeof reading.value === 'object' && reading.value !== null)
-                    ? Object.values(reading.value).find(v => typeof v === 'number') // Nesne içindeki ilk sayısal değeri bul
-                    : reading.value;
-
-                const numericValue = parseFloat(rawValue);
-
-                if (!isNaN(numericValue)) {
-                    if (reading.sensorType === sensor1) {
-                        entry[sensor1] = numericValue;
-                    }
-                    if (reading.sensorType === sensor2) {
-                        entry[sensor2] = numericValue;
-                    }
-                }
-            });
-
-            // Anahtarları (ISO tarihleri) sıralayarak verilerin doğru kronolojik sırada olmasını sağla
-            const sortedKeys = Array.from(dataMap.keys()).sort();
-            const processedData = sortedKeys.map(key => dataMap.get(key));
-
-            setChartData(processedData);
-
-        } catch (error) {
-            console.error("Korelasyon verisi alınamadı:", error);
-            setChartData([]); // Hata durumunda grafiği temizle
-        } finally {
-            setIsLoading(false);
-        }
-    }, [selectedStation, sensor1, sensor2]);
-
-
-    useEffect(() => {
-        fetchData();
-    }, [fetchData]);
-
-
-    return (
-        <Card>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Sensör Korelasyon Grafiği</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 p-3 bg-secondary dark:bg-gray-700/50 rounded-md border dark:border-gray-700">
-                <select value={selectedStation} onChange={e => setSelectedStation(e.target.value)} className="input-base"><option value="">İstasyon Seç</option>{stations.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
-                <select value={sensor1} onChange={e => setSensor1(e.target.value)} className="input-base" disabled={!selectedStation}><option value="">Sensör 1</option>{availableSensorTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
-                <select value={sensor2} onChange={e => setSensor2(e.target.value)} className="input-base" disabled={!selectedStation}><option value="">Sensör 2</option>{availableSensorTypes.map(t => <option key={t} value={t}>{t}</option>)}</select>
-            </div>
-            <div className="h-96">
-                {isLoading ? <Skeleton className="w-full h-full"/> : (
-                    <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#374151' : '#E5E7EB'} />
-                            <XAxis dataKey="timestamp" tick={{ fontSize: 10, fill: theme === 'dark' ? '#9CA3AF' : '#6B7281' }} />
-                            <YAxis yAxisId="left" stroke="#8884d8" tick={{ fontSize: 10, fill: theme === 'dark' ? '#9CA3AF' : '#6B7281' }} />
-                            <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" tick={{ fontSize: 10, fill: theme === 'dark' ? '#9CA3AF' : '#6B7281' }} />
-                            <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF', border: `1px solid ${theme === 'dark' ? '#4B5563' : '#E5E7EB'}` }}/>
-                            <Legend wrapperStyle={{fontSize: '12px'}}/>
-                            <Line yAxisId="left" type="monotone" dataKey={sensor1} stroke="#8884d8" activeDot={{ r: 8 }} dot={false} />
-                            <Line yAxisId="right" type="monotone" dataKey={sensor2} stroke="#82ca9d" dot={false}/>
-                        </LineChart>
-                    </ResponsiveContainer>
-                )}
-            </div>
+            <style>{`.input-base { background-color: white; border: 1px solid #D1D5DB; border-radius: 0.375rem; padding: 0.5rem 0.75rem; width: 100%; } .dark .input-base { background-color: #374151; border-color: #4B5563; color: #F3F4F6; } .btn-primary { background-color: #F97316; color: white; padding: 0.5rem 1rem; border-radius: 0.375rem; font-weight: 600; transition: background-color 0.2s; } .btn-primary:hover { background-color: #EA580C; } .btn-primary:disabled { background-color: #9CA3AF; cursor: not-allowed; } .btn-secondary { background-color: #E5E7EB; color: #1F2937; padding: 0.5rem 1rem; border-radius: 0.375rem; font-weight: 600; transition: background-color 0.2s; } .btn-secondary:hover { background-color: #D1D5DB; } .dark .btn-secondary { background-color: #4B5563; color: white; } .dark .btn-secondary:hover { background-color: #6B7281; }`}</style>
         </Card>
     )
 };
 
-const HistoricalDataExporter: React.FC<{ stations: Station[], sensors: Sensor[] }> = ({ stations, sensors }) => {
+const SWE_Calculator: React.FC = () => {
+    const [snowDepth, setSnowDepth] = useState('');
+    const [snowDensity, setSnowDensity] = useState('150');
+    const [swe, setSwe] = useState<number | null>(null);
+
+    const calculateSWE = () => {
+        const depth = parseFloat(snowDepth);
+        const density = parseFloat(snowDensity);
+        if (!isNaN(depth) && !isNaN(density)) {
+            // SWE (mm) = Kar Yüksekliği (cm) * (Kar Yoğunluğu (kg/m³) / Su Yoğunluğu (1000 kg/m³)) * 10
+            const calculatedSwe = depth * (density / 1000) * 10;
+            setSwe(calculatedSwe);
+        } else {
+            setSwe(null);
+        }
+    };
+    
+    useEffect(calculateSWE, [snowDepth, snowDensity]);
+
+    return (
+        <Card className="h-full">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Kar Su Eşdeğeri (SWE) Hesaplayıcı</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <div>
+                    <label htmlFor="snow-depth" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Kar Yüksekliği (cm)</label>
+                    <input type="number" id="snow-depth" value={snowDepth} onChange={e => setSnowDepth(e.target.value)} placeholder="Örn: 85" className="mt-1 input-base" />
+                </div>
+                <div>
+                    <label htmlFor="snow-density" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Kar Yoğunluğu (kg/m³)</label>
+                    <input type="number" id="snow-density" value={snowDensity} onChange={e => setSnowDensity(e.target.value)} className="mt-1 input-base" />
+                </div>
+                <div className="p-4 bg-secondary dark:bg-gray-700/50 rounded-lg text-center">
+                    <p className="text-sm text-muted">Hesaplanan SWE</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{swe !== null ? swe.toFixed(2) : '--'} <span className="text-lg">mm</span></p>
+                </div>
+            </div>
+             <div className="mt-4 p-3 bg-blue-50 dark:bg-gray-900/30 rounded-lg border border-blue-200 dark:border-blue-800 text-sm text-blue-800 dark:text-blue-300 flex items-start gap-2">
+                <InfoIcon className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <p>Bu hesaplayıcı, girilen kar yüksekliği ve yoğunluk değerlerine göre tahmini Kar Su Eşdeğeri (SWE) değerini anında hesaplar.</p>
+            </div>
+        </Card>
+    );
+};
+
+const CorrelationGraph: React.FC<{ stations: Station[], sensors: Sensor[] }> = ({ stations, sensors }) => {
+    const { theme } = useTheme();
+    const tickColor = theme === 'dark' ? '#9CA3AF' : '#6B7281';
+    
+    const allSensorTypes = useMemo(() => [...new Set(sensors.map(s => s.type))], [sensors]);
+    
     const [selectedStations, setSelectedStations] = useState<string[]>([]);
     const [selectedSensorTypes, setSelectedSensorTypes] = useState<string[]>([]);
-    const [dateRange, setDateRange] = useState('last7d');
-    const [data, setData] = useState<any[]>([]);
+    const [history, setHistory] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     
-    const sensorTypes = useMemo(() => [...new Set(sensors.map(s => s.type))], [sensors]);
-
     useEffect(() => {
-        if (stations.length > 0 && selectedStations.length === 0) {
-            setSelectedStations(stations.map(s => s.id));
+        if(stations.length > 0 && selectedStations.length === 0) {
+            setSelectedStations([stations[0].id]);
         }
-    }, [stations]);
+        if(allSensorTypes.length > 0 && selectedSensorTypes.length === 0) {
+            setSelectedSensorTypes(allSensorTypes.slice(0,2));
+        }
+    }, [stations, allSensorTypes]);
 
-    const handleFetchData = async () => {
+    const handleFetchHistory = useCallback(async () => {
         if (selectedStations.length === 0 || selectedSensorTypes.length === 0) {
-            alert("Lütfen en az bir istasyon ve sensör tipi seçin.");
+            setHistory([]);
             return;
         }
         setIsLoading(true);
-        setData([]);
         try {
-            const history = await getReadingsHistory({ stationIds: selectedStations, sensorTypes: selectedSensorTypes });
-            setData(history);
+            const data = await getReadingsHistory({ stationIds: selectedStations, sensorTypes: selectedSensorTypes });
+            setHistory(data);
         } catch (error) {
-            console.error("Failed to fetch historical data:", error);
+            console.error(error);
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [selectedStations, selectedSensorTypes]);
+    
+    const stationOptions = useMemo(() => stations.map(s => ({ value: s.id, label: s.name })), [stations]);
+    const sensorTypeOptions = useMemo(() => allSensorTypes.map(t => ({ value: t, label: t })), [allSensorTypes]);
 
-    const handleExport = () => {
-        if (data.length === 0) {
-            alert("Dışa aktarılacak veri yok.");
-            return;
-        }
-        const formattedData = data.map(d => ({
-            'Zaman Damgası': new Date(d.timestamp).toLocaleString('tr-TR'),
-            'İstasyon ID': d.stationId,
-            'Sensör Tipi': d.sensorType,
-            'Değer': (typeof d.value === 'object' && d.value !== null) ? JSON.stringify(d.value) : d.value
-        }));
-        
-        const ws = XLSX.utils.json_to_sheet(formattedData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Veri Geçmişi");
-        XLSX.writeFile(wb, "orion_veri_gecmisi.xlsx");
-    };
+    const chartData = useMemo(() => {
+        const timeMap = new Map<string, any>();
+        history.forEach(reading => {
+            const timestamp = new Date(reading.timestamp).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+            if (!timeMap.has(timestamp)) {
+                timeMap.set(timestamp, { name: timestamp });
+            }
+            const entry = timeMap.get(timestamp);
+            
+            let value = reading.value;
+            // FIX: Add a type check before calling toFixed to prevent runtime errors on 'unknown' type.
+            if (typeof value === 'object' && value !== null) {
+                const numeric = Object.values(value).find(v => typeof v === 'number');
+                // FIX: Refactored to an if/else block to help with type inference.
+                if (typeof numeric === 'number') {
+                    value = Number(numeric.toFixed(2));
+                } else {
+                    value = null;
+                }
+            } else if (typeof value === 'number') {
+                value = Number(value.toFixed(2));
+            }
+            
+            entry[reading.sensorType] = value;
+        });
+        return Array.from(timeMap.values()).reverse();
+    }, [history]);
+
+    const chartColors = ['#F97316', '#22C55E', '#3B82F6', '#8B5CF6', '#EC4899'];
     
     return (
         <Card>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Sensör Korelasyon Grafiği</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 items-center">
+                <MultiSelectDropdown label="İstasyon" options={stationOptions} selected={selectedStations} onChange={setSelectedStations} />
+                <MultiSelectDropdown label="Sensör Tipi" options={sensorTypeOptions} selected={selectedSensorTypes} onChange={setSelectedSensorTypes} />
+                <button onClick={handleFetchHistory} disabled={isLoading} className="btn-primary md:col-span-2">
+                    {isLoading ? 'Yükleniyor...' : 'Grafiği Oluştur'}
+                </button>
+            </div>
+            <div style={{ width: '100%', height: 300 }}>
+                <ResponsiveContainer>
+                    <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#374151' : '#E5E7EB'} />
+                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: tickColor }} />
+                        <YAxis tick={{ fontSize: 10, fill: tickColor }} />
+                        <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF', border: `1px solid ${theme === 'dark' ? '#374151' : '#E5E7EB'}` }}/>
+                        <Legend />
+                        {selectedSensorTypes.map((type, index) => (
+                             <Line key={type} type="monotone" dataKey={type} stroke={chartColors[index % chartColors.length]} strokeWidth={2} dot={false} />
+                        ))}
+                    </LineChart>
+                </ResponsiveContainer>
+            </div>
+        </Card>
+    );
+};
+
+const DataExplorer: React.FC<{ stations: Station[], sensors: Sensor[] }> = ({ stations, sensors }) => {
+    const [selectedStations, setSelectedStations] = useState<string[]>([]);
+    const [selectedSensorTypes, setSelectedSensorTypes] = useState<string[]>([]);
+    const [timeRange, setTimeRange] = useState('last7d');
+    const [readings, setReadings] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    
+    const allSensorTypes = useMemo(() => [...new Set(sensors.map(s => s.type))], [sensors]);
+    const stationOptions = useMemo(() => stations.map(s => ({ value: s.id, label: s.name })), [stations]);
+    const sensorTypeOptions = useMemo(() => allSensorTypes.map(t => ({ value: t, label: t })), [allSensorTypes]);
+    
+    useEffect(() => {
+        if(stations.length > 0 && selectedStations.length === 0) setSelectedStations(stations.map(s => s.id));
+        if(allSensorTypes.length > 0 && selectedSensorTypes.length === 0) setSelectedSensorTypes(allSensorTypes);
+    }, [stations, allSensorTypes]);
+    
+    const handleFetchData = useCallback(async () => {
+        if (selectedStations.length === 0 || selectedSensorTypes.length === 0) {
+            setReadings([]);
+            return;
+        }
+        setIsLoading(true);
+        try {
+            const data = await getReadingsHistory({ stationIds: selectedStations, sensorTypes: selectedSensorTypes });
+            setReadings(data);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [selectedStations, selectedSensorTypes]);
+
+    const formatReadingValue = (reading: any): string => {
+        const { value, sensorType, interface: sensorInterface } = reading;
+        if (value === null || value === undefined) return 'N/A';
+        const numValue = getNumericValue(value);
+        
+        if (numValue !== null) {
+            return `${numValue.toFixed(2)}`;
+        }
+        
+        return JSON.stringify(value);
+    };
+
+    const handleExport = () => {
+        if (readings.length === 0) {
+            alert("Dışa aktarılacak veri bulunmuyor.");
+            return;
+        }
+        const dataToExport = readings.map(reading => {
+            const station = stations.find(s => s.id === reading.stationId);
+            return {
+                'Zaman Damgası': new Date(reading.timestamp).toLocaleString('tr-TR'),
+                'İstasyon': station?.name || 'Bilinmiyor',
+                'Sensör Adı': reading.sensorName,
+                'Sensör Tipi': reading.sensorType,
+                'Değer': formatReadingValue(reading),
+                'Birim': reading.unit || ''
+            };
+        });
+
+        const ws = XLSX.utils.json_to_sheet(dataToExport);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Veri Geçmişi");
+        XLSX.writeFile(wb, `orion_veri_gezgini_${new Date().toISOString().split('T')[0]}.xlsx`);
+    };
+
+
+    return (
+        <Card>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Geçmiş Veri Gezgini ve Dışa Aktarma</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4 p-3 bg-secondary dark:bg-gray-700/50 rounded-md border dark:border-gray-700">
-                <MultiSelectDropdown label="İstasyon" options={stations.map(s => ({ value: s.id, label: s.name }))} selected={selectedStations} onChange={setSelectedStations} />
-                <MultiSelectDropdown label="Sensör Tipi" options={sensorTypes.map(t => ({ value: t, label: t }))} selected={selectedSensorTypes} onChange={setSelectedSensorTypes} />
-                <select value={dateRange} onChange={e => setDateRange(e.target.value)} className="input-base">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
+                <div className="md:col-span-2"><MultiSelectDropdown label="İstasyon" options={stationOptions} selected={selectedStations} onChange={setSelectedStations} /></div>
+                <div className="md:col-span-2"><MultiSelectDropdown label="Sensör Tipi" options={sensorTypeOptions} selected={selectedSensorTypes} onChange={setSelectedSensorTypes} /></div>
+                <select value={timeRange} onChange={e => setTimeRange(e.target.value)} className="input-base">
                     <option value="last24h">Son 24 Saat</option>
                     <option value="last7d">Son 7 Gün</option>
                     <option value="last30d">Son 30 Gün</option>
                 </select>
-                <div className="flex gap-2">
-                    <button onClick={handleFetchData} className="btn-primary w-full" disabled={isLoading}>{isLoading ? 'Yükleniyor...' : 'Verileri Getir'}</button>
-                    <button onClick={handleExport} className="p-2.5 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400" disabled={data.length === 0} title="XLSX Olarak Dışa Aktar"><DownloadIcon className="w-5 h-5"/></button>
-                </div>
             </div>
-            <div className="h-96 overflow-auto border dark:border-gray-700 rounded-lg">
-                <table className="w-full text-sm text-left">
-                    <thead className="text-xs text-gray-700 dark:text-gray-300 uppercase bg-gray-100 dark:bg-gray-700 sticky top-0">
-                        <tr>
-                            <th className="px-4 py-2">Zaman Damgası</th>
-                            <th className="px-4 py-2">Sensör Tipi</th>
-                            <th className="px-4 py-2 text-right">Değer</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y dark:divide-gray-700">
-                        {isLoading ? (
-                            <tr><td colSpan={3} className="text-center p-8 text-muted dark:text-gray-400">Veriler yükleniyor...</td></tr>
-                        ) : data.length > 0 ? (
-                            data.map((row, i) => (
-                                <tr key={i} className="hover:bg-secondary dark:hover:bg-gray-700">
-                                    <td className="px-4 py-2 font-mono text-xs text-gray-800 dark:text-gray-300">{new Date(row.timestamp).toLocaleString('tr-TR')}</td>
-                                    <td className="px-4 py-2 text-gray-800 dark:text-gray-300">{row.sensorType}</td>
-                                    <td className="px-4 py-2 text-right font-semibold text-gray-900 dark:text-gray-100">{(typeof row.value === 'object' && row.value !== null) ? JSON.stringify(row.value) : row.value}</td>
-                                </tr>
-                            ))
-                        ) : (
-                            <tr><td colSpan={3} className="text-center p-8 text-muted dark:text-gray-400">Görüntülenecek veri yok. Lütfen filtreleri seçip "Verileri Getir"e tıklayın.</td></tr>
-                        )}
-                    </tbody>
-                </table>
+             <div className="flex justify-end gap-2 mb-4">
+                <button onClick={handleFetchData} disabled={isLoading} className="btn-primary">
+                    {isLoading ? 'Veriler Getiriliyor...' : 'Verileri Getir'}
+                </button>
+                 <button onClick={handleExport} title="Verileri Excel olarak indir" className="p-2.5 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400" disabled={readings.length === 0}>
+                    <DownloadIcon className="w-5 h-5"/>
+                </button>
+            </div>
+             <div className="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg max-h-96">
+              <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
+                <thead className="text-xs text-gray-700 dark:text-gray-400 uppercase bg-gray-100 dark:bg-gray-800 sticky top-0">
+                  <tr>
+                    <th scope="col" className="px-6 py-3">Zaman Damgası</th>
+                    <th scope="col" className="px-6 py-3">İstasyon</th>
+                    <th scope="col" className="px-6 py-3">Sensör Adı</th>
+                    <th scope="col" className="px-6 py-3">Sensör Tipi</th>
+                    <th scope="col" className="px-6 py-3 text-right">Değer</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {readings.map((reading) => {
+                    const date = new Date(reading.timestamp);
+                    const displayTimestamp = !isNaN(date.getTime())
+                        ? date.toLocaleString('tr-TR')
+                        : reading.timestamp;
+                    return (
+                      <tr key={reading.id} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                        <td className="px-6 py-3 font-mono text-gray-800 dark:text-gray-200 whitespace-nowrap">{displayTimestamp}</td>
+                        <td className="px-6 py-3 font-medium text-gray-900 dark:text-gray-100">{stations.find(s => s.id === reading.stationId)?.name || 'N/A'}</td>
+                        <td className="px-6 py-3">{reading.sensorName}</td>
+                        <td className="px-6 py-3">{reading.sensorType}</td>
+                        <td className="px-6 py-3 font-semibold text-gray-900 dark:text-gray-100 text-right whitespace-nowrap">
+                            {formatReadingValue(reading)} {reading.unit || ''}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {readings.length === 0 && !isLoading && (
+                  <div className="text-center py-10 text-muted">
+                    <p>Görüntülenecek veri yok. Lütfen filtreleri seçip "Verileri Getir"e tıklayın.</p>
+                  </div>
+              )}
             </div>
         </Card>
     );
 };
 
-const AnomalyDetector: React.FC<{ stations: Station[], sensors: Sensor[] }> = ({ stations, sensors }) => {
-    const [selectedStation, setSelectedStation] = useState<string>('');
-    const [selectedSensorType, setSelectedSensorType] = useState<string>('');
-    const [analysis, setAnalysis] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
 
-    const availableSensorTypes = useMemo(() => {
-        if (!selectedStation) return [];
-        const stationSensors = sensors.filter(s => s.stationId === selectedStation);
-        return [...new Set(stationSensors.map(s => s.type))];
-    }, [selectedStation, sensors]);
-    
-    useEffect(() => {
-        if (stations.length > 0 && !selectedStation) setSelectedStation(stations[0].id);
-    }, [stations, selectedStation]);
-
-    useEffect(() => {
-        if (availableSensorTypes.length > 0) {
-            setSelectedSensorType(availableSensorTypes[0]);
-        }
-    }, [availableSensorTypes]);
-
-    const handleAnalyze = async () => {
-        if (!selectedStation || !selectedSensorType) return;
-        setIsLoading(true);
-        setAnalysis('');
-        try {
-            const history = await getReadingsHistory({ stationIds: [selectedStation], sensorTypes: [selectedSensorType] });
-            if(history.length < 10) {
-                setAnalysis("Analiz için yeterli veri bulunamadı (en az 10 kayıt gerekli).");
-                return;
-            }
-            const dataToAnalyze = history.map(h => ({ time: h.timestamp, value: h.value })).slice(0, 100);
-
-            const prompt = `Sen bir meteoroloji veri analisti uzmanısın. Aşağıda bir istasyondaki sensör verileri bulunmaktadır. Bu verilerdeki ani yükselişler, düşüşler, tutarsızlıklar veya dikkate değer trendler gibi anomalileri tespit et. Bulgularını kısa ve anlaşılır maddeler halinde Türkçe olarak açıkla.
-            - İstasyon: ${stations.find(s => s.id === selectedStation)?.name}
-            - Sensör Tipi: ${selectedSensorType}
-            - Veri (son 100 kayıt):
-            ${JSON.stringify(dataToAnalyze, null, 2)}
-            `;
-            
-            let fullText = '';
-            const stream = await sendMessageToGemini(prompt);
-            for await (const chunk of stream) {
-                fullText += chunk.text;
-                setAnalysis(fullText);
-            }
-        } catch (error: any) {
-            console.error("Failed to get analysis from Gemini:", error);
-            let errorMessage = "Analiz sırasında bir hata oluştu.";
-            if (error.message && (error.message.includes('API Key') || error.message.includes('API key'))) {
-                errorMessage = "Yapay zeka özelliği için API anahtarı yapılandırılmamış.";
-            }
-            setAnalysis(errorMessage);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
+const AnomalyDetection: React.FC<{ stations: Station[], sensors: Sensor[] }> = ({ stations, sensors }) => {
     return (
         <Card>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Yapay Zeka Destekli Anomali Tespiti</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 p-3 bg-secondary dark:bg-gray-700/50 rounded-md border dark:border-gray-700 items-center">
-                <select value={selectedStation} onChange={e => setSelectedStation(e.target.value)} className="input-base">
-                    <option value="">İstasyon Seç</option>
-                    {stations.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                 <select className="input-base">
+                     {stations.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
-                 <select value={selectedSensorType} onChange={e => setSelectedSensorType(e.target.value)} className="input-base" disabled={!selectedStation}>
-                    <option value="">Sensör Tipi Seç</option>
-                    {availableSensorTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                <select className="input-base">
+                    {sensors.filter(s => s.stationId === stations[0]?.id).map(s => <option key={s.id} value={s.id}>{s.name} ({s.type})</option>)}
                 </select>
-                <button onClick={handleAnalyze} disabled={isLoading || !selectedStation || !selectedSensorType} className="btn-primary flex items-center justify-center gap-2">
-                    <BrainIcon className="w-5 h-5"/>
-                    {isLoading ? 'Analiz Ediliyor...' : 'Anomalileri Tespit Et'}
+                <button className="btn-primary flex items-center justify-center gap-2">
+                    <BrainIcon className="w-5 h-5" />
+                    Anomalileri Tespit Et
                 </button>
             </div>
-            {(analysis || isLoading) && (
-                <div className="p-4 bg-secondary dark:bg-gray-700/50 rounded-md border dark:border-gray-700 min-h-[10rem]">
-                    <h4 className="font-semibold mb-2 text-gray-800 dark:text-gray-200">Analiz Sonuçları:</h4>
-                    {isLoading ? (
-                         <div className="space-y-2">
-                            <Skeleton className="h-4 w-full" />
-                            <Skeleton className="h-4 w-5/6" />
-                            <Skeleton className="h-4 w-full" />
-                         </div>
-                    ) : (
-                        <p className="text-sm text-gray-800 dark:text-gray-300 whitespace-pre-wrap">{analysis}</p>
-                    )}
-                </div>
-            )}
+             <p className="text-xs text-center text-muted mt-4 p-4 border border-dashed rounded-lg">Bu özellik geliştirme aşamasındadır.</p>
         </Card>
     );
-};
-
-
-interface AnalysisProps {
-    stations: Station[];
-    sensors: Sensor[];
-    cameras: Camera[];
 }
 
-const Analysis: React.FC<AnalysisProps> = ({ stations, sensors, cameras }) => {
-    const [activeTab, setActiveTab] = useState('comparison');
 
-    const TABS = [
-        { id: 'comparison', label: 'Karşılaştırmalı Analiz', icon: <RefreshIcon className="w-4 h-4" /> },
-        { id: 'swe', label: 'SWE Hesaplayıcı', icon: <CalculatorIcon className="w-4 h-4" /> },
-        { id: 'correlation', label: 'Korelasyon Grafiği', icon: <ChartBarIcon className="w-4 h-4" /> },
-        { id: 'exporter', label: 'Veri Gezgini', icon: <DownloadIcon className="w-4 h-4" /> },
-        { id: 'anomaly', label: 'Anomali Tespiti', icon: <BrainIcon className="w-4 h-4" /> }
+const Analysis: React.FC<{ stations: Station[], sensors: Sensor[], cameras: Camera[] }> = ({ stations, sensors, cameras }) => {
+    const [activeTab, setActiveTab] = useState('Karşılaştırmalı Analiz');
+    const tabs = [
+        { name: 'Karşılaştırmalı Analiz', icon: <BrainIcon className="w-5 h-5"/> },
+        { name: 'SWE Hesaplayıcı', icon: <CalculatorIcon className="w-5 h-5"/> },
+        { name: 'Korelasyon Grafiği', icon: <ChartBarIcon className="w-5 h-5"/> },
+        { name: 'Veri Gezgini', icon: <DownloadIcon className="w-5 h-5"/> },
+        { name: 'Anomali Tespiti', icon: <BrainIcon className="w-5 h-5"/> }
     ];
-
-    const renderContent = () => {
-        switch (activeTab) {
-            case 'comparison': return <ComparativeSnowDepthAnalysis stations={stations} sensors={sensors} cameras={cameras} />;
-            case 'swe': return <SnowWaterEquivalentCalculator />;
-            case 'correlation': return <SensorCorrelationChart stations={stations} sensors={sensors} />;
-            case 'exporter': return <HistoricalDataExporter stations={stations} sensors={sensors} />;
-            case 'anomaly': return <AnomalyDetector stations={stations} sensors={sensors} />;
-            default: return null;
-        }
-    };
 
     return (
         <div className="space-y-6">
-            <style>{`
-                .input-base { width: 100%; background-color: #FFFFFF; border: 1px solid #D1D5DB; border-radius: 0.5rem; padding: 0.625rem 1rem; }
-                .dark .input-base { background-color: #374151; border-color: #4B5563; color: #F3F4F6; }
-                .btn-primary { padding: 0.625rem 1rem; background-color: #F97316; color: white; border-radius: 0.5rem; font-weight: 600; transition: background-color 0.2s; }
-                .btn-primary:hover { background-color: #EA580C; }
-                .btn-primary:disabled { background-color: #9CA3AF; cursor: not-allowed; }
-                .btn-secondary { padding: 0.625rem 1rem; background-color: #E5E7EB; color: #1F2937; border-radius: 0.5rem; font-weight: 600; transition: background-color 0.2s; }
-                .btn-secondary:hover { background-color: #D1D5DB; }
-                .btn-secondary:disabled { background-color: #E5E7EB; color: #9CA3AF; cursor: not-allowed; }
-                .dark .btn-secondary { background-color: #4B5563; color: #F9FAFB; }
-                .dark .btn-secondary:hover { background-color: #6B7281; }
-            `}</style>
-            
-            <div className="bg-primary dark:bg-dark-primary p-2 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-                <nav className="flex flex-wrap gap-2" aria-label="Tabs">
-                    {TABS.map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`flex items-center gap-2 whitespace-nowrap py-2 px-4 rounded-md font-semibold text-sm transition-colors ${
-                                activeTab === tab.id
-                                ? 'bg-accent text-white shadow'
-                                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+             <div className="border-b border-gray-200 dark:border-gray-700">
+                <nav className="-mb-px flex space-x-6 overflow-x-auto" aria-label="Tabs">
+                    {tabs.map(tab => (
+                        <button 
+                            key={tab.name} 
+                            onClick={() => setActiveTab(tab.name)}
+                            className={`flex items-center gap-2 whitespace-nowrap py-3 px-1 border-b-2 font-semibold text-sm transition-colors ${
+                                activeTab === tab.name 
+                                ? 'border-accent text-accent' 
+                                : 'border-transparent text-muted hover:text-gray-700 dark:hover:text-gray-300'
                             }`}
                         >
                             {tab.icon}
-                            <span>{tab.label}</span>
+                            {tab.name}
                         </button>
                     ))}
                 </nav>
             </div>
 
-            <div className="mt-6">
-                {renderContent()}
-            </div>
+            {activeTab === 'Karşılaştırmalı Analiz' && <ComparativeSnowDepthAnalysis stations={stations} sensors={sensors} cameras={cameras} />}
+            {activeTab === 'SWE Hesaplayıcı' && <SWE_Calculator />}
+            {activeTab === 'Korelasyon Grafiği' && <CorrelationGraph stations={stations} sensors={sensors} />}
+            {activeTab === 'Veri Gezgini' && <DataExplorer stations={stations} sensors={sensors} />}
+            {activeTab === 'Anomali Tespiti' && <AnomalyDetection stations={stations} sensors={sensors} />}
         </div>
     );
 };

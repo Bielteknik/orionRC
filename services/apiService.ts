@@ -44,7 +44,10 @@ export const deleteCamera = (id: string): Promise<void> => apiClient.delete(`/ca
 export const captureCameraImage = (id: string): Promise<void> => apiClient.post(`/cameras/${id}/capture`).then(res => res.data).catch(e => handleError(e, 'capturing camera image'));
 
 // Analysis
-export const analyzeSnowDepth = (cameraId: string, virtualSensorId: string): Promise<void> => apiClient.post('/analysis/snow-depth', { cameraId, virtualSensorId }).then(res => res.data).catch(e => handleError(e, 'analyzing snow depth'));
+export const analyzeSnowDepth = (cameraId: string, virtualSensorId: string, analysisType: 'gemini' | 'opencv'): Promise<void> => 
+    apiClient.post('/analysis/snow-depth', { cameraId, virtualSensorId, analysisType })
+             .then(res => res.data)
+             .catch(e => handleError(e, `analyzing snow depth with ${analysisType}`));
 
 
 // Readings
