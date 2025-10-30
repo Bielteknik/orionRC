@@ -4,7 +4,7 @@ import { getReadingsHistory, analyzeSnowDepth } from '../services/apiService.ts'
 import { sendMessageToGemini } from '../services/geminiService.ts';
 import Card from '../components/common/Card.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
-import { BrainIcon, DownloadIcon, RefreshIcon, InfoIcon } from '../components/icons/Icons.tsx';
+import { BrainIcon, DownloadIcon, RefreshIcon, InfoIcon, CalculatorIcon, ChartBarIcon } from '../components/icons/Icons.tsx';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useTheme } from '../components/ThemeContext.tsx';
 import MultiSelectDropdown from '../components/common/MultiSelectDropdown.tsx';
@@ -41,15 +41,15 @@ const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sen
                 const hasAi = sensors.some(s => s.stationId === station.id && s.type === 'Kar Yüksekliği');
                 return hasUltrasonic && hasAi;
             });
-            setSelectedStationId(firstStationWithBothSensors?.id || stations[0].id);
+            setSelectedStationId(firstStationWithBothSensors?.id || stations[0]?.id || '');
         }
     }, [stations, sensors, selectedStationId]);
 
     const { ultrasonicSensor, aiSensor, sourceCamera } = useMemo(() => {
         if (!selectedStationId) return { ultrasonicSensor: null, aiSensor: null, sourceCamera: null };
         
-        const uSensor = sensors.find(s => s.stationId === selectedStationId && s.type === 'Mesafe');
-        const aSensor = sensors.find(s => s.stationId === selectedStationId && s.type === 'Kar Yüksekliği');
+        const uSensor = sensors.find(s => s.stationId === selectedStationId && (s.type === 'Mesafe' || s.type === 'Kar Yüksekliği'));
+        const aSensor = sensors.find(s => s.stationId === selectedStationId && s.type === 'Kar Yüksekliği' && s.interface === 'virtual');
         let sCamera = null;
         if(aSensor && aSensor.config && aSensor.config.source_camera_id) {
             sCamera = cameras.find(c => c.id === aSensor.config.source_camera_id);
@@ -73,8 +73,12 @@ const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sen
             setIsLoadingAnalysis(false);
         }
     };
+    
+    const rawUltrasonicValue = ultrasonicSensor?.value;
+    const ultrasonicValue = (rawUltrasonicValue && typeof rawUltrasonicValue === 'object' && rawUltrasonicValue.distance_cm !== undefined) 
+        ? rawUltrasonicValue.distance_cm 
+        : (typeof rawUltrasonicValue === 'number' ? rawUltrasonicValue : null);
 
-    const ultrasonicValue = ultrasonicSensor?.value ?? null;
     const aiValue = (aiSensor?.value && typeof aiSensor.value === 'object' && aiSensor.value.snow_depth_cm !== undefined) ? aiSensor.value.snow_depth_cm : null;
 
     const handleInterpret = async () => {
@@ -217,9 +221,8 @@ const SnowWaterEquivalentCalculator: React.FC = () => {
             let fullText = '';
             for await (const chunk of stream) {
                 fullText += chunk.text;
-                setExplanation(fullText + '...');
+                setExplanation(fullText);
             }
-            setExplanation(fullText);
         } catch (error: any) {
             console.error("Failed to get explanation from Gemini:", error);
             let errorMessage = "Açıklama alınırken bir hata oluştu.";
@@ -522,9 +525,8 @@ const AnomalyDetector: React.FC<{ stations: Station[], sensors: Sensor[] }> = ({
             const stream = await sendMessageToGemini(prompt);
             for await (const chunk of stream) {
                 fullText += chunk.text;
-                setAnalysis(fullText + "..."); // Add ellipsis for streaming effect
+                setAnalysis(fullText);
             }
-            setAnalysis(fullText); // Set final text
         } catch (error: any) {
             console.error("Failed to get analysis from Gemini:", error);
             let errorMessage = "Analiz sırasında bir hata oluştu.";
@@ -555,9 +557,17 @@ const AnomalyDetector: React.FC<{ stations: Station[], sensors: Sensor[] }> = ({
                 </button>
             </div>
             {(analysis || isLoading) && (
-                <div className="p-4 bg-secondary dark:bg-gray-700/50 rounded-md border dark:border-gray-700">
+                <div className="p-4 bg-secondary dark:bg-gray-700/50 rounded-md border dark:border-gray-700 min-h-[10rem]">
                     <h4 className="font-semibold mb-2 text-gray-800 dark:text-gray-200">Analiz Sonuçları:</h4>
-                    <p className="text-sm text-gray-800 dark:text-gray-300 whitespace-pre-wrap">{analysis.replace("...", "")}</p>
+                    {isLoading ? (
+                         <div className="space-y-2">
+                            <Skeleton className="h-4 w-full" />
+                            <Skeleton className="h-4 w-5/6" />
+                            <Skeleton className="h-4 w-full" />
+                         </div>
+                    ) : (
+                        <p className="text-sm text-gray-800 dark:text-gray-300 whitespace-pre-wrap">{analysis}</p>
+                    )}
                 </div>
             )}
         </Card>
@@ -572,6 +582,27 @@ interface AnalysisProps {
 }
 
 const Analysis: React.FC<AnalysisProps> = ({ stations, sensors, cameras }) => {
+    const [activeTab, setActiveTab] = useState('comparison');
+
+    const TABS = [
+        { id: 'comparison', label: 'Karşılaştırmalı Analiz', icon: <RefreshIcon className="w-4 h-4" /> },
+        { id: 'swe', label: 'SWE Hesaplayıcı', icon: <CalculatorIcon className="w-4 h-4" /> },
+        { id: 'correlation', label: 'Korelasyon Grafiği', icon: <ChartBarIcon className="w-4 h-4" /> },
+        { id: 'exporter', label: 'Veri Gezgini', icon: <DownloadIcon className="w-4 h-4" /> },
+        { id: 'anomaly', label: 'Anomali Tespiti', icon: <BrainIcon className="w-4 h-4" /> }
+    ];
+
+    const renderContent = () => {
+        switch (activeTab) {
+            case 'comparison': return <ComparativeSnowDepthAnalysis stations={stations} sensors={sensors} cameras={cameras} />;
+            case 'swe': return <SnowWaterEquivalentCalculator />;
+            case 'correlation': return <SensorCorrelationChart stations={stations} sensors={sensors} />;
+            case 'exporter': return <HistoricalDataExporter stations={stations} sensors={sensors} />;
+            case 'anomaly': return <AnomalyDetector stations={stations} sensors={sensors} />;
+            default: return null;
+        }
+    };
+
     return (
         <div className="space-y-6">
             <style>{`
@@ -586,11 +617,29 @@ const Analysis: React.FC<AnalysisProps> = ({ stations, sensors, cameras }) => {
                 .dark .btn-secondary { background-color: #4B5563; color: #F9FAFB; }
                 .dark .btn-secondary:hover { background-color: #6B7281; }
             `}</style>
-            <ComparativeSnowDepthAnalysis stations={stations} sensors={sensors} cameras={cameras} />
-            <SnowWaterEquivalentCalculator />
-            <SensorCorrelationChart stations={stations} sensors={sensors} />
-            <HistoricalDataExporter stations={stations} sensors={sensors} />
-            <AnomalyDetector stations={stations} sensors={sensors} />
+            
+            <div className="bg-primary dark:bg-dark-primary p-2 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                <nav className="flex flex-wrap gap-2" aria-label="Tabs">
+                    {TABS.map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`flex items-center gap-2 whitespace-nowrap py-2 px-4 rounded-md font-semibold text-sm transition-colors ${
+                                activeTab === tab.id
+                                ? 'bg-accent text-white shadow'
+                                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                            }`}
+                        >
+                            {tab.icon}
+                            <span>{tab.label}</span>
+                        </button>
+                    ))}
+                </nav>
+            </div>
+
+            <div className="mt-6">
+                {renderContent()}
+            </div>
         </div>
     );
 };
