@@ -1,16 +1,190 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Station, Sensor } from '../types.ts';
-import { getReadingsHistory } from '../services/apiService.ts';
+import { Station, Sensor, Camera } from '../types.ts';
+import { getReadingsHistory, analyzeSnowDepth } from '../services/apiService.ts';
 import { sendMessageToGemini } from '../services/geminiService.ts';
 import Card from '../components/common/Card.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
-import { BrainIcon, DownloadIcon } from '../components/icons/Icons.tsx';
+import { BrainIcon, DownloadIcon, RefreshIcon, InfoIcon } from '../components/icons/Icons.tsx';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useTheme } from '../components/ThemeContext.tsx';
 import MultiSelectDropdown from '../components/common/MultiSelectDropdown.tsx';
 
 // Use global XLSX from window
 declare const XLSX: any;
+
+const formatTimeAgo = (isoString: string | undefined): string => {
+    if (!isoString) return 'Veri Yok';
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return 'Veri Yok';
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    if (seconds < 10) return "az önce";
+    if (seconds < 60) return `${seconds} sn önce`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} dk önce`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours} sa önce`;
+};
+
+
+const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sensor[], cameras: Camera[] }> = ({ stations, sensors, cameras }) => {
+    const [selectedStationId, setSelectedStationId] = useState<string>('');
+    const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false);
+    const [interpretation, setInterpretation] = useState('');
+    const [isLoadingInterpretation, setIsLoadingInterpretation] = useState(false);
+    const [analysisMessage, setAnalysisMessage] = useState('');
+
+    useEffect(() => {
+        if(stations.length > 0 && !selectedStationId) {
+            const firstStationWithBothSensors = stations.find(station => {
+                const hasUltrasonic = sensors.some(s => s.stationId === station.id && s.type === 'Mesafe');
+                const hasAi = sensors.some(s => s.stationId === station.id && s.type === 'Kar Yüksekliği');
+                return hasUltrasonic && hasAi;
+            });
+            setSelectedStationId(firstStationWithBothSensors?.id || stations[0].id);
+        }
+    }, [stations, sensors, selectedStationId]);
+
+    const { ultrasonicSensor, aiSensor, sourceCamera } = useMemo(() => {
+        if (!selectedStationId) return { ultrasonicSensor: null, aiSensor: null, sourceCamera: null };
+        
+        const uSensor = sensors.find(s => s.stationId === selectedStationId && s.type === 'Mesafe');
+        const aSensor = sensors.find(s => s.stationId === selectedStationId && s.type === 'Kar Yüksekliği');
+        let sCamera = null;
+        if(aSensor && aSensor.config && aSensor.config.source_camera_id) {
+            sCamera = cameras.find(c => c.id === aSensor.config.source_camera_id);
+        }
+
+        return { ultrasonicSensor: uSensor || null, aiSensor: aSensor || null, sourceCamera: sCamera || null };
+    }, [selectedStationId, sensors, cameras]);
+
+    const handleTriggerAnalysis = async () => {
+        if (!aiSensor || !sourceCamera) return;
+        setIsLoadingAnalysis(true);
+        setAnalysisMessage('');
+        try {
+            await analyzeSnowDepth(sourceCamera.id, aiSensor.id);
+            setAnalysisMessage('Analiz başlatıldı. Sonuçlar birkaç dakika içinde yansıyacaktır.');
+            setTimeout(() => setAnalysisMessage(''), 10000);
+        } catch (error) {
+            console.error(error);
+            setAnalysisMessage('Analiz tetiklenirken bir hata oluştu.');
+        } finally {
+            setIsLoadingAnalysis(false);
+        }
+    };
+
+    const ultrasonicValue = ultrasonicSensor?.value ?? null;
+    const aiValue = (aiSensor?.value && typeof aiSensor.value === 'object' && aiSensor.value.snow_depth_cm !== undefined) ? aiSensor.value.snow_depth_cm : null;
+
+    const handleInterpret = async () => {
+        if (ultrasonicValue === null || aiValue === null) return;
+        setIsLoadingInterpretation(true);
+        setInterpretation('');
+        const difference = Math.abs(ultrasonicValue - aiValue).toFixed(1);
+        try {
+            const prompt = `Sen bir meteoroloji ve sensör veri analistisin. Bir istasyonda kar yüksekliği iki farklı yöntemle ölçülüyor: Ultrasonik sensör ve bir cetvel görüntüsünü analiz eden yapay zeka. Ultrasonik sensör ${ultrasonicValue} cm, yapay zeka ise ${aiValue} cm ölçtü. Aradaki ${difference} cm'lik farkın olası nedenlerini (sensör kalibrasyonu, karın yüzeyindeki pürüzler, görüş koşulları, cetvelin okunmasındaki olası hatalar vb.) analiz et ve hangi verinin daha güvenilir olabileceğine dair kısa, maddeler halinde bir yorum yap.`;
+            const stream = await sendMessageToGemini(prompt);
+            let fullText = '';
+            for await (const chunk of stream) {
+                fullText += chunk.text;
+                setInterpretation(fullText);
+            }
+        } catch (error) {
+            setInterpretation("Yorumlama sırasında bir hata oluştu.");
+        } finally {
+            setIsLoadingInterpretation(false);
+        }
+    };
+    
+    const difference = (ultrasonicValue !== null && aiValue !== null) ? Math.abs(ultrasonicValue - aiValue) : null;
+    let diffColor = 'text-gray-800 dark:text-gray-200';
+    if (difference !== null) {
+        if (difference > 10) diffColor = 'text-danger';
+        else if (difference > 5) diffColor = 'text-warning';
+        else diffColor = 'text-success';
+    }
+
+    return (
+        <Card>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Karşılaştırmalı Kar Yüksekliği Analizi</h3>
+            <p className="text-sm text-muted mb-4">Ultrasonik sensör verileri ile yapay zeka destekli görüntü analizi sonuçlarını karşılaştırın.</p>
+            
+            <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">İstasyon Seçin</label>
+                <select value={selectedStationId} onChange={e => setSelectedStationId(e.target.value)} className="input-base max-w-sm">
+                    {stations.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+            </div>
+
+            {!ultrasonicSensor || !aiSensor ? (
+                <div className="text-center py-10 text-muted border border-dashed rounded-lg">
+                    <p>Seçilen istasyonda karşılaştırma için gerekli sensörler (Mesafe ve Kar Yüksekliği) bulunamadı.</p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                    {/* Ultrasonic Sensor */}
+                    <div className="p-4 rounded-lg bg-secondary dark:bg-gray-700/50 border dark:border-gray-700 space-y-3 h-full flex flex-col">
+                        <div className="flex items-center gap-2">
+                            <RefreshIcon className="w-5 h-5 text-muted" />
+                            <h4 className="font-semibold text-gray-800 dark:text-gray-200">Ultrasonik Sensör</h4>
+                        </div>
+                        <div className="text-center flex-grow flex flex-col justify-center">
+                            <p className="text-5xl font-bold text-gray-900 dark:text-gray-100">{ultrasonicValue !== null ? ultrasonicValue.toFixed(1) : '--'}</p>
+                            <p className="text-sm text-muted">cm</p>
+                        </div>
+                        <div className="text-xs text-muted text-center border-t dark:border-gray-600 pt-2">{ultrasonicSensor.name} | Son güncelleme: {formatTimeAgo(ultrasonicSensor.lastUpdate)}</div>
+                    </div>
+
+                    {/* AI Sensor */}
+                    <div className="p-4 rounded-lg bg-secondary dark:bg-gray-700/50 border dark:border-gray-700 space-y-3 h-full flex flex-col">
+                        <div className="flex items-center gap-2">
+                            <BrainIcon className="w-5 h-5 text-muted" />
+                            <h4 className="font-semibold text-gray-800 dark:text-gray-200">Yapay Zeka Analizi</h4>
+                        </div>
+                        <div className="text-center flex-grow flex flex-col justify-center">
+                            <p className="text-5xl font-bold text-gray-900 dark:text-gray-100">{aiValue !== null ? aiValue.toFixed(1) : '--'}</p>
+                            <p className="text-sm text-muted">cm</p>
+                        </div>
+                        {sourceCamera && sourceCamera.photos?.length > 0 && (
+                            <div className="relative group">
+                                <img src={sourceCamera.photos[0]} alt="Kaynak Kamera Görüntüsü" className="rounded-md w-full h-24 object-cover"/>
+                                <div className="absolute top-1 right-1 bg-black/50 p-1 rounded-full text-white cursor-pointer">
+                                    <InfoIcon className="w-3 h-3"/>
+                                </div>
+                                <div className="absolute bottom-full mb-2 right-0 w-48 p-2 text-xs text-white bg-black rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                    Bu görüntü, analiz için kullanılan kameranın galerisindeki en son fotoğraftır ve son analize ait olmayabilir.
+                                </div>
+                            </div>
+                        )}
+                        <div className="text-xs text-muted text-center border-t dark:border-gray-600 pt-2">{aiSensor.name} | Son güncelleme: {formatTimeAgo(aiSensor.lastUpdate)}</div>
+                        <button onClick={handleTriggerAnalysis} disabled={isLoadingAnalysis} className="btn-primary w-full flex items-center justify-center gap-2">
+                           <svg className={`w-5 h-5 ${isLoadingAnalysis ? 'animate-spin' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 18.657A8 8 0 109.293 5.343m8.364 13.314L20 21m-2.343-2.343l-3.536 3.536"/></svg>
+                            {isLoadingAnalysis ? 'Analiz Başlatılıyor...' : 'Yeni Analiz Tetikle'}
+                        </button>
+                        {analysisMessage && <p className="text-xs text-center text-muted mt-2">{analysisMessage}</p>}
+                    </div>
+
+                    {/* Comparison */}
+                    <div className="p-4 rounded-lg bg-blue-50 dark:bg-gray-900/30 border border-blue-200 dark:border-blue-800 space-y-3 h-full flex flex-col">
+                         <h4 className="font-semibold text-gray-800 dark:text-gray-200 text-center">Fark Analizi</h4>
+                         <div className="text-center flex-grow flex flex-col justify-center">
+                            <p className={`text-5xl font-bold ${diffColor}`}>{difference !== null ? difference.toFixed(1) : '--'}</p>
+                            <p className="text-sm text-muted">cm fark</p>
+                        </div>
+                         <button onClick={handleInterpret} disabled={isLoadingInterpretation || ultrasonicValue === null || aiValue === null} className="w-full btn-secondary flex items-center justify-center gap-2">
+                            <BrainIcon className="w-5 h-5"/>
+                            {isLoadingInterpretation ? 'Yorumlanıyor...' : 'Farkı Yorumla'}
+                         </button>
+                         {interpretation && (
+                            <div className="text-sm mt-2 p-2 bg-white/50 dark:bg-black/20 rounded max-h-40 overflow-y-auto text-gray-700 dark:text-gray-300 text-xs whitespace-pre-wrap">{interpretation.replace("...", "")}</div>
+                         )}
+                    </div>
+                </div>
+            )}
+        </Card>
+    );
+};
 
 
 const SnowWaterEquivalentCalculator: React.FC = () => {
@@ -394,18 +568,25 @@ const AnomalyDetector: React.FC<{ stations: Station[], sensors: Sensor[] }> = ({
 interface AnalysisProps {
     stations: Station[];
     sensors: Sensor[];
+    cameras: Camera[];
 }
 
-const Analysis: React.FC<AnalysisProps> = ({ stations, sensors }) => {
+const Analysis: React.FC<AnalysisProps> = ({ stations, sensors, cameras }) => {
     return (
         <div className="space-y-6">
             <style>{`
                 .input-base { width: 100%; background-color: #FFFFFF; border: 1px solid #D1D5DB; border-radius: 0.5rem; padding: 0.625rem 1rem; }
                 .dark .input-base { background-color: #374151; border-color: #4B5563; color: #F3F4F6; }
-                .btn-primary { padding: 0.625rem 1rem; background-color: #E95420; color: white; border-radius: 0.5rem; font-weight: 600; transition: background-color 0.2s; }
-                .btn-primary:hover { background-color: #c2410c; }
+                .btn-primary { padding: 0.625rem 1rem; background-color: #F97316; color: white; border-radius: 0.5rem; font-weight: 600; transition: background-color 0.2s; }
+                .btn-primary:hover { background-color: #EA580C; }
                 .btn-primary:disabled { background-color: #9CA3AF; cursor: not-allowed; }
+                .btn-secondary { padding: 0.625rem 1rem; background-color: #E5E7EB; color: #1F2937; border-radius: 0.5rem; font-weight: 600; transition: background-color 0.2s; }
+                .btn-secondary:hover { background-color: #D1D5DB; }
+                .btn-secondary:disabled { background-color: #E5E7EB; color: #9CA3AF; cursor: not-allowed; }
+                .dark .btn-secondary { background-color: #4B5563; color: #F9FAFB; }
+                .dark .btn-secondary:hover { background-color: #6B7281; }
             `}</style>
+            <ComparativeSnowDepthAnalysis stations={stations} sensors={sensors} cameras={cameras} />
             <SnowWaterEquivalentCalculator />
             <SensorCorrelationChart stations={stations} sensors={sensors} />
             <HistoricalDataExporter stations={stations} sensors={sensors} />

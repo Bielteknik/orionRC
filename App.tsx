@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Page, Notification, Station, Sensor } from './types';
+import { Page, Notification, Station, Sensor, Camera } from './types';
 import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
 import Dashboard from './pages/Dashboard';
@@ -14,7 +14,7 @@ import CameraDetail from './pages/CameraDetail';
 import { ThemeProvider } from './components/ThemeContext';
 import Notifications from './pages/Notifications';
 import GeminiAssistant from './components/GeminiAssistant';
-import { getNotifications, markAllNotificationsAsRead, getAgentStatus, getStations, getSensors } from './services/apiService';
+import { getNotifications, markAllNotificationsAsRead, getAgentStatus, getStations, getSensors, getCameras } from './services/apiService';
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.Dashboard);
@@ -24,20 +24,23 @@ const App: React.FC = () => {
   const [agentStatus, setAgentStatus] = useState<{ status: string; lastUpdate: string | null }>({ status: 'offline', lastUpdate: null });
   const [stations, setStations] = useState<Station[]>([]);
   const [sensors, setSensors] = useState<Sensor[]>([]);
+  const [cameras, setCameras] = useState<Camera[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const refreshAllData = useCallback(async () => {
     try {
-      const [notificationsData, agentStatusData, stationsData, sensorsData] = await Promise.all([
+      const [notificationsData, agentStatusData, stationsData, sensorsData, camerasData] = await Promise.all([
         getNotifications(),
         getAgentStatus(),
         getStations(),
-        getSensors()
+        getSensors(),
+        getCameras()
       ]);
       setNotifications(notificationsData);
       setAgentStatus(agentStatusData);
       setStations(stationsData);
       setSensors(sensorsData);
+      setCameras(camerasData);
     } catch (error) {
       console.error("Veri yenileme sırasında hata oluştu:", error);
     } finally {
@@ -81,14 +84,13 @@ const App: React.FC = () => {
       return <CameraDetail cameraId={viewingCameraId} onBack={() => setViewingCameraId(null)} />;
     }
     if (currentPage === Page.Stations && viewingStationId) {
-      // FIX: Removed 'onDataChange' prop as it's not defined or used in StationDetail.
       return <StationDetail stationId={viewingStationId} onBack={() => setViewingStationId(null)} onViewCamera={handleViewCamera} />;
     }
     switch (currentPage) {
       case Page.Dashboard:
         return <Dashboard onViewStationDetails={handleViewStationDetails} stations={stations} sensors={sensors} />;
       case Page.Analysis:
-        return <Analysis stations={stations} sensors={sensors} />;
+        return <Analysis stations={stations} sensors={sensors} cameras={cameras} />;
       case Page.Stations:
         return <Stations stations={stations} onViewDetails={handleViewStationDetails} onDataChange={refreshAllData} />;
       case Page.Sensors:
