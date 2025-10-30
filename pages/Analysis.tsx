@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Station, Sensor, Camera } from '../types.ts';
-import { getReadingsHistory, analyzeSnowDepth } from '../services/apiService.ts';
+import { getReadingsHistory, analyzeSnowDepth, analyzeSnowDepthFromImage } from '../services/apiService.ts';
 import { sendMessageToGemini } from '../services/geminiService.ts';
 import Card from '../components/common/Card.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
-import { BrainIcon, DownloadIcon, RefreshIcon, InfoIcon, CalculatorIcon, ChartBarIcon } from '../components/icons/Icons.tsx';
+import { BrainIcon, DownloadIcon, RefreshIcon, InfoIcon, CalculatorIcon, ChartBarIcon, PhotographIcon } from '../components/icons/Icons.tsx';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useTheme } from '../components/ThemeContext.tsx';
 import MultiSelectDropdown from '../components/common/MultiSelectDropdown.tsx';
@@ -37,14 +37,30 @@ const getNumericValue = (value: any): number | null => {
     return isNaN(parsed) ? null : parsed;
 }
 
+const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64String = reader.result as string;
+            // remove the header, e.g. 'data:image/png;base64,'
+            const pureBase64 = base64String.split(',')[1];
+            resolve(pureBase64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+};
+
+
 const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sensor[], cameras: Camera[] }> = ({ stations, sensors, cameras }) => {
     const [selectedStationId, setSelectedStationId] = useState<string>('');
     const [isLoadingAnalysis, setIsLoadingAnalysis] = useState<'gemini' | 'opencv' | false>(false);
     const [interpretation, setInterpretation] = useState('');
     const [isLoadingInterpretation, setIsLoadingInterpretation] = useState(false);
     const [analysisMessage, setAnalysisMessage] = useState('');
-    
     const [selectedVirtualSensorId, setSelectedVirtualSensorId] = useState<string>('');
+    const [photoDateFilter, setPhotoDateFilter] = useState(new Date().toISOString().split('T')[0]);
+    const [analyzingPhotoUrl, setAnalyzingPhotoUrl] = useState<string | null>(null);
 
 
     const virtualSensors = useMemo(() => 
@@ -61,7 +77,7 @@ const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sen
         } else if (virtualSensors.length === 0) {
             setSelectedVirtualSensorId('');
         }
-    }, [stations, selectedStationId, virtualSensors]);
+    }, [stations, selectedStationId, virtualSensors, selectedVirtualSensorId]);
 
     const { ultrasonicSensor, virtualSensor, sourceCamera } = useMemo(() => {
         if (!selectedStationId) return { ultrasonicSensor: null, virtualSensor: null, sourceCamera: null };
@@ -83,6 +99,20 @@ const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sen
         };
     }, [selectedStationId, selectedVirtualSensorId, sensors, cameras]);
 
+    const filteredPhotos = useMemo(() => {
+        if (!sourceCamera?.photos) return [];
+        if (!photoDateFilter) return sourceCamera.photos;
+        
+        return sourceCamera.photos.filter(photoUrl => {
+            const filename = photoUrl.split('/').pop() || '';
+            const datePartMatch = filename.match(/^(\d{4}-\d{2}-\d{2})/);
+            if (datePartMatch) {
+                return datePartMatch[1] === photoDateFilter;
+            }
+            return false;
+        });
+    }, [sourceCamera, photoDateFilter]);
+
     const handleTriggerAnalysis = async (type: 'gemini' | 'opencv') => {
         const sensor = virtualSensor;
         const camera = sourceCamera;
@@ -103,6 +133,32 @@ const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sen
             setAnalysisMessage(`${type.toUpperCase()} analizi tetiklenirken bir hata oluştu.`);
         } finally {
             setIsLoadingAnalysis(false);
+        }
+    };
+
+    const handlePhotoDoubleClick = async (photoUrl: string) => {
+        if (!virtualSensor) {
+            setAnalysisMessage('Analiz için sanal sensör seçilmemiş.');
+            return;
+        }
+        if (analyzingPhotoUrl) return; // Already analyzing
+
+        setAnalyzingPhotoUrl(photoUrl);
+        setAnalysisMessage('Seçilen fotoğraf analiz ediliyor...');
+        try {
+            const response = await fetch(photoUrl);
+            const blob = await response.blob();
+            const base64String = await blobToBase64(blob);
+
+            await analyzeSnowDepthFromImage(base64String, virtualSensor.id, 'gemini');
+            
+            setAnalysisMessage('Analiz başarılı! Veriler kısa süre içinde güncellenecektir.');
+        } catch (error) {
+            console.error(error);
+            setAnalysisMessage('Fotoğraf analiz edilirken bir hata oluştu.');
+        } finally {
+            setAnalyzingPhotoUrl(null);
+            setTimeout(() => setAnalysisMessage(''), 7000);
         }
     };
     
@@ -202,7 +258,40 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
                                 <button onClick={() => handleTriggerAnalysis('gemini')} disabled={isLoadingAnalysis === 'gemini'} className="btn-secondary w-full text-sm flex items-center justify-center gap-2"> {isLoadingAnalysis === 'gemini' ? <LoadingSpinner/> : <BrainIcon className="w-4 h-4"/>} Gemini ile Analiz Et</button>
                                 <button onClick={() => handleTriggerAnalysis('opencv')} disabled={isLoadingAnalysis === 'opencv'} className="btn-secondary w-full text-sm flex items-center justify-center gap-2">{isLoadingAnalysis === 'opencv' ? <LoadingSpinner/> : <BrainIcon className="w-4 h-4"/>} OpenCV ile Analiz Et</button>
                             </div>
-                            <p className="text-xs text-center text-muted">Son Güncelleme: {formatTimeAgo(virtualSensor.lastUpdate)}</p>
+                             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 w-full">
+                                <div className="flex justify-between items-center mb-2">
+                                    <h5 className="font-semibold text-gray-800 dark:text-gray-200 text-sm">Fotoğraf Arşivi</h5>
+                                    <input 
+                                        type="date"
+                                        value={photoDateFilter}
+                                        onChange={e => setPhotoDateFilter(e.target.value)}
+                                        className="input-base text-sm p-1"
+                                    />
+                                </div>
+                                {filteredPhotos.length > 0 ? (
+                                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-40 overflow-y-auto pr-1">
+                                        {filteredPhotos.map((photoUrl) => (
+                                            <div key={photoUrl} className="relative group cursor-pointer" onDoubleClick={() => handlePhotoDoubleClick(photoUrl)}>
+                                                <img src={photoUrl} alt="arşivlenmiş görüntü" className="w-full h-20 object-cover rounded-md border dark:border-gray-700" />
+                                                {analyzingPhotoUrl === photoUrl && (
+                                                    <div className="absolute inset-0 bg-black/70 flex items-center justify-center rounded-md">
+                                                        <LoadingSpinner className="text-white" />
+                                                    </div>
+                                                )}
+                                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-md p-1">
+                                                    <p className="text-white text-[10px] font-bold text-center leading-tight">Analiz için çift tıkla</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-6 text-muted border border-dashed rounded-lg">
+                                        <PhotographIcon className="w-8 h-8 mx-auto text-gray-400 dark:text-gray-600 mb-1"/>
+                                        <p className="text-xs">Seçili tarihe ait fotoğraf bulunamadı.</p>
+                                    </div>
+                                )}
+                            </div>
+                            <p className="text-xs text-center text-muted !mt-3">Son Güncelleme: {formatTimeAgo(virtualSensor.lastUpdate)}</p>
                         </div>
                     ) : (
                         <div className="text-center py-10 text-muted my-auto">Bu istasyon için yapılandırılmış görüntü işleme sensörü bulunamadı.</div>
@@ -294,7 +383,7 @@ const CorrelationGraph: React.FC<{ stations: Station[], sensors: Sensor[] }> = (
         if(allSensorTypes.length > 0 && selectedSensorTypes.length === 0) {
             setSelectedSensorTypes(allSensorTypes.slice(0,2));
         }
-    }, [stations, allSensorTypes]);
+    }, [stations, allSensorTypes, selectedStations, selectedSensorTypes]);
 
     const handleFetchHistory = useCallback(async () => {
         if (selectedStations.length === 0 || selectedSensorTypes.length === 0) {
@@ -379,7 +468,7 @@ const DataExplorer: React.FC<{ stations: Station[], sensors: Sensor[] }> = ({ st
     useEffect(() => {
         if(stations.length > 0 && selectedStations.length === 0) setSelectedStations(stations.map(s => s.id));
         if(allSensorTypes.length > 0 && selectedSensorTypes.length === 0) setSelectedSensorTypes(allSensorTypes);
-    }, [stations, allSensorTypes]);
+    }, [stations, allSensorTypes, selectedStations, selectedSensorTypes]);
     
     const handleFetchData = useCallback(async () => {
         if (selectedStations.length === 0 || selectedSensorTypes.length === 0) {

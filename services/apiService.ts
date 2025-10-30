@@ -49,6 +49,11 @@ export const analyzeSnowDepth = (cameraId: string, virtualSensorId: string, anal
              .then(res => res.data)
              .catch(e => handleError(e, `analyzing snow depth with ${analysisType}`));
 
+export const analyzeSnowDepthFromImage = (imageBase64: string, virtualSensorId: string, analysisType: 'gemini'): Promise<any> => 
+    apiClient.post('/analysis/snow-depth-from-image', { imageBase64, virtualSensorId, analysisType })
+             .then(res => res.data)
+             .catch(e => handleError(e, `analyzing snow depth with ${analysisType} from image`));
+
 
 // Readings
 export const getReadings = (): Promise<any[]> => apiClient.get('/readings').then(res => res.data).catch(e => handleError(e, 'fetching readings'));

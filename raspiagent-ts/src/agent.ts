@@ -4,7 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { GoogleGenAI } from "@google/genai";
+// FIX: Import Type for responseSchema
+import { GoogleGenAI, Type } from "@google/genai";
 import {
     DeviceConfig,
     SensorConfig,
@@ -421,9 +422,23 @@ class Agent {
                 text: "Bu görüntüdeki kar ölçüm cetveline göre karla kaplı en yüksek sayısal değer nedir? Cevabını sadece `{\"snow_depth_cm\": SAYI}` formatında bir JSON olarak ver.",
             };
 
+            // FIX: Use responseSchema for reliable JSON output
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: { parts: [imagePart, textPart] },
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: Type.OBJECT,
+                        properties: {
+                            snow_depth_cm: {
+                                type: Type.NUMBER,
+                                description: "The measured snow depth in centimeters."
+                            }
+                        },
+                        required: ["snow_depth_cm"]
+                    }
+                }
             });
             
             const resultText = response.text;
