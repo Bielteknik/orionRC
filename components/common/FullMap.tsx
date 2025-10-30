@@ -22,10 +22,11 @@ const FullMap: React.FC<FullMapProps> = ({ stations, onViewStationDetails, onSta
     const markersLayerRef = useRef<any>(null);
 
     useEffect(() => {
+        let map: any;
         if (mapContainerRef.current && !mapRef.current) {
-            const map = L.map(mapContainerRef.current, { 
+            map = L.map(mapContainerRef.current, {
                 scrollWheelZoom: true,
-                attributionControl: false 
+                attributionControl: false
             }).setView([39.90, 41.26], 6);
             mapRef.current = map;
 
@@ -35,18 +36,30 @@ const FullMap: React.FC<FullMapProps> = ({ stations, onViewStationDetails, onSta
 
             markersLayerRef.current = L.layerGroup().addTo(map);
 
+            // Use a ResizeObserver to handle container resizing gracefully
             const resizeObserver = new ResizeObserver(() => {
-                setTimeout(() => map.invalidateSize(), 100);
+                window.requestAnimationFrame(() => {
+                     if (mapRef.current) {
+                        mapRef.current.invalidateSize();
+                    }
+                });
             });
             resizeObserver.observe(mapContainerRef.current);
-
-            // Invalidate size after a short delay to ensure container is sized correctly after initial render
-            setTimeout(() => map.invalidateSize(), 150);
+            
+            // Also force an invalidate after a short delay to handle initial layout shifts
+            const timeoutId = setTimeout(() => {
+                if (mapRef.current) {
+                    mapRef.current.invalidateSize();
+                }
+            }, 200);
 
             return () => {
                 resizeObserver.disconnect();
-                map.remove();
-                mapRef.current = null;
+                clearTimeout(timeoutId);
+                if (mapRef.current) {
+                    mapRef.current.remove();
+                    mapRef.current = null;
+                }
             };
         }
     }, []);
@@ -54,9 +67,6 @@ const FullMap: React.FC<FullMapProps> = ({ stations, onViewStationDetails, onSta
     useEffect(() => {
         if (!mapRef.current || !markersLayerRef.current) return;
         
-        // Force map to re-evaluate its size
-        setTimeout(() => mapRef.current.invalidateSize(), 100);
-
         const markersLayer = markersLayerRef.current;
         markersLayer.clearLayers();
         
@@ -114,7 +124,12 @@ const FullMap: React.FC<FullMapProps> = ({ stations, onViewStationDetails, onSta
             const validStations = stations.filter(s => s.locationCoords);
             if (validStations.length > 0) {
                 const bounds = L.latLngBounds(validStations.map(s => [s.locationCoords.lat, s.locationCoords.lng]));
-                mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+                // Add a small delay to ensure map is ready for fitBounds
+                setTimeout(() => {
+                    if(mapRef.current) {
+                        mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+                    }
+                }, 100);
             }
         }
 

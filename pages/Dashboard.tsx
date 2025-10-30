@@ -12,7 +12,6 @@ interface DashboardProps {
 }
 
 const StatCard: React.FC<{ 
-    // FIX: Specify a more precise type for the icon prop to allow className to be passed.
     icon: React.ReactElement<React.HTMLAttributes<SVGElement>>; 
     label: string; 
     value: string | number; 
@@ -20,18 +19,17 @@ const StatCard: React.FC<{
     iconColorClass: string;
     gradientFromClass: string;
 }> = ({ icon, label, value, subtitle, iconColorClass, gradientFromClass }) => (
-    <Card className={`relative p-4 overflow-hidden bg-gradient-to-br ${gradientFromClass} to-white dark:from-gray-800 dark:to-dark-secondary`}>
+    <div className={`relative p-3 overflow-hidden bg-gradient-to-br ${gradientFromClass} to-white dark:from-gray-800 dark:to-dark-secondary bg-primary dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm`}>
         <div className="flex items-center">
             {React.cloneElement(icon, { className: `w-5 h-5 ${iconColorClass}`})}
-            <p className={`ml-2 font-semibold text-gray-700 dark:text-gray-300`}>{label}</p>
+            <p className={`ml-2 font-semibold text-sm text-gray-700 dark:text-gray-300`}>{label}</p>
         </div>
-        <p className={`mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100`}>{value}</p>
-        <p className="text-xs text-muted mt-1">{subtitle}</p>
-        <div className={`absolute -right-2 -bottom-2 opacity-10 dark:opacity-20`}>
-            {/* FIX: Correctly clone the element by specifying a compatible type for the icon prop. */}
-            {React.cloneElement(icon, { className: `w-20 h-20 ${iconColorClass}` })}
+        <p className={`mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100`}>{value}</p>
+        <p className="text-xs text-muted mt-0.5">{subtitle}</p>
+        <div className={`absolute -right-3 -bottom-3 opacity-10 dark:opacity-20`}>
+            {React.cloneElement(icon, { className: `w-16 h-16 ${iconColorClass}` })}
         </div>
-    </Card>
+    </div>
 );
 
 const SensorDisplayCard: React.FC<{ sensor: Sensor }> = ({ sensor }) => {
@@ -54,7 +52,6 @@ const SensorDisplayCard: React.FC<{ sensor: Sensor }> = ({ sensor }) => {
         if (sensor.value === null || sensor.value === undefined) return 'N/A';
         if (typeof sensor.value === 'object') {
             const numericValue = Object.values(sensor.value).find(v => typeof v === 'number');
-            // FIX: Ensure numericValue is a number before calling toFixed to prevent runtime errors.
             if (typeof numericValue === 'number') {
                 return numericValue.toFixed(1);
             }
@@ -74,7 +71,6 @@ const SensorDisplayCard: React.FC<{ sensor: Sensor }> = ({ sensor }) => {
                         <p className="text-xs text-muted">{sensor.type}</p>
                     </div>
                 </div>
-                {/* FIX: Use the enum member for the key, not the string literal. */}
                 <div className={`text-xs font-semibold py-0.5 px-2 rounded-full ${statusStyles[sensor.status] || statusStyles[SensorStatus.Inactive]}`}>
                     {sensor.status}
                 </div>
@@ -135,15 +131,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStationDetails, stations, s
             {/* Map and Sensor Panel */}
             <div className="grid grid-cols-1 lg:grid-cols-11 gap-6 h-[calc(65vh-50px)]">
                 {/* Map Section */}
-                <div className="lg:col-span-7 h-full">
-                    <Card className="p-0 h-full overflow-hidden">
-                        <FullMap 
-                            stations={stations} 
-                            onViewStationDetails={onViewStationDetails} 
-                            onStationSelect={setSelectedStationId}
-                            selectedStationId={selectedStationId}
-                        />
-                    </Card>
+                <div className="lg:col-span-7 h-full bg-primary dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-hidden">
+                    <FullMap 
+                        stations={stations} 
+                        onViewStationDetails={onViewStationDetails} 
+                        onStationSelect={setSelectedStationId}
+                        selectedStationId={selectedStationId}
+                    />
                 </div>
 
                 {/* Sensor Data Section */}
