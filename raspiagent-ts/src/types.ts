@@ -3,6 +3,7 @@ export interface DeviceConfig {
     sensors: SensorConfig[];
     cameras: CameraConfig[];
     global_read_frequency_seconds?: number;
+    gemini_api_key?: string;
 }
 
 // Tek bir sensörün yapılandırması

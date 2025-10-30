@@ -47,6 +47,7 @@ class Agent {
     private apiBaseUrl: string = '';
     private deviceId: string = '';
     private authToken: string = '';
+    private geminiApiKey?: string;
     
     private running: boolean = false;
     // FIX: Replaced NodeJS.Timeout with ReturnType<typeof setTimeout> to avoid dependency on Node.js-specific types which are not correctly resolved.
@@ -138,7 +139,13 @@ class Agent {
             });
             this.config = response.data;
             this.globalReadFrequencySeconds = this.config.global_read_frequency_seconds;
+            this.geminiApiKey = this.config.gemini_api_key;
             console.log(`✅ Yapılandırma alındı: ${this.config.sensors.length} sensör, ${this.config.cameras.length} kamera. Global frekans: ${this.globalReadFrequencySeconds || 'devre dışı'}`);
+            if(this.geminiApiKey) {
+                console.log("   -> Gemini API anahtarı başarıyla alındı.");
+            } else {
+                console.warn("   -> UYARI: Sunucudan Gemini API anahtarı alınamadı. Görüntü analizi özellikleri çalışmayabilir.");
+            }
             this.setState(AgentState.ONLINE);
         } catch (error) {
             this.setState(AgentState.OFFLINE);
@@ -386,8 +393,8 @@ class Agent {
             return false;
         }
         
-        if (!process.env.API_KEY) {
-            console.error('HATA: Gemini API anahtarı (API_KEY) ortam değişkenlerinde ayarlanmamış. Analiz yapılamıyor.');
+        if (!this.geminiApiKey) {
+            console.error('HATA: Gemini API anahtarı sunucudan alınamadı. Analiz yapılamıyor.');
             return false;
         }
 
@@ -411,7 +418,7 @@ class Agent {
             
             // 3. Call Gemini API
             console.log('   -> Gemini API ile analiz ediliyor...');
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const ai = new GoogleGenAI({ apiKey: this.geminiApiKey });
             const imagePart = {
                 inlineData: {
                     mimeType: 'image/jpeg',

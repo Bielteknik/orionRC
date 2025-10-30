@@ -35,6 +35,7 @@ export interface DeviceConfig {
     sensors: SensorConfig[];
     cameras: CameraConfig[];
     global_read_frequency_seconds?: number;
+    gemini_api_key?: string;
 }
 
 // Data structure for a station, sent to the frontend
