@@ -81,6 +81,7 @@ const App: React.FC = () => {
       return <CameraDetail cameraId={viewingCameraId} onBack={() => setViewingCameraId(null)} />;
     }
     if (currentPage === Page.Stations && viewingStationId) {
+      // FIX: Removed 'onDataChange' prop as it's not defined or used in StationDetail.
       return <StationDetail stationId={viewingStationId} onBack={() => setViewingStationId(null)} onViewCamera={handleViewCamera} />;
     }
     switch (currentPage) {
@@ -89,7 +90,7 @@ const App: React.FC = () => {
       case Page.Analysis:
         return <Analysis stations={stations} sensors={sensors} />;
       case Page.Stations:
-        return <Stations onViewDetails={handleViewStationDetails} />;
+        return <Stations stations={stations} onViewDetails={handleViewStationDetails} onDataChange={refreshAllData} />;
       case Page.Sensors:
         return <Sensors />;
       case Page.Cameras:

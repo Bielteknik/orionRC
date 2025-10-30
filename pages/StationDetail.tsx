@@ -106,8 +106,8 @@ const SensorCard: React.FC<{ sensor: Sensor, onClick: () => void }> = ({ sensor,
                         <p className="text-sm text-muted">{sensor.type}</p>
                     </div>
                 </div>
-                <span className={`px-3 py-1 text-xs font-semibold rounded-full ${statusStyles[sensor.status]}`}>
-                    {sensor.status}
+                <span className={`px-3 py-1 text-xs font-semibold rounded-full ${statusStyles[sensor.status] || statusStyles[SensorStatus.Inactive]}`}>
+                    {sensor.status || SensorStatus.Inactive}
                 </span>
             </div>
             <div className="flex-grow text-center !my-4">
@@ -268,7 +268,7 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
     );
   }
 
-  const stationStatus = statusInfo[station.status];
+  const stationStatus = statusInfo[station.status] || statusInfo.inactive;
   const TABS = ['Veriler', 'Sensörler', 'Kameralar', 'Konum'];
 
   return (
@@ -481,7 +481,7 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
                     )}
                 </>
             )}
-            {activeTab === 'Konum' && (
+            {activeTab === 'Konum' && station.locationCoords && (
                  <>
                     <div className="flex justify-between items-center mb-4 pb-4 border-b border-gray-200 text-sm">
                         <div>

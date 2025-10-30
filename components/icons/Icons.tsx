@@ -219,3 +219,7 @@ export const AgentIcon: React.FC<IconProps> = (props) => (
         <path strokeLinecap="round" strokeLinejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.136 18.975a10.5 10.5 0 0113.728 0M12 21v-2.25M8.25 15.75L12 12m0 0l3.75-3.75M12 12L8.25 8.25m3.75 3.75L15.75 15.75" />
     </svg>
 );
+
+export const InfoIcon: React.FC<IconProps> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.25 5.25m.25-5.25v-.25a.375.375 0 11.75 0v.25m-1.5 6.75h.008v.008h-.008v-.008zm0-6.75h.008v.008h-.008v-.008z" /></svg>
+);

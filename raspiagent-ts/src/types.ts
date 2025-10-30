@@ -12,7 +12,7 @@ export interface SensorConfig {
     type: string;
     is_active: boolean;
     read_frequency: number;
-    interface: 'i2c' | 'serial' | 'virtual' | 'openweather' | 'http';
+    interface: 'i2c' | 'serial' | 'virtual' | 'openweather' | 'http' | 'uart';
     parser_config: {
         driver: string;
     };

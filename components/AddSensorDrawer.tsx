@@ -17,6 +17,7 @@ interface AddSensorDrawerProps {
 
 const interfaceIcons: { [key: string]: React.ReactNode } = {
     'serial': <SerialPortIcon className="w-5 h-5 text-muted" />,
+    'uart': <SerialPortIcon className="w-5 h-5 text-muted" />,
     'i2c': <CpuChipIcon className="w-5 h-5 text-muted" />,
     'http': <HttpIcon className="w-5 h-5 text-muted" />,
     'virtual': <BrainIcon className="w-5 h-5 text-muted" />,
@@ -125,6 +126,9 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
         } else if (interfaceType === 'serial') {
              setInterfaceConfig('{\n  "port": "/dev/ttyUSB0",\n  "baudrate": 9600\n}');
              setParserConfig('{\n  "driver": "dfrobot_ult"\n}');
+        } else if (interfaceType === 'uart') {
+             setInterfaceConfig('{\n  "port": "/dev/ttyS0",\n  "baudrate": 9600\n}');
+             setParserConfig('{\n  "driver": "hx711_uart"\n}');
         } else if (interfaceType === 'virtual') {
             setInterfaceConfig('{\n  "source_camera_id": "cam_...",\n  "script": "image_analyzer.py"\n}');
             setParserConfig('{\n  "driver": "image_analyzer"\n}');
@@ -260,6 +264,7 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
                                     </div>
                                     <select id="interface-type" value={interfaceType} onChange={e => setInterfaceType(e.target.value)} className="w-full appearance-none bg-secondary border border-gray-300 rounded-md pl-10 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent">
                                         <option value="serial">Seri Port</option>
+                                        <option value="uart">UART</option>
                                         <option value="i2c">I2C</option>
                                         <option value="http">HTTP</option>
                                         <option value="virtual">Yapay Zeka (Görüntü İşleme)</option>

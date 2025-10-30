@@ -1,14 +1,18 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Station, Sensor, Camera } from '../types.ts';
 import Card from '../components/common/Card.tsx';
 import { AddIcon, SearchIcon, LocationPinIcon, SensorIcon, CameraIcon, SettingsIcon, ExclamationIcon, DeleteIcon } from '../components/icons/Icons.tsx';
 import AddStationDrawer from '../components/AddStationModal.tsx';
-import Skeleton from '../components/common/Skeleton.tsx';
-import { getStations, getUnassignedSensors, getUnassignedCameras, addStation, deleteStation, updateStation } from '../services/apiService.ts';
+import { getUnassignedSensors, getUnassignedCameras, addStation, deleteStation, updateStation } from '../services/apiService.ts';
 import LocationPickerMap from '../components/common/LocationPickerMap.tsx';
 import DeleteConfirmationModal from '../components/DeleteConfirmationModal.tsx';
 
-// Re-using AddStationDrawer for editing by creating a new component wrapper
+interface StationsProps {
+  stations: Station[];
+  onViewDetails: (stationId: string) => void;
+  onDataChange: () => void;
+}
+
 const EditStationDrawer: React.FC<{
     isOpen: boolean;
     onClose: () => void;
@@ -30,7 +34,7 @@ const EditStationDrawer: React.FC<{
             setError('');
         }
     }, [station, isOpen]);
-    
+
     if (!isOpen || !station) return null;
 
     const handleSave = () => {
@@ -64,16 +68,10 @@ const EditStationDrawer: React.FC<{
           </div>
         </main>
         <footer className="px-6 py-4 bg-primary border-t flex justify-end gap-3"><button onClick={onClose} className="btn-secondary">İptal</button><button onClick={handleSave} className="btn-primary">Kaydet</button></footer>
-        <style>{`
-            .input-base { background-color: #F9FAFB; border: 1px solid #D1D5DB; border-radius: 0.5rem; padding: 0.625rem 1rem; }
-            .btn-primary { padding: 0.5rem 1rem; background-color: #E95420; color: white; border-radius: 0.5rem; font-weight: 600; }
-            .btn-secondary { padding: 0.5rem 1rem; background-color: #4B5563; color: white; border-radius: 0.5rem; font-weight: 600; }
-        `}</style>
-      </div>
+        </div>
     </div>
     );
 };
-
 
 const formatTimeAgo = (isoString: string | undefined): string => {
     if (!isoString) return 'bilinmiyor';
@@ -94,7 +92,6 @@ const formatTimeAgo = (isoString: string | undefined): string => {
     return `${days} gün önce`;
 };
 
-
 const statusInfo: Record<string, { text: string, className: string }> = {
     active: { text: 'Aktif', className: 'bg-white/90 text-gray-900' },
     inactive: { text: 'Pasif', className: 'bg-white/20 backdrop-blur-sm text-white/80' },
@@ -102,7 +99,7 @@ const statusInfo: Record<string, { text: string, className: string }> = {
 };
 
 const StationCard: React.FC<{ station: Station, onViewDetails: (id: string) => void, onEdit: (station: Station) => void, onDelete: (station: Station) => void }> = ({ station, onViewDetails, onEdit, onDelete }) => {
-    const status = statusInfo[station.status];
+    const status = statusInfo[station.status] || statusInfo.inactive;
 
     const handleDelete = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -174,60 +171,46 @@ const StationCard: React.FC<{ station: Station, onViewDetails: (id: string) => v
     );
 };
 
-
-interface StationsProps {
-  onViewDetails: (stationId: string) => void;
-}
-
-const Stations: React.FC<StationsProps> = ({ onViewDetails }) => {
-  const [stations, setStations] = useState<Station[]>([]);
+const Stations: React.FC<StationsProps> = ({ stations, onViewDetails, onDataChange }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDrawerOpen, setIsAddDrawerOpen] = useState(false);
   const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
   const [editingStation, setEditingStation] = useState<Station | null>(null);
   const [unassignedSensors, setUnassignedSensors] = useState<Sensor[]>([]);
   const [unassignedCameras, setUnassignedCameras] = useState<Camera[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [stationToDelete, setStationToDelete] = useState<Station | null>(null);
 
-  const fetchData = useCallback(async () => {
-    try {
-        setIsLoading(true);
-        setError(null);
-        const [stationsData, uSensors, uCameras] = await Promise.all([
-            getStations(),
-            getUnassignedSensors(),
-            getUnassignedCameras()
-        ]);
-        setStations(stationsData);
-        setUnassignedSensors(uSensors);
-        setUnassignedCameras(uCameras);
-    } catch (err) {
-        setError('İstasyon verileri yüklenirken bir hata oluştu.');
-        console.error(err);
-    } finally {
-        setIsLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (isAddDrawerOpen || isEditDrawerOpen) {
+        const fetchDrawerData = async () => {
+             try {
+                const [uSensors, uCameras] = await Promise.all([
+                    getUnassignedSensors(),
+                    getUnassignedCameras()
+                ]);
+                setUnassignedSensors(uSensors);
+                setUnassignedCameras(uCameras);
+            } catch (err) {
+                console.error("Error fetching data for drawers:", err);
+            }
+        };
+        fetchDrawerData();
+    }
+  }, [isAddDrawerOpen, isEditDrawerOpen]);
 
   const filteredStations = useMemo(() => {
+    if (!stations) return [];
     return stations.filter(station => 
       station.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      station.location.toLowerCase().includes(searchTerm.toLowerCase())
+      (station.location && station.location.toLowerCase().includes(searchTerm.toLowerCase()))
     );
   }, [stations, searchTerm]);
   
-  const handleSaveStation = async (newStationData: { name: string; location: string; locationCoords: { lat: number; lng: number; }; selectedSensorIds: string[]; selectedCameraIds: string[] }) => {
+  const handleSaveStation = async (newStationData: any) => {
     try {
         await addStation(newStationData);
-        fetchData(); // Refresh all data
+        onDataChange();
     } catch(error) {
         console.error("Failed to save station:", error);
         alert("İstasyon kaydedilirken bir hata oluştu.");
@@ -237,7 +220,8 @@ const Stations: React.FC<StationsProps> = ({ onViewDetails }) => {
   const handleUpdateStation = async (stationData: Station) => {
     try {
         await updateStation(stationData.id, stationData);
-        fetchData();
+        onDataChange();
+        setIsEditDrawerOpen(false);
     } catch (error) {
         console.error("Failed to update station:", error);
         alert("İstasyon güncellenirken bir hata oluştu.");
@@ -253,7 +237,8 @@ const Stations: React.FC<StationsProps> = ({ onViewDetails }) => {
       if (!stationToDelete) return;
       try {
           await deleteStation(stationToDelete.id);
-          fetchData();
+          onDataChange();
+          setIsDeleteModalOpen(false);
       } catch (error) {
           console.error("Failed to delete station:", error);
           alert("İstasyon silinirken bir hata oluştu.");
@@ -264,7 +249,6 @@ const Stations: React.FC<StationsProps> = ({ onViewDetails }) => {
     setEditingStation(station);
     setIsEditDrawerOpen(true);
   };
-
 
   return (
     <div className="space-y-6">
@@ -289,26 +273,13 @@ const Stations: React.FC<StationsProps> = ({ onViewDetails }) => {
         </div>
       </Card>
       
-      {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[312px] rounded-xl" />)}
-        </div>
-      ) : error ? (
-        <Card>
-            <div className="text-center py-8 text-danger">
-                <ExclamationIcon className="w-12 h-12 mx-auto mb-2"/>
-                <p className="font-semibold">{error}</p>
-            </div>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredStations.map(station => (
-                <StationCard key={station.id} station={station} onViewDetails={onViewDetails} onEdit={handleOpenEdit} onDelete={handleDeleteStation}/>
-            ))}
-        </div>
-      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {filteredStations.map(station => (
+              <StationCard key={station.id} station={station} onViewDetails={onViewDetails} onEdit={handleOpenEdit} onDelete={handleDeleteStation}/>
+          ))}
+      </div>
 
-       {filteredStations.length === 0 && !isLoading && !error && (
+       {filteredStations.length === 0 && (
             <Card>
                 <div className="text-center py-8 text-muted">
                     <p>Arama kriterlerinize uygun istasyon bulunamadı.</p>
@@ -335,7 +306,7 @@ const Stations: React.FC<StationsProps> = ({ onViewDetails }) => {
             title="İstasyonu Sil"
             message={
                 <>
-                    <strong>{stationToDelete?.name}</strong> adlı istasyonu silmek üzeresiniz. Bu işlem geri alınamaz. Onaylamak için şifreyi girin.
+                    <strong>{stationToDelete?.name}</strong> adlı istasyonu silmek üzeresiniz. Bu işlem geri alınamaz.
                 </>
             }
         />

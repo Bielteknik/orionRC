@@ -76,7 +76,7 @@ export interface Sensor {
   battery: number;
   lastUpdate: string;
   // Advanced config
-  interface: 'serial' | 'i2c' | 'http' | 'virtual' | 'openweather';
+  interface: 'serial' | 'i2c' | 'http' | 'virtual' | 'openweather' | 'uart';
   config: any; // JSON object for interface config
   parser_config: any; // JSON object for parser config
   read_frequency: number;
