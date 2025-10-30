@@ -40,6 +40,9 @@ const FullMap: React.FC<FullMapProps> = ({ stations, onViewStationDetails, onSta
             });
             resizeObserver.observe(mapContainerRef.current);
 
+            // Invalidate size after a short delay to ensure container is sized correctly after initial render
+            setTimeout(() => map.invalidateSize(), 150);
+
             return () => {
                 resizeObserver.disconnect();
                 map.remove();

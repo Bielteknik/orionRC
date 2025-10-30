@@ -20,16 +20,16 @@ const StatCard: React.FC<{
     iconColorClass: string;
     gradientFromClass: string;
 }> = ({ icon, label, value, subtitle, iconColorClass, gradientFromClass }) => (
-    <Card className={`relative p-5 overflow-hidden bg-gradient-to-br ${gradientFromClass} to-white dark:from-gray-800 dark:to-dark-secondary`}>
+    <Card className={`relative p-4 overflow-hidden bg-gradient-to-br ${gradientFromClass} to-white dark:from-gray-800 dark:to-dark-secondary`}>
         <div className="flex items-center">
-            {React.cloneElement(icon, { className: `w-6 h-6 ${iconColorClass}`})}
+            {React.cloneElement(icon, { className: `w-5 h-5 ${iconColorClass}`})}
             <p className={`ml-2 font-semibold text-gray-700 dark:text-gray-300`}>{label}</p>
         </div>
-        <p className={`mt-4 text-3xl font-bold text-gray-900 dark:text-gray-100`}>{value}</p>
+        <p className={`mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100`}>{value}</p>
         <p className="text-xs text-muted mt-1">{subtitle}</p>
-        <div className={`absolute -right-4 -bottom-4 opacity-10 dark:opacity-20`}>
+        <div className={`absolute -right-2 -bottom-2 opacity-10 dark:opacity-20`}>
             {/* FIX: Correctly clone the element by specifying a compatible type for the icon prop. */}
-            {React.cloneElement(icon, { className: `w-24 h-24 ${iconColorClass}` })}
+            {React.cloneElement(icon, { className: `w-20 h-20 ${iconColorClass}` })}
         </div>
     </Card>
 );
