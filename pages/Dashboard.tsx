@@ -129,7 +129,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStationDetails, stations, s
             </div>
 
             {/* Map and Sensor Panel */}
-            <div className="grid grid-cols-1 lg:grid-cols-11 gap-6 h-[calc(65vh-50px)]">
+            <div className="grid grid-cols-1 lg:grid-cols-11 gap-6 h-[500px]">
                 {/* Map Section */}
                 <div className="lg:col-span-7 h-full bg-primary dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-hidden">
                     <FullMap 
