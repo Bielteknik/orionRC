@@ -1,13 +1,11 @@
-
-
-
-
-
 // Use fully qualified express types to avoid conflict with global DOM types.
 // FIX: Use aliased imports for express types to prevent conflicts with global DOM types (e.g., from Jest or other libraries).
 // FIX: Added Express type to explicitly type the app constant.
 // FIX: Replaced aliased imports with a namespace import to resolve type conflicts more robustly.
-import * as express from 'express';
+// FIX: The `import * as express` combined with `express.default()` is problematic with some module configurations.
+// Using `import express = require('express')` correctly imports CommonJS modules like Express in a way that
+// provides both the callable function and the type namespace, fixing all subsequent type errors.
+import express = require('express');
 import cors from 'cors';
 import { openDb, db, migrate } from './database.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -26,7 +24,7 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// FIX: Explicitly type app as Express to fix type conflicts.
+// FIX: Correctly initialize express app. The `express` object from require is the callable function.
 const app: express.Express = express();
 const port = process.env.PORT || 8000;
 
@@ -60,7 +58,6 @@ let commandQueue: { [deviceId: string]: any[] } = {};
 
 
 // --- AUTH MIDDLEWARE (simple token check) ---
-// FIX: Replaced Request, Response, NextFunction with aliased Express types
 const agentAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const token = req.headers.authorization?.split(' ')[1];
     // This token MUST match the one in the agent's config.json
@@ -75,7 +72,6 @@ const agentAuth = (req: express.Request, res: express.Response, next: express.Ne
 
 // --- AGENT-FACING ENDPOINTS ---
 
-// FIX: Replaced Request and Response with aliased Express types
 app.get('/api/config/:deviceId', agentAuth, async (req: express.Request, res: express.Response) => {
     try {
         const { deviceId } = req.params;
@@ -121,7 +117,6 @@ app.get('/api/config/:deviceId', agentAuth, async (req: express.Request, res: ex
     }
 });
 
-// FIX: Replaced Request and Response with aliased Express types
 app.post('/api/submit-reading', agentAuth, async (req: express.Request, res: express.Response) => {
     try {
         const { sensor: sensor_id, value: rawValue } = req.body;
@@ -179,7 +174,6 @@ app.post('/api/submit-reading', agentAuth, async (req: express.Request, res: exp
     }
 });
 
-// FIX: Replaced Request and Response with aliased Express types
 app.get('/api/commands/:deviceId', agentAuth, (req: express.Request, res: express.Response) => {
     const { deviceId } = req.params;
     const pendingCommands = commandQueue[deviceId]?.filter(cmd => cmd.status === 'pending') || [];
@@ -191,7 +185,6 @@ app.get('/api/commands/:deviceId', agentAuth, (req: express.Request, res: expres
 });
 
 
-// FIX: Replaced Request and Response with aliased Express types
 app.post('/api/commands/:id/:status', agentAuth, async (req: express.Request, res: express.Response) => {
     const { id, status } = req.params;
     const commandId = parseInt(id, 10);
@@ -221,7 +214,6 @@ app.post('/api/commands/:id/:status', agentAuth, async (req: express.Request, re
 });
 
 
-// FIX: Replaced Request and Response with aliased Express types
 app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: express.Request, res: express.Response) => {
     const { cameraId } = req.params;
     const { image, filename } = req.body; // base64 image and filename
@@ -250,7 +242,6 @@ app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: express.R
 });
 
 // Endpoint for analysis photos
-// FIX: Replaced Request and Response with aliased Express types
 app.post('/api/analysis/upload-photo', agentAuth, async (req: express.Request, res: express.Response) => {
     const { cameraId, image, filename } = req.body;
     try {
@@ -269,7 +260,6 @@ app.post('/api/analysis/upload-photo', agentAuth, async (req: express.Request, r
 
 
 // --- FRONTEND-FACING ENDPOINTS ---
-// FIX: Replaced Request and Response with aliased Express types
 app.get('/api/agent-status', (req: express.Request, res: express.Response) => {
     // Add logic to check if lastUpdate is recent
     if (agentStatus.lastUpdate && (new Date().getTime() - new Date(agentStatus.lastUpdate).getTime()) > 30000) {
@@ -279,7 +269,6 @@ app.get('/api/agent-status', (req: express.Request, res: express.Response) => {
 });
 
 // STATIONS
-// FIX: Replaced Request and Response with aliased Express types
 app.get('/api/stations', async (req: express.Request, res: express.Response) => {
     try {
         const stationsFromDb = await db.all(`
@@ -304,7 +293,6 @@ app.get('/api/stations', async (req: express.Request, res: express.Response) => 
         res.status(500).json({ error: "Failed to fetch stations." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.post('/api/stations', async (req: express.Request, res: express.Response) => {
     try {
         const { id, name, location, locationCoords, selectedSensorIds = [], selectedCameraIds = [] } = req.body;
@@ -324,7 +312,6 @@ app.post('/api/stations', async (req: express.Request, res: express.Response) =>
         res.status(500).json({ error: "Failed to create station." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.put('/api/stations/:id', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     try {
@@ -339,7 +326,6 @@ app.put('/api/stations/:id', async (req: express.Request, res: express.Response)
         res.status(500).json({ error: "Failed to update station." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.delete('/api/stations/:id', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("DELETE FROM stations WHERE id = ?", req.params.id);
@@ -352,7 +338,6 @@ app.delete('/api/stations/:id', async (req: express.Request, res: express.Respon
 
 
 // SENSORS
-// FIX: Replaced Request and Response with aliased Express types
 app.get('/api/sensors', async (req: express.Request, res: express.Response) => {
     try {
         const unassigned = req.query.unassigned === 'true';
@@ -382,7 +367,6 @@ app.get('/api/sensors', async (req: express.Request, res: express.Response) => {
         res.status(500).json({ error: "Failed to fetch sensors." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.post('/api/sensors', async (req: express.Request, res: express.Response) => {
     try {
         const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
@@ -401,7 +385,6 @@ app.post('/api/sensors', async (req: express.Request, res: express.Response) => 
         res.status(500).json({ error: "Failed to create sensor." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.put('/api/sensors/:id', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     try {
@@ -420,7 +403,6 @@ app.put('/api/sensors/:id', async (req: express.Request, res: express.Response) 
         res.status(500).json({ error: 'Failed to update sensor.' });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.delete('/api/sensors/:id', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("DELETE FROM sensors WHERE id = ?", req.params.id);
@@ -430,7 +412,6 @@ app.delete('/api/sensors/:id', async (req: express.Request, res: express.Respons
         res.status(500).json({ error: "Failed to delete sensor." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.post('/api/sensors/:id/read', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     try {
@@ -454,7 +435,6 @@ app.post('/api/sensors/:id/read', async (req: express.Request, res: express.Resp
 });
 
 // CAMERAS
-// FIX: Replaced Request and Response with aliased Express types
 app.get('/api/cameras', async (req: express.Request, res: express.Response) => {
     try {
         const unassigned = req.query.unassigned === 'true';
@@ -480,7 +460,6 @@ app.get('/api/cameras', async (req: express.Request, res: express.Response) => {
         res.status(500).json({ error: "Failed to fetch cameras." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.post('/api/cameras', async (req: express.Request, res: express.Response) => {
     try {
         const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
@@ -495,7 +474,6 @@ app.post('/api/cameras', async (req: express.Request, res: express.Response) => 
         res.status(500).json({ error: "Failed to create camera." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.put('/api/cameras/:id', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     try {
@@ -510,7 +488,6 @@ app.put('/api/cameras/:id', async (req: express.Request, res: express.Response) 
         res.status(500).json({ error: "Failed to update camera." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.delete('/api/cameras/:id', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("DELETE FROM cameras WHERE id = ?", req.params.id);
@@ -520,7 +497,6 @@ app.delete('/api/cameras/:id', async (req: express.Request, res: express.Respons
         res.status(500).json({ error: "Failed to delete camera." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.post('/api/cameras/:id/capture', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     try {
@@ -544,7 +520,6 @@ app.post('/api/cameras/:id/capture', async (req: express.Request, res: express.R
 });
 
 // READINGS
-// FIX: Replaced Request and Response with aliased Express types
 app.get('/api/readings', async (req: express.Request, res: express.Response) => {
     try {
         const readings = await db.all(`
@@ -561,7 +536,6 @@ app.get('/api/readings', async (req: express.Request, res: express.Response) => 
         res.status(500).json({ error: "Failed to fetch readings." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.get('/api/readings/history', async (req: express.Request, res: express.Response) => {
     const { stationIds: stationIdsQuery, sensorTypes: sensorTypesQuery } = req.query;
 
@@ -600,7 +574,6 @@ app.get('/api/readings/history', async (req: express.Request, res: express.Respo
 
 
 // DEFINITIONS & SETTINGS
-// FIX: Replaced Request and Response with aliased Express types
 app.get('/api/definitions', async (req: express.Request, res: express.Response) => {
     try {
         const [stationTypes, sensorTypes, cameraTypes] = await Promise.all([
@@ -614,7 +587,6 @@ app.get('/api/definitions', async (req: express.Request, res: express.Response) 
         res.status(500).json({ error: "Failed to fetch definitions." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.post('/api/definitions/:type', async (req: express.Request, res: express.Response) => {
     const { type } = req.params;
     try {
@@ -626,7 +598,6 @@ app.post('/api/definitions/:type', async (req: express.Request, res: express.Res
         res.status(500).json({ error: `Failed to create definition for ${type}.` });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.put('/api/definitions/:type/:id', async (req: express.Request, res: express.Response) => {
     const { type, id } = req.params;
     try {
@@ -638,7 +609,6 @@ app.put('/api/definitions/:type/:id', async (req: express.Request, res: express.
         res.status(500).json({ error: `Failed to update definition.` });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.delete('/api/definitions/:type/:id', async (req: express.Request, res: express.Response) => {
     const { type, id } = req.params;
     try {
@@ -650,7 +620,6 @@ app.delete('/api/definitions/:type/:id', async (req: express.Request, res: expre
     }
 });
 
-// FIX: Replaced Request and Response with aliased Express types
 app.get('/api/alert-rules', async (req: express.Request, res: express.Response) => {
     try {
         res.json(await db.all("SELECT * FROM alert_rules"));
@@ -660,7 +629,6 @@ app.get('/api/alert-rules', async (req: express.Request, res: express.Response) 
     }
 });
 
-// FIX: Replaced Request and Response with aliased Express types
 app.get('/api/settings/global_read_frequency', async (req: express.Request, res: express.Response) => {
     try {
         const setting = await db.get("SELECT value FROM global_settings WHERE key = 'global_read_frequency_minutes'");
@@ -670,7 +638,6 @@ app.get('/api/settings/global_read_frequency', async (req: express.Request, res:
         res.status(500).json({ error: "Failed to get global read frequency." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.put('/api/settings/global_read_frequency', async (req: express.Request, res: express.Response) => {
     try {
         const { value } = req.body;
@@ -683,7 +650,6 @@ app.put('/api/settings/global_read_frequency', async (req: express.Request, res:
 });
 
 // REPORTS
-// FIX: Replaced Request and Response with aliased Express types
 app.get('/api/reports', async (req: express.Request, res: express.Response) => {
     try {
         res.json(await db.all("SELECT * FROM reports"));
@@ -692,7 +658,6 @@ app.get('/api/reports', async (req: express.Request, res: express.Response) => {
         res.status(500).json({ error: "Failed to fetch reports." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.delete('/api/reports/:id', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("DELETE FROM reports WHERE id = ?", req.params.id);
@@ -702,7 +667,6 @@ app.delete('/api/reports/:id', async (req: express.Request, res: express.Respons
         res.status(500).json({ error: "Failed to delete report." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.get('/api/report-schedules', async (req: express.Request, res: express.Response) => {
     try {
         const schedules = await db.all("SELECT * FROM report_schedules");
@@ -715,7 +679,6 @@ app.get('/api/report-schedules', async (req: express.Request, res: express.Respo
         res.status(500).json({ error: "Failed to fetch report schedules." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.post('/api/report-schedules', async (req: express.Request, res: express.Response) => {
     try {
         const { name, frequency, time, recipient, reportConfig, isEnabled } = req.body;
@@ -730,7 +693,6 @@ app.post('/api/report-schedules', async (req: express.Request, res: express.Resp
         res.status(500).json({ error: "Failed to create report schedule." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.put('/api/report-schedules/:id', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     try {
@@ -742,7 +704,6 @@ app.put('/api/report-schedules/:id', async (req: express.Request, res: express.R
         res.status(500).json({ error: "Failed to update report schedule." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.delete('/api/report-schedules/:id', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("DELETE FROM report_schedules WHERE id = ?", req.params.id);
@@ -754,7 +715,6 @@ app.delete('/api/report-schedules/:id', async (req: express.Request, res: expres
 });
 
 // NOTIFICATIONS
-// FIX: Replaced Request and Response with aliased Express types
 app.get('/api/notifications', async (req: express.Request, res: express.Response) => {
     try {
         res.json(await db.all("SELECT * FROM notifications ORDER BY timestamp DESC"));
@@ -763,7 +723,6 @@ app.get('/api/notifications', async (req: express.Request, res: express.Response
         res.status(500).json({ error: "Failed to fetch notifications." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.post('/api/notifications/mark-all-read', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("UPDATE notifications SET is_read = 0 WHERE is_read = 1");
@@ -773,7 +732,6 @@ app.post('/api/notifications/mark-all-read', async (req: express.Request, res: e
         res.status(500).json({ error: "Failed to mark all notifications as read." });
     }
 });
-// FIX: Replaced Request and Response with aliased Express types
 app.delete('/api/notifications/clear-all', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("DELETE FROM notifications");
@@ -785,7 +743,6 @@ app.delete('/api/notifications/clear-all', async (req: express.Request, res: exp
 });
 
 // ANALYSIS
-// FIX: Replaced Request and Response with aliased Express types
 app.post('/api/analysis/snow-depth', async (req: express.Request, res: express.Response) => {
     try {
         const { cameraId, virtualSensorId, analysisType } = req.body;
@@ -982,7 +939,6 @@ fs.access(path.join(publicPath, 'index.html')).catch(() => {
 app.use(express.static(publicPath));
 
 // Catch-all to serve index.html for any other request (for client-side routing)
-// FIX: Replaced Request and Response with aliased Express types
 app.get('*', (req: express.Request, res: express.Response) => {
     // Exclude API routes from being caught by this
     if (req.path.startsWith('/api/')) {
