@@ -117,7 +117,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStationDetails, stations, s
                     <Skeleton className="h-28" /> <Skeleton className="h-28" />
                     <Skeleton className="h-28" /> <Skeleton className="h-28" />
                 </div>
-                <Skeleton className="h-[65vh]" />
+                <Skeleton className="h-[calc(65vh-50px)]" />
             </div>
         );
     }
@@ -133,7 +133,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStationDetails, stations, s
             </div>
 
             {/* Map and Sensor Panel */}
-            <div className="grid grid-cols-1 lg:grid-cols-11 gap-6 h-[65vh]">
+            <div className="grid grid-cols-1 lg:grid-cols-11 gap-6 h-[calc(65vh-50px)]">
                 {/* Map Section */}
                 <div className="lg:col-span-7 h-full">
                     <Card className="p-0 h-full overflow-hidden">

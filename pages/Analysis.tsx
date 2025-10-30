@@ -44,8 +44,7 @@ const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sen
     const [isLoadingInterpretation, setIsLoadingInterpretation] = useState(false);
     const [analysisMessage, setAnalysisMessage] = useState('');
     
-    const [selectedGeminiSensorId, setSelectedGeminiSensorId] = useState<string>('');
-    const [selectedOpenCVSensorId, setSelectedOpenCVSensorId] = useState<string>('');
+    const [selectedVirtualSensorId, setSelectedVirtualSensorId] = useState<string>('');
 
 
     const virtualSensors = useMemo(() => 
@@ -57,18 +56,18 @@ const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sen
         if(stations.length > 0 && !selectedStationId) {
             setSelectedStationId(stations[0]?.id || '');
         }
-        if (virtualSensors.length > 0) {
-            if (!selectedGeminiSensorId) setSelectedGeminiSensorId(virtualSensors[0].id);
-            if (!selectedOpenCVSensorId) setSelectedOpenCVSensorId(virtualSensors[0].id);
+        if (virtualSensors.length > 0 && !selectedVirtualSensorId) {
+            setSelectedVirtualSensorId(virtualSensors[0].id);
+        } else if (virtualSensors.length === 0) {
+            setSelectedVirtualSensorId('');
         }
-    }, [stations, selectedStationId, virtualSensors, selectedGeminiSensorId, selectedOpenCVSensorId]);
+    }, [stations, selectedStationId, virtualSensors]);
 
-    const { ultrasonicSensor, geminiSensor, openCVSensor, geminiSourceCamera } = useMemo(() => {
-        if (!selectedStationId) return { ultrasonicSensor: null, geminiSensor: null, openCVSensor: null, geminiSourceCamera: null };
+    const { ultrasonicSensor, virtualSensor, sourceCamera } = useMemo(() => {
+        if (!selectedStationId) return { ultrasonicSensor: null, virtualSensor: null, sourceCamera: null };
         
         const uSensor = sensors.find(s => s.stationId === selectedStationId && s.type === 'Mesafe' && s.interface !== 'virtual');
-        const gSensor = sensors.find(s => s.id === selectedGeminiSensorId);
-        const oSensor = sensors.find(s => s.id === selectedOpenCVSensorId);
+        const vSensor = sensors.find(s => s.id === selectedVirtualSensorId);
 
         const findCamera = (sensor: Sensor | undefined) => {
             if(sensor && sensor.config && sensor.config.source_camera_id) {
@@ -79,18 +78,17 @@ const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sen
 
         return { 
             ultrasonicSensor: uSensor || null, 
-            geminiSensor: gSensor || null, 
-            openCVSensor: oSensor || null,
-            geminiSourceCamera: findCamera(gSensor) || findCamera(oSensor), // Use any available camera image as placeholder
+            virtualSensor: vSensor || null,
+            sourceCamera: findCamera(vSensor),
         };
-    }, [selectedStationId, sensors, cameras, selectedGeminiSensorId, selectedOpenCVSensorId]);
+    }, [selectedStationId, selectedVirtualSensorId, sensors, cameras]);
 
     const handleTriggerAnalysis = async (type: 'gemini' | 'opencv') => {
-        const sensor = type === 'gemini' ? geminiSensor : openCVSensor;
-        const camera = geminiSourceCamera;
+        const sensor = virtualSensor;
+        const camera = sourceCamera;
 
         if (!sensor || !camera) {
-            setAnalysisMessage(`${type.toUpperCase()} analizi için sensör veya kamera yapılandırılmamış.`);
+            setAnalysisMessage(`${type.toUpperCase()} analizi için sanal sensör veya kaynak kamera yapılandırılmamış.`);
             return;
         }
         setIsLoadingAnalysis(type);
@@ -109,26 +107,21 @@ const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sen
     };
     
     const ultrasonicValue = getNumericValue(ultrasonicSensor?.value);
-    const geminiValue = getNumericValue(geminiSensor?.value);
-    const openCVValue = getNumericValue(openCVSensor?.value);
+    const virtualSensorValue = getNumericValue(virtualSensor?.value);
 
     const handleInterpret = async () => {
         setIsLoadingInterpretation(true);
         setInterpretation('');
-        const diff_gemini = (ultrasonicValue !== null && geminiValue !== null) ? Math.abs(ultrasonicValue - geminiValue).toFixed(1) : "hesaplanamadı";
-        const diff_opencv = (ultrasonicValue !== null && openCVValue !== null) ? Math.abs(ultrasonicValue - openCVValue).toFixed(1) : "hesaplanamadı";
+        const diff = (ultrasonicValue !== null && virtualSensorValue !== null) ? Math.abs(ultrasonicValue - virtualSensorValue).toFixed(1) : "hesaplanamadı";
 
         try {
-            const prompt = `Sen bir meteoroloji ve sensör veri analistisin. Bir istasyonda kar yüksekliği üç farklı yöntemle ölçülüyor:
+            const prompt = `Sen bir meteoroloji ve sensör veri analistisin. Bir istasyonda kar yüksekliği iki farklı yöntemle ölçülüyor:
 1.  **Ultrasonik Sensör:** ${ultrasonicValue ?? 'Veri Yok'} cm
-2.  **Yapay Zeka (Gemini):** ${geminiValue ?? 'Veri Yok'} cm
-3.  **Görüntü İşleme (OpenCV):** ${openCVValue ?? 'Veri Yok'} cm
+2.  **Görüntü İşleme:** ${virtualSensorValue ?? 'Veri Yok'} cm (Bu değer Gemini veya OpenCV analizi ile elde edilmiş olabilir)
 
-Hesaplanan farklar:
-- Ultrasonik ve Gemini arası fark: ${diff_gemini} cm
-- Ultrasonik ve OpenCV arası fark: ${diff_opencv} cm
+Hesaplanan fark: ${diff} cm.
 
-Bu üç ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (örn: sensör kalibrasyonu, kar yüzeyinin pürüzlü olması, görüş koşulları, algoritma hassasiyeti vb.) analiz et. Hangi ölçümün daha güvenilir olabileceğine dair kısa, maddeler halinde bir uzman yorumu yap.`;
+Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (örn: sensör kalibrasyonu, kar yüzeyinin pürüzlü olması, görüş koşulları, algoritma hassasiyeti vb.) analiz et. Hangi ölçümün daha güvenilir olabileceğine dair kısa, maddeler halinde bir uzman yorumu yap.`;
             
             const stream = await sendMessageToGemini(prompt);
             let fullText = '';
@@ -143,8 +136,7 @@ Bu üç ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (�
         }
     };
     
-    const diffGemini = (ultrasonicValue !== null && geminiValue !== null) ? Math.abs(ultrasonicValue - geminiValue) : null;
-    const diffOpenCV = (ultrasonicValue !== null && openCVValue !== null) ? Math.abs(ultrasonicValue - openCVValue) : null;
+    const diffValue = (ultrasonicValue !== null && virtualSensorValue !== null) ? Math.abs(ultrasonicValue - virtualSensorValue) : null;
     
     const getDiffColor = (diff: number | null) => {
         if (diff === null) return 'text-gray-800 dark:text-gray-200';
@@ -183,43 +175,47 @@ Bu üç ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (�
                 </div>
 
                 {/* Image Analyses */}
-                <div className="lg:col-span-5 p-6 border-b lg:border-b-0 lg:border-r border-gray-200 dark:border-gray-700">
-                    <h4 className="font-semibold text-gray-800 dark:text-gray-200 text-center mb-4">Görüntü İşleme Analizleri</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Gemini */}
-                        <div className="p-4 rounded-lg bg-secondary dark:bg-gray-900/40 border dark:border-gray-700 space-y-3">
-                            <div className="flex justify-between items-start">
-                                <div className="flex items-center gap-2"><BrainIcon className="w-5 h-5 text-accent" /><h5 className="font-semibold text-gray-800 dark:text-gray-200">Gemini</h5></div>
-                                <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{geminiValue?.toFixed(1) ?? '--'}<span className="text-xl text-muted ml-1">cm</span></p>
-                            </div>
-                            <select value={selectedGeminiSensorId} onChange={e => setSelectedGeminiSensorId(e.target.value)} className="w-full text-xs p-1 input-base" disabled={virtualSensors.length === 0}><option value="" disabled>Sanal Sensör Seç</option>{virtualSensors.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
-                            <img src={geminiSourceCamera?.photos?.[0] || 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'} alt="kamera görüntüsü" className="w-full h-24 object-cover rounded-md border dark:border-gray-700 bg-gray-300 dark:bg-gray-700"/>
-                            <button onClick={() => handleTriggerAnalysis('gemini')} disabled={isLoadingAnalysis === 'gemini'} className="btn-secondary w-full text-sm flex items-center justify-center gap-2"> {isLoadingAnalysis === 'gemini' ? <LoadingSpinner/> : <BrainIcon className="w-4 h-4"/>} Analiz Et</button>
-                        </div>
-                        {/* OpenCV */}
-                        <div className="p-4 rounded-lg bg-secondary dark:bg-gray-900/40 border dark:border-gray-700 space-y-3">
-                            <div className="flex justify-between items-start">
-                                <div className="flex items-center gap-2"><BrainIcon className="w-5 h-5 text-blue-500" /><h5 className="font-semibold text-gray-800 dark:text-gray-200">OpenCV</h5></div>
-                                <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{openCVValue?.toFixed(1) ?? '--'}<span className="text-xl text-muted ml-1">cm</span></p>
-                            </div>
-                            <select value={selectedOpenCVSensorId} onChange={e => setSelectedOpenCVSensorId(e.target.value)} className="w-full text-xs p-1 input-base" disabled={virtualSensors.length === 0}><option value="" disabled>Sanal Sensör Seç</option>{virtualSensors.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
-                            <div className="w-full h-24 rounded-md border dark:border-gray-700 bg-gray-300 dark:bg-gray-700 flex items-center justify-center"><p className="text-xs text-muted">Görüntü yok</p></div>
-                            <button onClick={() => handleTriggerAnalysis('opencv')} disabled={isLoadingAnalysis === 'opencv'} className="btn-secondary w-full text-sm flex items-center justify-center gap-2">{isLoadingAnalysis === 'opencv' ? <LoadingSpinner/> : <BrainIcon className="w-4 h-4"/>} Analiz Et</button>
-                        </div>
+                <div className="lg:col-span-5 p-6 border-b lg:border-b-0 lg:border-r border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center">
+                    <div className="flex items-center justify-center gap-2 mb-4">
+                        <BrainIcon className="w-6 h-6 text-muted"/>
+                        <h4 className="font-semibold text-gray-800 dark:text-gray-200 text-center">Görüntü İşleme Analizi</h4>
                     </div>
+
+                    {virtualSensors.length > 0 && virtualSensor ? (
+                        <div className="p-4 rounded-lg bg-secondary dark:bg-gray-900/40 border dark:border-gray-700 space-y-3 w-full max-w-md mx-auto">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <label className="text-xs text-muted">Analiz Sensörü</label>
+                                    <select value={selectedVirtualSensorId} onChange={e => setSelectedVirtualSensorId(e.target.value)} className="w-full text-sm p-1 input-base -ml-1">
+                                        {virtualSensors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    </select>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-xs text-muted">Son Değer</p>
+                                    <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{virtualSensorValue?.toFixed(1) ?? '--'}<span className="text-xl text-muted ml-1">cm</span></p>
+                                </div>
+                            </div>
+
+                            <img src={sourceCamera?.photos?.[0] || 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'} alt="kamera görüntüsü" className="w-full h-48 object-cover rounded-md border dark:border-gray-700 bg-gray-300 dark:bg-gray-700"/>
+
+                            <div className="grid grid-cols-2 gap-2">
+                                <button onClick={() => handleTriggerAnalysis('gemini')} disabled={isLoadingAnalysis === 'gemini'} className="btn-secondary w-full text-sm flex items-center justify-center gap-2"> {isLoadingAnalysis === 'gemini' ? <LoadingSpinner/> : <BrainIcon className="w-4 h-4"/>} Gemini ile Analiz Et</button>
+                                <button onClick={() => handleTriggerAnalysis('opencv')} disabled={isLoadingAnalysis === 'opencv'} className="btn-secondary w-full text-sm flex items-center justify-center gap-2">{isLoadingAnalysis === 'opencv' ? <LoadingSpinner/> : <BrainIcon className="w-4 h-4"/>} OpenCV ile Analiz Et</button>
+                            </div>
+                            <p className="text-xs text-center text-muted">Son Güncelleme: {formatTimeAgo(virtualSensor.lastUpdate)}</p>
+                        </div>
+                    ) : (
+                        <div className="text-center py-10 text-muted my-auto">Bu istasyon için yapılandırılmış görüntü işleme sensörü bulunamadı.</div>
+                    )}
                 </div>
 
                 {/* Difference & Interpretation */}
                 <div className="lg:col-span-3 bg-gray-50 dark:bg-gray-800/50 p-6 flex flex-col">
                     <h4 className="font-semibold text-center text-gray-800 dark:text-gray-200 mb-4">Fark Analizi</h4>
                     <div className="space-y-4 flex-grow">
-                        <div className="text-center bg-white dark:bg-gray-800 p-3 rounded-lg border dark:border-gray-700">
-                            <p className="text-xs text-muted">Ultrasonik vs Gemini Farkı</p>
-                            <p className={`text-3xl font-bold ${getDiffColor(diffGemini)}`}>{diffGemini?.toFixed(1) ?? '--'} <span className="text-lg">cm</span></p>
-                        </div>
-                        <div className="text-center bg-white dark:bg-gray-800 p-3 rounded-lg border dark:border-gray-700">
-                            <p className="text-xs text-muted">Ultrasonik vs OpenCV Farkı</p>
-                            <p className={`text-3xl font-bold ${getDiffColor(diffOpenCV)}`}>{diffOpenCV?.toFixed(1) ?? '--'} <span className="text-lg">cm</span></p>
+                        <div className="text-center bg-white dark:bg-gray-800 p-3 rounded-lg border dark:border-gray-700 h-full flex flex-col justify-center">
+                            <p className="text-xs text-muted">Ultrasonik vs Görüntü İşleme Farkı</p>
+                            <p className={`text-4xl font-bold ${getDiffColor(diffValue)}`}>{diffValue?.toFixed(1) ?? '--'} <span className="text-xl">cm</span></p>
                         </div>
                     </div>
                      <button onClick={handleInterpret} disabled={isLoadingInterpretation} className="btn-primary w-full mt-4 flex items-center justify-center gap-2"> {isLoadingInterpretation ? <LoadingSpinner className="text-white"/> : <BrainIcon className="w-5 h-5"/>} Farkları Yorumla</button>
