@@ -40,6 +40,23 @@ const safeJSONParse = (str: string | null | undefined, fallback: any) => {
     }
 };
 
+// Helper to round numeric values in an object/primitive recursively to 2 decimal places
+const roundNumericValues = (value: any): any => {
+    if (typeof value === 'number') {
+        return Math.round(value * 100) / 100;
+    }
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        const newObj: { [key: string]: any } = {};
+        for (const key in value) {
+            if (Object.prototype.hasOwnProperty.call(value, key)) {
+                newObj[key] = roundNumericValues(value[key]);
+            }
+        }
+        return newObj;
+    }
+    return value;
+};
+
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' })); // Increase limit for base64 image uploads
@@ -159,22 +176,6 @@ app.post('/api/submit-reading', agentAuth, async (req: ExpressRequest, res: Expr
             }
         }
         
-        const roundNumericValues = (value: any): any => {
-            if (typeof value === 'number') {
-                return parseFloat(value.toFixed(2));
-            }
-            if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-                const newObj: { [key: string]: any } = {};
-                for (const key in value) {
-                    if (Object.prototype.hasOwnProperty.call(value, key)) {
-                        newObj[key] = roundNumericValues(value[key]);
-                    }
-                }
-                return newObj;
-            }
-            return value;
-        };
-
         processedValue = roundNumericValues(processedValue);
 
         const timestamp = new Date().toISOString();
@@ -675,6 +676,9 @@ app.post('/api/definitions/:type', async (req: ExpressRequest, res: ExpressRespo
     }
     try {
         const { name } = req.body;
+        if (!name || typeof name !== 'string' || name.trim() === '') {
+            return res.status(400).json({ error: 'Invalid name provided.' });
+        }
         const result = await db.run(`INSERT INTO ${type} (name) VALUES (?)`, name);
         res.status(201).json({ id: result.lastID, name });
     } catch (error) {
@@ -689,6 +693,9 @@ app.put('/api/definitions/:type/:id', async (req: ExpressRequest, res: ExpressRe
     }
     try {
         const { name } = req.body;
+        if (!name || typeof name !== 'string' || name.trim() === '') {
+            return res.status(400).json({ error: 'Invalid name provided.' });
+        }
         await db.run(`UPDATE ${type} SET name = ? WHERE id = ?`, name, id);
         res.status(200).json({ id, name });
     } catch (error) {
@@ -835,7 +842,7 @@ app.get('/api/notifications', async (req: ExpressRequest, res: ExpressResponse) 
 });
 app.post('/api/notifications/mark-all-read', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
-        await db.run("UPDATE notifications SET is_read = 1 WHERE is_read = 0");
+        await db.run("UPDATE notifications SET is_read = ? WHERE is_read = ?", [true, false]);
         res.status(200).send('OK');
     } catch (error) {
         console.error("Error marking all notifications as read:", error);
@@ -958,7 +965,8 @@ app.post('/api/analysis/snow-depth-from-image', async (req: ExpressRequest, res:
 
         // Update the sensor reading
         const timestamp = new Date().toISOString();
-        const value = { snow_depth_cm: snowDepth };
+        let value = { snow_depth_cm: snowDepth };
+        value = roundNumericValues(value); // Round the value before saving
         const valueStr = JSON.stringify(value);
 
         await db.run("INSERT INTO readings (sensor_id, value, timestamp) VALUES (?, ?, ?)", virtualSensorId, valueStr, timestamp);
