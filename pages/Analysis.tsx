@@ -4,7 +4,8 @@ import { getReadingsHistory, analyzeSnowDepth, analyzeSnowDepthFromImage } from 
 import { sendMessageToGemini } from '../services/geminiService.ts';
 import Card from '../components/common/Card.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
-import { BrainIcon, DownloadIcon, RefreshIcon, InfoIcon, CalculatorIcon, ChartBarIcon, PhotographIcon } from '../components/icons/Icons.tsx';
+import { BrainIcon, DownloadIcon, RefreshIcon, InfoIcon, CalculatorIcon, ChartBarIcon, PhotographIcon, SensorIcon as GenericSensorIcon } from '../components/icons/Icons.tsx';
+import { SnowRulerDayIcon, SnowRulerNightIcon } from '../components/icons/RulerIcons.tsx';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useTheme } from '../components/ThemeContext.tsx';
 import MultiSelectDropdown from '../components/common/MultiSelectDropdown.tsx';
@@ -51,8 +52,8 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
     });
 };
 
-
 const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sensor[], cameras: Camera[] }> = ({ stations, sensors, cameras }) => {
+    const { theme } = useTheme();
     const [selectedStationId, setSelectedStationId] = useState<string>('');
     const [isLoadingAnalysis, setIsLoadingAnalysis] = useState<'gemini' | 'opencv' | false>(false);
     const [interpretation, setInterpretation] = useState('');
@@ -61,7 +62,6 @@ const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sen
     const [selectedVirtualSensorId, setSelectedVirtualSensorId] = useState<string>('');
     const [photoDateFilter, setPhotoDateFilter] = useState(new Date().toISOString().split('T')[0]);
     const [analyzingPhotoUrl, setAnalyzingPhotoUrl] = useState<string | null>(null);
-
 
     const virtualSensors = useMemo(() => 
         sensors.filter(s => s.stationId === selectedStationId && s.type === 'Kar Yüksekliği' && s.interface === 'virtual'),
@@ -72,12 +72,16 @@ const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sen
         if(stations.length > 0 && !selectedStationId) {
             setSelectedStationId(stations[0]?.id || '');
         }
-        if (virtualSensors.length > 0 && !selectedVirtualSensorId) {
+    }, [stations, selectedStationId]);
+
+    useEffect(() => {
+        if (virtualSensors.length > 0 && !virtualSensors.some(vs => vs.id === selectedVirtualSensorId)) {
             setSelectedVirtualSensorId(virtualSensors[0].id);
         } else if (virtualSensors.length === 0) {
             setSelectedVirtualSensorId('');
         }
-    }, [stations, selectedStationId, virtualSensors, selectedVirtualSensorId]);
+    }, [virtualSensors, selectedVirtualSensorId]);
+
 
     const { ultrasonicSensor, virtualSensor, sourceCamera } = useMemo(() => {
         if (!selectedStationId) return { ultrasonicSensor: null, virtualSensor: null, sourceCamera: null };
@@ -206,120 +210,118 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
     );
 
     return (
-        <Card className="p-0 overflow-hidden">
-            <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Karşılaştırmalı Kar Yüksekliği Analizi</h3>
-                <p className="text-sm text-muted">Fiziksel sensör verilerini, iki farklı görüntü işleme tekniğinin sonuçlarıyla karşılaştırın.</p>
-                <div className="mt-4 max-w-sm">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">İstasyon Seçin</label>
+        <div className="space-y-6">
+             <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div>
+                     <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Karşılaştırmalı Kar Yüksekliği Analizi</h3>
+                     <p className="text-sm text-muted">Fiziksel ve yapay zeka sensör verilerini karşılaştırın.</p>
+                </div>
+                <div className="w-full sm:w-auto sm:max-w-xs">
                     <select value={selectedStationId} onChange={e => setSelectedStationId(e.target.value)} className="input-base">
                          {stations.length > 0 ? stations.map(s => <option key={s.id} value={s.id}>{s.name}</option>) : <option>Yükleniyor...</option>}
                     </select>
                 </div>
             </div>
 
-            <div className="flex flex-col lg:flex-row">
-                {/* Ultrasonic */}
-                <div className="w-full lg:w-1/4 p-4 sm:p-6 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-gray-200 dark:border-gray-700">
-                     <div className="flex items-center gap-2"><RefreshIcon className="w-5 h-5 text-muted" /><h4 className="font-semibold text-gray-800 dark:text-gray-200">Ultrasonik Sensör</h4></div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card className="flex flex-col p-6">
+                    <div className="flex items-center gap-3">
+                        <GenericSensorIcon className="w-6 h-6 text-muted" />
+                        <h4 className="font-semibold text-gray-800 dark:text-gray-200">Fiziksel Ölçüm (Ultrasonik)</h4>
+                    </div>
                     {ultrasonicSensor ? (
                         <>
-                            <div className="text-center my-8"><p className="text-6xl sm:text-7xl font-bold text-gray-900 dark:text-gray-100">{ultrasonicValue?.toFixed(1) ?? '--'}<span className="text-3xl text-muted ml-1">cm</span></p></div>
+                            <div className="flex-grow flex items-center justify-center text-center my-8">
+                                <p className="text-7xl font-bold text-gray-900 dark:text-gray-100">{ultrasonicValue?.toFixed(1) ?? '--'}<span className="text-4xl text-muted ml-2">cm</span></p>
+                            </div>
                             <p className="text-xs text-center text-muted">Son Güncelleme: {formatTimeAgo(ultrasonicSensor.lastUpdate)}</p>
                         </>
-                    ) : <div className="text-center py-10 text-muted my-auto">Mesafe sensörü bulunamadı.</div>}
-                </div>
+                    ) : <div className="flex-grow flex items-center justify-center text-center py-10 text-muted my-auto">Bu istasyon için atanmış Ultrasonik Mesafe sensörü bulunamadı.</div>}
+                </Card>
 
-                {/* Image Analyses */}
-                <div className="w-full lg:w-1/2 p-4 sm:p-6 border-b lg:border-b-0 lg:border-r border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center">
-                    <div className="flex items-center justify-center gap-2 mb-4">
-                        <BrainIcon className="w-6 h-6 text-muted"/>
-                        <h4 className="font-semibold text-gray-800 dark:text-gray-200 text-center">Görüntü İşleme Analizi</h4>
+                <Card className="flex flex-col p-6">
+                    <div className="flex items-center gap-3">
+                        <BrainIcon className="w-6 h-6 text-muted" />
+                        <h4 className="font-semibold text-gray-800 dark:text-gray-200">Yapay Zeka Ölçümü (Görüntü İşleme)</h4>
                     </div>
-
-                    {virtualSensors.length > 0 && virtualSensor ? (
-                        <div className="p-4 rounded-lg bg-secondary dark:bg-gray-900/40 border dark:border-gray-700 space-y-3 w-full max-w-md mx-auto">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <label className="text-xs text-muted">Analiz Sensörü</label>
-                                    <select value={selectedVirtualSensorId} onChange={e => setSelectedVirtualSensorId(e.target.value)} className="w-full text-sm p-1 input-base -ml-1">
-                                        {virtualSensors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                    </select>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-xs text-muted">Son Değer</p>
-                                    <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{virtualSensorValue?.toFixed(1) ?? '--'}<span className="text-xl text-muted ml-1">cm</span></p>
-                                </div>
+                    {virtualSensor ? (
+                        <>
+                            <div className="flex-grow flex items-center justify-center text-center my-8">
+                                <p className="text-7xl font-bold text-gray-900 dark:text-gray-100">{virtualSensorValue?.toFixed(1) ?? '--'}<span className="text-4xl text-muted ml-2">cm</span></p>
                             </div>
-
-                            <img src={sourceCamera?.photos?.[0] || 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'} alt="kamera görüntüsü" className="w-full h-48 object-cover rounded-md border dark:border-gray-700 bg-gray-300 dark:bg-gray-700"/>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                <button onClick={() => handleTriggerAnalysis('gemini')} disabled={isLoadingAnalysis === 'gemini'} className="btn-secondary w-full text-sm flex items-center justify-center gap-2"> {isLoadingAnalysis === 'gemini' ? <LoadingSpinner/> : <BrainIcon className="w-4 h-4"/>} Gemini ile Analiz Et</button>
-                                <button onClick={() => handleTriggerAnalysis('opencv')} disabled={isLoadingAnalysis === 'opencv'} className="btn-secondary w-full text-sm flex items-center justify-center gap-2">{isLoadingAnalysis === 'opencv' ? <LoadingSpinner/> : <BrainIcon className="w-4 h-4"/>} OpenCV ile Analiz Et</button>
-                            </div>
-                             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 w-full">
-                                <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-2 gap-2">
-                                    <h5 className="font-semibold text-gray-800 dark:text-gray-200 text-sm">Fotoğraf Arşivi</h5>
-                                    <input 
-                                        type="date"
-                                        value={photoDateFilter}
-                                        onChange={e => setPhotoDateFilter(e.target.value)}
-                                        className="input-base text-sm p-1 w-full sm:w-auto"
-                                    />
+                            <div className="space-y-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <button onClick={() => handleTriggerAnalysis('gemini')} disabled={isLoadingAnalysis === 'gemini'} className="btn-secondary w-full text-sm flex items-center justify-center gap-2"> {isLoadingAnalysis === 'gemini' ? <LoadingSpinner/> : <BrainIcon className="w-4 h-4"/>} Yeni Gemini Analizi</button>
+                                    <button onClick={() => handleTriggerAnalysis('opencv')} disabled={isLoadingAnalysis === 'opencv'} className="btn-secondary w-full text-sm flex items-center justify-center gap-2">{isLoadingAnalysis === 'opencv' ? <LoadingSpinner/> : <BrainIcon className="w-4 h-4"/>} Yeni OpenCV Analizi</button>
                                 </div>
-                                {filteredPhotos.length > 0 ? (
-                                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-40 overflow-y-auto pr-1">
-                                        {filteredPhotos.map((photoUrl) => (
-                                            <div key={photoUrl} className="relative group cursor-pointer" onDoubleClick={() => handlePhotoDoubleClick(photoUrl)}>
-                                                <img src={photoUrl} alt="arşivlenmiş görüntü" className="w-full h-20 object-cover rounded-md border dark:border-gray-700" />
-                                                {analyzingPhotoUrl === photoUrl && (
-                                                    <div className="absolute inset-0 bg-black/70 flex items-center justify-center rounded-md">
-                                                        <LoadingSpinner className="text-white" />
-                                                    </div>
-                                                )}
-                                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-md p-1">
-                                                    <p className="text-white text-[10px] font-bold text-center leading-tight">Analiz için çift tıkla</p>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-6 text-muted border border-dashed rounded-lg">
-                                        <PhotographIcon className="w-8 h-8 mx-auto text-gray-400 dark:text-gray-600 mb-1"/>
-                                        <p className="text-xs">Seçili tarihe ait fotoğraf bulunamadı.</p>
-                                    </div>
-                                )}
+                                <p className="text-xs text-center text-muted">Son Güncelleme: {formatTimeAgo(virtualSensor.lastUpdate)}</p>
                             </div>
-                            <p className="text-xs text-center text-muted !mt-3">Son Güncelleme: {formatTimeAgo(virtualSensor.lastUpdate)}</p>
+                        </>
+                    ) : <div className="flex-grow flex items-center justify-center text-center py-10 text-muted my-auto">Bu istasyon için atanmış Yapay Zeka Kar Sensörü bulunamadı.</div>}
+                </Card>
+            </div>
+            
+            <Card>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+                    <div className="md:col-span-1 text-center border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-700 pb-4 md:pb-0 md:pr-6">
+                        <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-1">Ölçüm Farkı</h4>
+                         <p className={`text-5xl font-bold ${getDiffColor(diffValue)}`}>{diffValue?.toFixed(1) ?? '--'} <span className="text-3xl text-muted">cm</span></p>
+                    </div>
+                    <div className="md:col-span-2">
+                         <div className="flex justify-between items-center mb-2">
+                            <h4 className="font-semibold text-gray-800 dark:text-gray-200">Uzman Yorumu</h4>
+                            <button onClick={handleInterpret} disabled={isLoadingInterpretation} className="btn-primary flex items-center justify-center gap-2"> {isLoadingInterpretation ? <LoadingSpinner className="text-white"/> : <BrainIcon className="w-5 h-5"/>} Farkları Yorumla</button>
+                         </div>
+                         {analysisMessage && <p className="text-xs text-center text-accent pt-2">{analysisMessage}</p>}
+                         {interpretation || isLoadingInterpretation ? (
+                            <div className="text-sm text-gray-700 dark:text-gray-300 p-3 bg-secondary dark:bg-gray-800/50 rounded-md border dark:border-gray-600 min-h-[80px] max-h-40 overflow-y-auto mt-3 prose-sm dark:prose-invert">
+                                {isLoadingInterpretation ? <p>Yorum oluşturuluyor...</p> : <p dangerouslySetInnerHTML={{ __html: interpretation.replace(/\n/g, '<br />') }} />}
+                            </div>
+                         ) : null}
+                    </div>
+                </div>
+            </Card>
+
+            {sourceCamera && (
+                <Card>
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-3">
+                        <h3 className="font-semibold text-gray-800 dark:text-gray-200">Geçmiş Görüntüler ve Analiz ({sourceCamera.name})</h3>
+                        <input type="date" value={photoDateFilter} onChange={e => setPhotoDateFilter(e.target.value)} className="input-base text-sm p-1.5 w-full sm:w-auto"/>
+                    </div>
+                     {filteredPhotos.length > 0 ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                            {filteredPhotos.map((photoUrl) => (
+                                <div key={photoUrl} className="relative group aspect-w-4 aspect-h-3">
+                                    <img src={photoUrl} alt="arşivlenmiş görüntü" className="w-full h-full object-cover rounded-lg border dark:border-gray-700" />
+                                    {analyzingPhotoUrl === photoUrl ? (
+                                        <div className="absolute inset-0 bg-black/70 flex items-center justify-center rounded-lg">
+                                            <LoadingSpinner className="text-white w-8 h-8" />
+                                        </div>
+                                    ) : (
+                                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center rounded-lg p-2">
+                                            <button onClick={() => handlePhotoDoubleClick(photoUrl)} className="btn-secondary !bg-white/20 !text-white hover:!bg-white/30 border border-white/30 text-xs flex items-center gap-1.5">
+                                                <BrainIcon className="w-4 h-4"/>
+                                                <span>Analiz Et</span>
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
                         </div>
                     ) : (
-                        <div className="text-center py-10 text-muted my-auto">Bu istasyon için yapılandırılmış görüntü işleme sensörü bulunamadı.</div>
+                        <div className="text-center py-10 text-muted border border-dashed rounded-lg">
+                            <PhotographIcon className="w-10 h-10 mx-auto text-gray-400 dark:text-gray-600 mb-2"/>
+                            <p>Seçili tarihe ait fotoğraf bulunamadı.</p>
+                        </div>
                     )}
-                </div>
+                </Card>
+            )}
 
-                {/* Difference & Interpretation */}
-                <div className="w-full lg:w-1/4 bg-gray-50 dark:bg-gray-800/50 p-4 sm:p-6 flex flex-col">
-                    <h4 className="font-semibold text-center text-gray-800 dark:text-gray-200 mb-4">Fark Analizi</h4>
-                    <div className="space-y-4 flex-grow">
-                        <div className="text-center bg-white dark:bg-gray-800 p-3 rounded-lg border dark:border-gray-700 h-full flex flex-col justify-center">
-                            <p className="text-xs text-muted">Ultrasonik vs Görüntü İşleme Farkı</p>
-                            <p className={`text-4xl font-bold ${getDiffColor(diffValue)}`}>{diffValue?.toFixed(1) ?? '--'} <span className="text-xl">cm</span></p>
-                        </div>
-                    </div>
-                     <button onClick={handleInterpret} disabled={isLoadingInterpretation} className="btn-primary w-full mt-4 flex items-center justify-center gap-2"> {isLoadingInterpretation ? <LoadingSpinner className="text-white"/> : <BrainIcon className="w-5 h-5"/>} Farkları Yorumla</button>
-                     {analysisMessage && <p className="text-xs text-center text-accent pt-2">{analysisMessage}</p>}
-                     {interpretation && (
-                        <div className="text-xs text-muted p-3 bg-primary dark:bg-gray-800 rounded-md border dark:border-gray-600 max-h-40 overflow-y-auto mt-3 prose prose-sm dark:prose-invert">
-                            <p dangerouslySetInnerHTML={{ __html: interpretation.replace(/\n/g, '<br />') }} />
-                        </div>
-                     )}
-                </div>
-            </div>
             <style>{`.input-base { background-color: white; border: 1px solid #D1D5DB; border-radius: 0.375rem; padding: 0.5rem 0.75rem; width: 100%; } .dark .input-base { background-color: #374151; border-color: #4B5563; color: #F3F4F6; } .btn-primary { background-color: #F97316; color: white; padding: 0.625rem 1rem; border-radius: 0.375rem; font-weight: 600; transition: background-color 0.2s; } .btn-primary:hover { background-color: #EA580C; } .btn-primary:disabled { background-color: #9CA3AF; cursor: not-allowed; } .btn-secondary { background-color: #E5E7EB; color: #1F2937; padding: 0.625rem 1rem; border-radius: 0.375rem; font-weight: 600; transition: background-color 0.2s; } .btn-secondary:hover:not(:disabled) { background-color: #D1D5DB; } .dark .btn-secondary { background-color: #4B5563; color: white; } .dark .btn-secondary:hover:not(:disabled) { background-color: #6B7281; } .btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }`}</style>
-        </Card>
-    )
+        </div>
+    );
 };
+
 
 const SWE_Calculator: React.FC = () => {
     const [snowDepth, setSnowDepth] = useState('');
@@ -643,6 +645,7 @@ const Analysis: React.FC<{ stations: Station[], sensors: Sensor[], cameras: Came
             {activeTab === 'Korelasyon Grafiği' && <CorrelationGraph stations={stations} sensors={sensors} />}
             {activeTab === 'Veri Gezgini' && <DataExplorer stations={stations} sensors={sensors} />}
             {activeTab === 'Anomali Tespiti' && <AnomalyDetection stations={stations} sensors={sensors} />}
+            <style>{`.input-base { background-color: white; border: 1px solid #D1D5DB; border-radius: 0.375rem; padding: 0.5rem 0.75rem; width: 100%; } .dark .input-base { background-color: #374151; border-color: #4B5563; color: #F3F4F6; } .btn-primary { background-color: #F97316; color: white; padding: 0.625rem 1rem; border-radius: 0.375rem; font-weight: 600; transition: background-color 0.2s; } .btn-primary:hover { background-color: #EA580C; } .btn-primary:disabled { background-color: #9CA3AF; cursor: not-allowed; } .btn-secondary { background-color: #E5E7EB; color: #1F2937; padding: 0.625rem 1rem; border-radius: 0.375rem; font-weight: 600; transition: background-color 0.2s; } .btn-secondary:hover:not(:disabled) { background-color: #D1D5DB; } .dark .btn-secondary { background-color: #4B5563; color: white; } .dark .btn-secondary:hover:not(:disabled) { background-color: #6B7281; } .btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }`}</style>
         </div>
     );
 };
