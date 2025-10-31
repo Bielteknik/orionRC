@@ -122,7 +122,6 @@ app.post('/api/submit-reading', agentAuth, async (req: ExpressRequest, res: Expr
     try {
         const { sensor: sensor_id, value: rawValue } = req.body;
 
-        // Validate incoming data to prevent database errors from malformed requests.
         if (sensor_id === undefined || rawValue === undefined) {
             console.warn(`Bad request for /submit-reading: 'sensor' or 'value' field is missing.`, req.body);
             return res.status(400).json({ error: 'Bad Request: sensor and value fields are required.' });
@@ -138,10 +137,8 @@ app.post('/api/submit-reading', agentAuth, async (req: ExpressRequest, res: Expr
         const refVal = sensor.reference_value;
         const refOp = sensor.reference_operation;
 
-        // Apply reference value logic if applicable
         if (refVal !== null && refVal !== 999 && refOp && (refOp === 'add' || refOp === 'subtract')) {
              if (typeof rawValue === 'object' && rawValue !== null) {
-                // Find the first numeric value in the object to modify
                 const keyToModify = Object.keys(rawValue).find(k => typeof rawValue[k] === 'number');
                 if (keyToModify) {
                     const originalNumericValue = rawValue[keyToModify];
@@ -162,6 +159,24 @@ app.post('/api/submit-reading', agentAuth, async (req: ExpressRequest, res: Expr
             }
         }
         
+        const roundNumericValues = (value: any): any => {
+            if (typeof value === 'number') {
+                return parseFloat(value.toFixed(2));
+            }
+            if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                const newObj: { [key: string]: any } = {};
+                for (const key in value) {
+                    if (Object.prototype.hasOwnProperty.call(value, key)) {
+                        newObj[key] = roundNumericValues(value[key]);
+                    }
+                }
+                return newObj;
+            }
+            return value;
+        };
+
+        processedValue = roundNumericValues(processedValue);
+
         const timestamp = new Date().toISOString();
         const valueStr = JSON.stringify(processedValue);
 
@@ -174,6 +189,7 @@ app.post('/api/submit-reading', agentAuth, async (req: ExpressRequest, res: Expr
         res.status(500).json({ error: 'Failed to submit reading.' });
     }
 });
+
 
 app.get('/api/commands/:deviceId', agentAuth, (req: ExpressRequest, res: ExpressResponse) => {
     const { deviceId } = req.params;
@@ -316,11 +332,26 @@ app.post('/api/stations', async (req: ExpressRequest, res: ExpressResponse) => {
 app.put('/api/stations/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     const { id } = req.params;
     try {
-        const { name, location, locationCoords, status } = req.body;
-        await db.run(
-            "UPDATE stations SET name = ?, location = ?, lat = ?, lng = ?, status = ? WHERE id = ?",
-            name, location, locationCoords.lat, locationCoords.lng, status, id
-        );
+        const fields = req.body;
+        const updates: string[] = [];
+        const params: any[] = [];
+
+        if (fields.name !== undefined) { updates.push('name = ?'); params.push(fields.name); }
+        if (fields.location !== undefined) { updates.push('location = ?'); params.push(fields.location); }
+        if (fields.status !== undefined) { updates.push('status = ?'); params.push(fields.status); }
+        if (fields.locationCoords !== undefined) {
+            updates.push('lat = ?', 'lng = ?');
+            params.push(fields.locationCoords.lat, fields.locationCoords.lng);
+        }
+
+        if (updates.length === 0) {
+            return res.status(200).json({ id, message: 'No fields to update.' });
+        }
+
+        const sql = `UPDATE stations SET ${updates.join(', ')} WHERE id = ?`;
+        params.push(id);
+
+        await db.run(sql, ...params);
         res.status(200).json({ id });
     } catch (error) {
         console.error(`Error updating station ${id}:`, error);
@@ -389,21 +420,52 @@ app.post('/api/sensors', async (req: ExpressRequest, res: ExpressResponse) => {
 app.put('/api/sensors/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     const { id } = req.params;
     try {
-        const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
-        const parserConfigStr = typeof parserConfig === 'string' ? parserConfig : JSON.stringify(parserConfig || {});
-        const interfaceConfigStr = typeof interfaceConfig === 'string' ? interfaceConfig : JSON.stringify(interfaceConfig || {});
+        const fields = req.body;
+        const updates: string[] = [];
+        const params: any[] = [];
 
-        await db.run(
-            `UPDATE sensors SET name=?, station_id=?, type=?, unit=?, status=?, interface=?, parser_config=?, config=?, read_frequency=?, is_active=?, reference_value=?, reference_operation=?
-             WHERE id = ?`,
-            name, stationId, type, unit, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfigStr, interfaceConfigStr, readFrequency, isActive, referenceValue, referenceOperation, id
-        );
+        if (fields.name !== undefined) { updates.push('name = ?'); params.push(fields.name); }
+        if (fields.stationId !== undefined) { updates.push('station_id = ?'); params.push(fields.stationId); }
+        if (fields.type !== undefined) { updates.push('type = ?'); params.push(fields.type); }
+        if (fields.unit !== undefined) { updates.push('unit = ?'); params.push(fields.unit); }
+        if (fields.interfaceType !== undefined) { updates.push('interface = ?'); params.push(fields.interfaceType); }
+        if (fields.readFrequency !== undefined) { updates.push('read_frequency = ?'); params.push(fields.readFrequency); }
+        if (fields.referenceValue !== undefined) { updates.push('reference_value = ?'); params.push(fields.referenceValue); }
+        if (fields.referenceOperation !== undefined) { updates.push('reference_operation = ?'); params.push(fields.referenceOperation); }
+        
+        if (fields.parserConfig !== undefined) { 
+            updates.push('parser_config = ?'); 
+            const parserConfig = typeof fields.parserConfig === 'string' ? fields.parserConfig : JSON.stringify(fields.parserConfig || {});
+            params.push(parserConfig); 
+        }
+        if (fields.interfaceConfig !== undefined) { 
+            updates.push('config = ?'); 
+            const interfaceConfig = typeof fields.interfaceConfig === 'string' ? fields.interfaceConfig : JSON.stringify(fields.interfaceConfig || {});
+            params.push(interfaceConfig);
+        }
+        
+        if (fields.isActive !== undefined) {
+            updates.push('is_active = ?');
+            params.push(fields.isActive ? 1 : 0);
+            updates.push('status = ?');
+            params.push(fields.isActive ? 'Aktif' : 'Pasif');
+        }
+
+        if (updates.length === 0) {
+            return res.status(200).json({ id, message: 'No fields to update.' });
+        }
+
+        const sql = `UPDATE sensors SET ${updates.join(', ')} WHERE id = ?`;
+        params.push(id);
+        
+        await db.run(sql, ...params);
         res.status(200).json({ id });
     } catch (error) {
         console.error(`Error updating sensor with ID ${id}:`, error);
         res.status(500).json({ error: 'Failed to update sensor.' });
     }
 });
+
 app.delete('/api/sensors/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         await db.run("DELETE FROM sensors WHERE id = ?", req.params.id);
@@ -478,11 +540,25 @@ app.post('/api/cameras', async (req: ExpressRequest, res: ExpressResponse) => {
 app.put('/api/cameras/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     const { id } = req.params;
     try {
-        const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
-        await db.run(
-            "UPDATE cameras SET name = ?, station_id = ?, status = ?, view_direction = ?, rtsp_url = ?, camera_type = ? WHERE id = ?",
-            name, stationId, status, viewDirection, rtspUrl, cameraType, id
-        );
+        const fields = req.body;
+        const updates: string[] = [];
+        const params: any[] = [];
+        
+        if (fields.name !== undefined) { updates.push('name = ?'); params.push(fields.name); }
+        if (fields.stationId !== undefined) { updates.push('station_id = ?'); params.push(fields.stationId); }
+        if (fields.status !== undefined) { updates.push('status = ?'); params.push(fields.status); }
+        if (fields.viewDirection !== undefined) { updates.push('view_direction = ?'); params.push(fields.viewDirection); }
+        if (fields.rtspUrl !== undefined) { updates.push('rtsp_url = ?'); params.push(fields.rtspUrl); }
+        if (fields.cameraType !== undefined) { updates.push('camera_type = ?'); params.push(fields.cameraType); }
+
+        if (updates.length === 0) {
+            return res.status(200).json({ id, message: 'No fields to update.' });
+        }
+
+        const sql = `UPDATE cameras SET ${updates.join(', ')} WHERE id = ?`;
+        params.push(id);
+        
+        await db.run(sql, ...params);
         res.status(200).json({ id });
     } catch (error) {
         console.error(`Error updating camera ${id}:`, error);
@@ -575,6 +651,10 @@ app.get('/api/readings/history', async (req: ExpressRequest, res: ExpressRespons
 
 
 // DEFINITIONS & SETTINGS
+const isValidDefinitionType = (type: string): boolean => {
+    return ['station_types', 'sensor_types', 'camera_types'].includes(type);
+};
+
 app.get('/api/definitions', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const [stationTypes, sensorTypes, cameraTypes] = await Promise.all([
@@ -590,6 +670,9 @@ app.get('/api/definitions', async (req: ExpressRequest, res: ExpressResponse) =>
 });
 app.post('/api/definitions/:type', async (req: ExpressRequest, res: ExpressResponse) => {
     const { type } = req.params;
+    if (!isValidDefinitionType(type)) {
+        return res.status(400).json({ error: 'Invalid definition type.' });
+    }
     try {
         const { name } = req.body;
         const result = await db.run(`INSERT INTO ${type} (name) VALUES (?)`, name);
@@ -601,6 +684,9 @@ app.post('/api/definitions/:type', async (req: ExpressRequest, res: ExpressRespo
 });
 app.put('/api/definitions/:type/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     const { type, id } = req.params;
+    if (!isValidDefinitionType(type)) {
+        return res.status(400).json({ error: 'Invalid definition type.' });
+    }
     try {
         const { name } = req.body;
         await db.run(`UPDATE ${type} SET name = ? WHERE id = ?`, name, id);
@@ -612,6 +698,9 @@ app.put('/api/definitions/:type/:id', async (req: ExpressRequest, res: ExpressRe
 });
 app.delete('/api/definitions/:type/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     const { type, id } = req.params;
+    if (!isValidDefinitionType(type)) {
+        return res.status(400).json({ error: 'Invalid definition type.' });
+    }
     try {
         await db.run(`DELETE FROM ${type} WHERE id = ?`, id);
         res.status(204).send();
@@ -697,8 +786,28 @@ app.post('/api/report-schedules', async (req: ExpressRequest, res: ExpressRespon
 app.put('/api/report-schedules/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     const { id } = req.params;
     try {
-        const { isEnabled } = req.body; // For now, only supports toggling
-        await db.run("UPDATE report_schedules SET is_enabled = ? WHERE id = ?", isEnabled, id);
+        const fields = req.body;
+        const updates: string[] = [];
+        const params: any[] = [];
+
+        if (fields.name !== undefined) { updates.push('name = ?'); params.push(fields.name); }
+        if (fields.frequency !== undefined) { updates.push('frequency = ?'); params.push(fields.frequency); }
+        if (fields.time !== undefined) { updates.push('time = ?'); params.push(fields.time); }
+        if (fields.recipient !== undefined) { updates.push('recipient = ?'); params.push(fields.recipient); }
+        if (fields.isEnabled !== undefined) { updates.push('is_enabled = ?'); params.push(fields.isEnabled); }
+        if (fields.reportConfig !== undefined) {
+            updates.push('report_config = ?');
+            params.push(JSON.stringify(fields.reportConfig || {}));
+        }
+
+        if (updates.length === 0) {
+            return res.status(200).json({ id, message: 'No fields to update.' });
+        }
+
+        const sql = `UPDATE report_schedules SET ${updates.join(', ')} WHERE id = ?`;
+        params.push(id);
+
+        await db.run(sql, ...params);
         res.status(200).send('OK');
     } catch (error) {
         console.error(`Error updating report schedule ${id}:`, error);
@@ -726,7 +835,7 @@ app.get('/api/notifications', async (req: ExpressRequest, res: ExpressResponse) 
 });
 app.post('/api/notifications/mark-all-read', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
-        await db.run("UPDATE notifications SET is_read = 0 WHERE is_read = 1");
+        await db.run("UPDATE notifications SET is_read = 1 WHERE is_read = 0");
         res.status(200).send('OK');
     } catch (error) {
         console.error("Error marking all notifications as read:", error);
