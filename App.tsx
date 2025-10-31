@@ -26,6 +26,7 @@ const App: React.FC = () => {
   const [sensors, setSensors] = useState<Sensor[]>([]);
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const refreshAllData = useCallback(async () => {
     try {
@@ -67,6 +68,7 @@ const App: React.FC = () => {
     setCurrentPage(page);
     setViewingStationId(null); 
     setViewingCameraId(null);
+    setIsMobileSidebarOpen(false); // Close mobile sidebar on navigation
   };
 
   const handleViewStationDetails = (stationId: string) => {
@@ -88,7 +90,7 @@ const App: React.FC = () => {
     }
     switch (currentPage) {
       case Page.Dashboard:
-        return <Dashboard onViewStationDetails={handleViewStationDetails} stations={stations} sensors={sensors} />;
+        return <Dashboard onViewStationDetails={handleViewStationDetails} stations={stations} sensors={sensors} onRefresh={refreshAllData} />;
       case Page.Analysis:
         return <Analysis stations={stations} sensors={sensors} cameras={cameras} />;
       case Page.Stations:
@@ -104,14 +106,19 @@ const App: React.FC = () => {
       case Page.Notifications:
         return <Notifications notifications={notifications} setNotifications={setNotifications} onRefresh={refreshAllData} />;
       default:
-        return <Dashboard onViewStationDetails={handleViewStationDetails} stations={stations} sensors={sensors} />;
+        return <Dashboard onViewStationDetails={handleViewStationDetails} stations={stations} sensors={sensors} onRefresh={refreshAllData} />;
     }
   };
 
   return (
     <ThemeProvider>
       <div className="flex h-screen bg-secondary dark:bg-dark-secondary font-sans">
-        <Sidebar currentPage={currentPage} setCurrentPage={handleSetCurrentPage} />
+        <Sidebar 
+          currentPage={currentPage} 
+          setCurrentPage={handleSetCurrentPage}
+          isMobileOpen={isMobileSidebarOpen}
+          onClose={() => setIsMobileSidebarOpen(false)}
+        />
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header 
               currentPage={viewingStationId ? 'İstasyon Detayı' : viewingCameraId ? 'Kamera Detayı' : currentPage}
@@ -119,6 +126,7 @@ const App: React.FC = () => {
               onMarkAllNotificationsAsRead={handleMarkAllAsRead}
               onViewAllNotifications={() => handleSetCurrentPage(Page.Notifications)}
               agentStatus={agentStatus}
+              onToggleMobileSidebar={() => setIsMobileSidebarOpen(true)}
           />
           <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-6 lg:p-8">
             {renderPage()}

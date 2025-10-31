@@ -207,7 +207,7 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
 
     return (
         <Card className="p-0 overflow-hidden">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Karşılaştırmalı Kar Yüksekliği Analizi</h3>
                 <p className="text-sm text-muted">Fiziksel sensör verilerini, iki farklı görüntü işleme tekniğinin sonuçlarıyla karşılaştırın.</p>
                 <div className="mt-4 max-w-sm">
@@ -218,20 +218,20 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-11">
+            <div className="flex flex-col lg:flex-row">
                 {/* Ultrasonic */}
-                <div className="lg:col-span-3 p-6 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-gray-200 dark:border-gray-700">
+                <div className="w-full lg:w-1/4 p-4 sm:p-6 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-gray-200 dark:border-gray-700">
                      <div className="flex items-center gap-2"><RefreshIcon className="w-5 h-5 text-muted" /><h4 className="font-semibold text-gray-800 dark:text-gray-200">Ultrasonik Sensör</h4></div>
                     {ultrasonicSensor ? (
                         <>
-                            <div className="text-center my-8"><p className="text-7xl font-bold text-gray-900 dark:text-gray-100">{ultrasonicValue?.toFixed(1) ?? '--'}<span className="text-3xl text-muted ml-1">cm</span></p></div>
+                            <div className="text-center my-8"><p className="text-6xl sm:text-7xl font-bold text-gray-900 dark:text-gray-100">{ultrasonicValue?.toFixed(1) ?? '--'}<span className="text-3xl text-muted ml-1">cm</span></p></div>
                             <p className="text-xs text-center text-muted">Son Güncelleme: {formatTimeAgo(ultrasonicSensor.lastUpdate)}</p>
                         </>
                     ) : <div className="text-center py-10 text-muted my-auto">Mesafe sensörü bulunamadı.</div>}
                 </div>
 
                 {/* Image Analyses */}
-                <div className="lg:col-span-5 p-6 border-b lg:border-b-0 lg:border-r border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center">
+                <div className="w-full lg:w-1/2 p-4 sm:p-6 border-b lg:border-b-0 lg:border-r border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center">
                     <div className="flex items-center justify-center gap-2 mb-4">
                         <BrainIcon className="w-6 h-6 text-muted"/>
                         <h4 className="font-semibold text-gray-800 dark:text-gray-200 text-center">Görüntü İşleme Analizi</h4>
@@ -254,18 +254,18 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
 
                             <img src={sourceCamera?.photos?.[0] || 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'} alt="kamera görüntüsü" className="w-full h-48 object-cover rounded-md border dark:border-gray-700 bg-gray-300 dark:bg-gray-700"/>
 
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 <button onClick={() => handleTriggerAnalysis('gemini')} disabled={isLoadingAnalysis === 'gemini'} className="btn-secondary w-full text-sm flex items-center justify-center gap-2"> {isLoadingAnalysis === 'gemini' ? <LoadingSpinner/> : <BrainIcon className="w-4 h-4"/>} Gemini ile Analiz Et</button>
                                 <button onClick={() => handleTriggerAnalysis('opencv')} disabled={isLoadingAnalysis === 'opencv'} className="btn-secondary w-full text-sm flex items-center justify-center gap-2">{isLoadingAnalysis === 'opencv' ? <LoadingSpinner/> : <BrainIcon className="w-4 h-4"/>} OpenCV ile Analiz Et</button>
                             </div>
                              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 w-full">
-                                <div className="flex justify-between items-center mb-2">
+                                <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-2 gap-2">
                                     <h5 className="font-semibold text-gray-800 dark:text-gray-200 text-sm">Fotoğraf Arşivi</h5>
                                     <input 
                                         type="date"
                                         value={photoDateFilter}
                                         onChange={e => setPhotoDateFilter(e.target.value)}
-                                        className="input-base text-sm p-1"
+                                        className="input-base text-sm p-1 w-full sm:w-auto"
                                     />
                                 </div>
                                 {filteredPhotos.length > 0 ? (
@@ -299,7 +299,7 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
                 </div>
 
                 {/* Difference & Interpretation */}
-                <div className="lg:col-span-3 bg-gray-50 dark:bg-gray-800/50 p-6 flex flex-col">
+                <div className="w-full lg:w-1/4 bg-gray-50 dark:bg-gray-800/50 p-4 sm:p-6 flex flex-col">
                     <h4 className="font-semibold text-center text-gray-800 dark:text-gray-200 mb-4">Fark Analizi</h4>
                     <div className="space-y-4 flex-grow">
                         <div className="text-center bg-white dark:bg-gray-800 p-3 rounded-lg border dark:border-gray-700 h-full flex flex-col justify-center">
@@ -429,10 +429,10 @@ const CorrelationGraph: React.FC<{ stations: Station[], sensors: Sensor[] }> = (
     return (
         <Card>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Sensör Korelasyon Grafiği</h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 items-center">
-                <MultiSelectDropdown label="İstasyon" options={stationOptions} selected={selectedStations} onChange={setSelectedStations} />
-                <MultiSelectDropdown label="Sensör Tipi" options={sensorTypeOptions} selected={selectedSensorTypes} onChange={setSelectedSensorTypes} />
-                <button onClick={handleFetchHistory} disabled={isLoading} className="btn-primary md:col-span-2">
+            <div className="flex flex-col md:flex-row gap-4 mb-4">
+                <div className="w-full md:w-1/3"><MultiSelectDropdown label="İstasyon" options={stationOptions} selected={selectedStations} onChange={setSelectedStations} /></div>
+                <div className="w-full md:w-1/3"><MultiSelectDropdown label="Sensör Tipi" options={sensorTypeOptions} selected={selectedSensorTypes} onChange={setSelectedSensorTypes} /></div>
+                <button onClick={handleFetchHistory} disabled={isLoading} className="btn-primary w-full md:w-auto flex-grow">
                     {isLoading ? 'Yükleniyor...' : 'Grafiği Oluştur'}
                 </button>
             </div>
@@ -491,8 +491,6 @@ const DataExplorer: React.FC<{ stations: Station[], sensors: Sensor[] }> = ({ st
         if (value === null || value === undefined) return 'N/A';
         const numValue = getNumericValue(value);
         
-        // FIX: A non-null return from getNumericValue is always a number, so the inner type check is redundant.
-        // This also resolves the TS error under strict settings.
         if (numValue !== null) {
             return `${numValue.toFixed(2)}`;
         }
@@ -527,21 +525,22 @@ const DataExplorer: React.FC<{ stations: Station[], sensors: Sensor[] }> = ({ st
     return (
         <Card>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Geçmiş Veri Gezgini ve Dışa Aktarma</h3>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
-                <div className="md:col-span-2"><MultiSelectDropdown label="İstasyon" options={stationOptions} selected={selectedStations} onChange={setSelectedStations} /></div>
-                <div className="md:col-span-2"><MultiSelectDropdown label="Sensör Tipi" options={sensorTypeOptions} selected={selectedSensorTypes} onChange={setSelectedSensorTypes} /></div>
-                <select value={timeRange} onChange={e => setTimeRange(e.target.value)} className="input-base">
+            <div className="flex flex-col md:flex-row flex-wrap gap-4 mb-4">
+                <div className="w-full md:w-auto md:flex-1"><MultiSelectDropdown label="İstasyon" options={stationOptions} selected={selectedStations} onChange={setSelectedStations} /></div>
+                <div className="w-full md:w-auto md:flex-1"><MultiSelectDropdown label="Sensör Tipi" options={sensorTypeOptions} selected={selectedSensorTypes} onChange={setSelectedSensorTypes} /></div>
+                <select value={timeRange} onChange={e => setTimeRange(e.target.value)} className="input-base w-full md:w-auto">
                     <option value="last24h">Son 24 Saat</option>
                     <option value="last7d">Son 7 Gün</option>
                     <option value="last30d">Son 30 Gün</option>
                 </select>
             </div>
-             <div className="flex justify-end gap-2 mb-4">
-                <button onClick={handleFetchData} disabled={isLoading} className="btn-primary">
+             <div className="flex flex-col sm:flex-row justify-end gap-2 mb-4">
+                <button onClick={handleFetchData} disabled={isLoading} className="btn-primary w-full sm:w-auto">
                     {isLoading ? 'Veriler Getiriliyor...' : 'Verileri Getir'}
                 </button>
-                 <button onClick={handleExport} title="Verileri Excel olarak indir" className="p-2.5 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400" disabled={readings.length === 0}>
+                 <button onClick={handleExport} title="Verileri Excel olarak indir" className="p-2.5 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 w-full sm:w-auto flex items-center justify-center gap-2">
                     <DownloadIcon className="w-5 h-5"/>
+                    <span className="sm:hidden">Excel'e Aktar</span>
                 </button>
             </div>
              <div className="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg max-h-96">

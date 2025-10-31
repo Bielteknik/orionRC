@@ -300,7 +300,7 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
       {/* Tabs */}
       <Card className="p-0">
          <div className="px-4 border-b border-gray-200">
-            <nav className="flex -mb-px space-x-6">
+            <nav className="flex -mb-px space-x-6 overflow-x-auto">
                  {TABS.map(tab => (
                     <button
                       key={tab}
@@ -317,7 +317,7 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
             </nav>
          </div>
         
-         <div className="p-6">
+         <div className="p-4 sm:p-6">
             {activeTab === 'Veriler' && (
                 <>
                     <div className="relative w-full md:w-1/3 mb-4">
@@ -352,7 +352,7 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
 
                             return (
                                 <tr key={reading.id} className="border-b border-gray-200 hover:bg-gray-50">
-                                  <td className="px-6 py-4 font-mono text-gray-800">{displayTimestamp}</td>
+                                  <td className="px-6 py-4 font-mono text-gray-800 whitespace-nowrap">{displayTimestamp}</td>
                                   <td className="px-6 py-4 font-medium text-gray-900">{reading.sensorName}</td>
                                   <td className="px-6 py-4">{reading.sensorType}</td>
                                   <td className="px-6 py-4 text-right font-semibold text-gray-900">{`${formatReadingValue(reading)} ${reading.unit || ''}`}</td>
@@ -396,9 +396,9 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
             {activeTab === 'Kameralar' && (
                 <>
                     {cameras.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                        <div className="flex flex-col md:flex-row gap-6">
                             {/* Camera List */}
-                            <div className="md:col-span-1 lg:col-span-1">
+                            <div className="w-full md:w-1/3 lg:w-1/4">
                                 <h3 className="font-semibold text-gray-800 mb-3 px-1">Kameralar ({cameras.length})</h3>
                                 <ul className="space-y-2">
                                     {cameras.map(camera => (
@@ -424,7 +424,7 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
                                                     title="Canlı izle"
                                                 >
                                                     <PlayIcon className="w-4 h-4" />
-                                                    <span>İzle</span>
+                                                    <span className="hidden sm:inline">İzle</span>
                                                 </button>
                                             </div>
                                         </li>
@@ -432,7 +432,7 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
                                 </ul>
                             </div>
                             {/* Photo Gallery */}
-                            <div className="md:col-span-2 lg:col-span-3">
+                            <div className="w-full md:w-2/3 lg:w-3/4">
                                 {selectedCamera ? (
                                     <div>
                                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-3">
@@ -483,17 +483,17 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
             )}
             {activeTab === 'Konum' && station.locationCoords && (
                  <>
-                    <div className="flex justify-between items-center mb-4 pb-4 border-b border-gray-200 text-sm">
+                    <div className="flex flex-col sm:flex-row justify-between items-center mb-4 pb-4 border-b border-gray-200 text-sm gap-4">
                         <div>
                             <p className="text-xs text-muted">Koordinatlar</p>
                             <p className="font-semibold text-gray-800 font-mono">{`${station.locationCoords.lat}° K, ${station.locationCoords.lng}° D`}</p>
                         </div>
-                         <div>
-                            <p className="text-xs text-muted text-right">Son Güncelleme</p>
+                         <div className="self-start sm:self-center">
+                            <p className="text-xs text-muted sm:text-right">Son Güncelleme</p>
                             <p className="font-semibold text-gray-800">{formatTimeAgo(station.lastUpdate)}</p>
                         </div>
                     </div>
-                    <div className="h-[500px] rounded-lg overflow-hidden">
+                    <div className="h-[400px] md:h-[500px] rounded-lg overflow-hidden">
                         <InteractiveMap 
                             lat={station.locationCoords.lat}
                             lng={station.locationCoords.lng}

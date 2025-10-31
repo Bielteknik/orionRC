@@ -8,12 +8,15 @@ import {
     DefinitionsIcon, 
     ReportsIcon, 
     CloudIcon,
-    BrainIcon
+    BrainIcon,
+    XIcon
 } from '../icons/Icons';
 
 interface SidebarProps {
   currentPage: Page;
   setCurrentPage: (page: Page) => void;
+  isMobileOpen: boolean;
+  onClose: () => void;
 }
 
 interface NavItemProps {
@@ -39,7 +42,7 @@ const NavItem: React.FC<NavItemProps> = ({ page, icon, currentPage, onClick }) =
     </li>
 );
 
-const Sidebar: React.FC<SidebarProps> = ({ currentPage, setCurrentPage }) => {
+const SidebarContent: React.FC<Omit<SidebarProps, 'isMobileOpen' | 'onClose'>> = ({ currentPage, setCurrentPage }) => {
     const navItems = [
         { page: Page.Dashboard, icon: <DashboardIcon className="w-5 h-5" /> },
         { page: Page.Analysis, icon: <BrainIcon className="w-5 h-5" /> },
@@ -49,15 +52,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setCurrentPage }) => {
         { page: Page.Reports, icon: <ReportsIcon className="w-5 h-5" /> },
         { page: Page.Definitions, icon: <DefinitionsIcon className="w-5 h-5" /> },
     ];
-
+    
     return (
-        <aside className="hidden lg:flex w-64 bg-primary dark:bg-dark-primary border-r border-gray-200 dark:border-gray-700 flex-col flex-shrink-0">
-            <div className="flex items-center justify-center h-16 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-                <div className="flex items-center space-x-2">
-                    <CloudIcon className="w-8 h-8 text-accent" />
-                    <span className="text-xl font-bold text-gray-900 dark:text-gray-100">ORION</span>
-                </div>
-            </div>
+        <>
             <nav className="flex-1 p-4">
                 <ul className="space-y-2">
                     {navItems.map(item => (
@@ -76,7 +73,49 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, setCurrentPage }) => {
                     &copy; {new Date().getFullYear()} ORION Gözlem Platformu
                 </p>
             </div>
-        </aside>
+        </>
+    );
+};
+
+
+const Sidebar: React.FC<SidebarProps> = ({ currentPage, setCurrentPage, isMobileOpen, onClose }) => {
+    return (
+        <>
+            {/* Mobile Sidebar */}
+            <div className={`fixed inset-0 z-50 lg:hidden ${!isMobileOpen && 'pointer-events-none'}`}>
+                {/* Overlay */}
+                <div 
+                    className={`absolute inset-0 bg-black/60 transition-opacity ${isMobileOpen ? 'opacity-100' : 'opacity-0'}`}
+                    onClick={onClose} 
+                />
+                {/* Drawer */}
+                <aside 
+                    className={`relative z-10 w-64 h-full bg-primary dark:bg-dark-primary flex flex-col transition-transform duration-300 ease-in-out ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'}`}
+                >
+                     <div className="flex items-center justify-between h-16 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 px-4">
+                        <div className="flex items-center space-x-2">
+                            <CloudIcon className="w-8 h-8 text-accent" />
+                            <span className="text-xl font-bold text-gray-900 dark:text-gray-100">ORION</span>
+                        </div>
+                        <button onClick={onClose} className="p-1 -mr-2 text-muted dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full">
+                            <XIcon className="w-6 h-6" />
+                        </button>
+                    </div>
+                    <SidebarContent currentPage={currentPage} setCurrentPage={setCurrentPage} />
+                </aside>
+            </div>
+
+            {/* Desktop Sidebar */}
+            <aside className="hidden lg:flex w-64 bg-primary dark:bg-dark-primary border-r border-gray-200 dark:border-gray-700 flex-col flex-shrink-0">
+                <div className="flex items-center justify-center h-16 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+                    <div className="flex items-center space-x-2">
+                        <CloudIcon className="w-8 h-8 text-accent" />
+                        <span className="text-xl font-bold text-gray-900 dark:text-gray-100">ORION</span>
+                    </div>
+                </div>
+                <SidebarContent currentPage={currentPage} setCurrentPage={setCurrentPage} />
+            </aside>
+        </>
     );
 };
 

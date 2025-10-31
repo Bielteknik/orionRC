@@ -9,6 +9,7 @@ interface DashboardProps {
   onViewStationDetails: (stationId: string) => void;
   stations: Station[];
   sensors: Sensor[];
+  onRefresh: () => void;
 }
 
 const StatCard: React.FC<{ 
@@ -83,7 +84,7 @@ const SensorDisplayCard: React.FC<{ sensor: Sensor }> = ({ sensor }) => {
     );
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ onViewStationDetails, stations, sensors }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onViewStationDetails, stations, sensors, onRefresh }) => {
     const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
     const isLoading = stations.length === 0 && sensors.length === 0;
 
@@ -113,7 +114,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStationDetails, stations, s
                     <Skeleton className="h-28" /> <Skeleton className="h-28" />
                     <Skeleton className="h-28" /> <Skeleton className="h-28" />
                 </div>
-                <Skeleton className="h-[calc(65vh-50px)]" />
+                <Skeleton className="h-[400px] lg:h-[450px]" />
             </div>
         );
     }
@@ -129,25 +130,26 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStationDetails, stations, s
             </div>
 
             {/* Map and Sensor Panel */}
-            <div className="grid grid-cols-1 lg:grid-cols-11 gap-6 h-[500px]">
+            <div className="flex flex-col lg:flex-row gap-6">
                 {/* Map Section */}
-                <div className="lg:col-span-7 h-full bg-primary dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-hidden">
+                <div className="w-full lg:w-7/12 h-[400px] lg:h-[500px] bg-primary dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-hidden">
                     <FullMap 
                         stations={stations} 
                         onViewStationDetails={onViewStationDetails} 
                         onStationSelect={setSelectedStationId}
                         selectedStationId={selectedStationId}
+                        onRefresh={onRefresh}
                     />
                 </div>
 
                 {/* Sensor Data Section */}
-                <div className="lg:col-span-4 h-full flex flex-col space-y-4">
+                <div className="w-full lg:w-5/12 h-auto lg:h-[500px] flex flex-col space-y-4">
                     <Card className="flex-shrink-0 p-4">
-                        <h2 className="font-bold text-lg text-gray-900">İstasyon Sensörleri</h2>
+                        <h2 className="font-bold text-lg text-gray-900 dark:text-gray-100">İstasyon Sensörleri</h2>
                         <select 
                             value={selectedStationId || ''}
                             onChange={e => setSelectedStationId(e.target.value)}
-                            className="w-full mt-2 p-2 border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-accent"
+                            className="w-full mt-2 p-2 border border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-accent"
                         >
                             {stations.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
@@ -161,8 +163,8 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStationDetails, stations, s
                                 ))}
                             </div>
                         ) : (
-                            <Card className="flex items-center justify-center h-full">
-                                <p className="text-center text-muted">Veri yok</p>
+                            <Card className="flex items-center justify-center h-full min-h-[200px]">
+                                <p className="text-center text-muted">Bu istasyon için sensör bulunamadı.</p>
                             </Card>
                         )}
                     </div>

@@ -245,17 +245,17 @@ const Reports: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <div><h2 className="text-2xl font-bold text-gray-900">Raporlar</h2></div>
-                <button onClick={() => activeTab === 'generated' ? setIsDrawerOpen(true) : setIsScheduleDrawerOpen(true)} className="flex items-center justify-center gap-2 bg-accent text-white px-4 py-2.5 rounded-lg hover:bg-orange-600 transition-colors"><AddIcon className="w-5 h-5" />
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                <div><h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Raporlar</h2></div>
+                <button onClick={() => activeTab === 'generated' ? setIsDrawerOpen(true) : setIsScheduleDrawerOpen(true)} className="w-full md:w-auto flex items-center justify-center gap-2 bg-accent text-white px-4 py-2.5 rounded-lg hover:bg-orange-600 transition-colors"><AddIcon className="w-5 h-5" />
                     <span className="font-semibold">{activeTab === 'generated' ? 'Yeni Rapor Oluştur' : 'Yeni Plan Oluştur'}</span>
                 </button>
             </div>
             
-             <div className="border-b border-gray-200">
-                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                    <button onClick={() => setActiveTab('generated')} className={`flex items-center gap-2 whitespace-nowrap py-3 px-1 border-b-2 font-semibold text-sm ${activeTab === 'generated' ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-gray-700'}`}><DownloadIcon className="w-5 h-5"/>Oluşturulan Raporlar</button>
-                    <button onClick={() => setActiveTab('scheduled')} className={`flex items-center gap-2 whitespace-nowrap py-3 px-1 border-b-2 font-semibold text-sm ${activeTab === 'scheduled' ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-gray-700'}`}><CalendarIcon className="w-5 h-5"/>Zamanlanmış Raporlar</button>
+             <div className="border-b border-gray-200 dark:border-gray-700">
+                <nav className="-mb-px flex space-x-8 overflow-x-auto" aria-label="Tabs">
+                    <button onClick={() => setActiveTab('generated')} className={`flex items-center gap-2 whitespace-nowrap py-3 px-1 border-b-2 font-semibold text-sm ${activeTab === 'generated' ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-gray-700 dark:hover:text-gray-300'}`}><DownloadIcon className="w-5 h-5"/>Oluşturulan Raporlar</button>
+                    <button onClick={() => setActiveTab('scheduled')} className={`flex items-center gap-2 whitespace-nowrap py-3 px-1 border-b-2 font-semibold text-sm ${activeTab === 'scheduled' ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-gray-700 dark:hover:text-gray-300'}`}><CalendarIcon className="w-5 h-5"/>Zamanlanmış Raporlar</button>
                 </nav>
             </div>
 
@@ -268,8 +268,8 @@ const Reports: React.FC = () => {
             </Card>
 
             {activeTab === 'generated' && (
-                <Card className="p-0"><div className="overflow-x-auto"><table className="w-full text-sm text-left text-gray-600"><thead className="text-xs text-gray-700 uppercase bg-gray-100"><tr><th scope="col" className="px-6 py-3">Rapor Başlığı</th><th scope="col" className="px-6 py-3">Rapor Tipi</th><th scope="col" className="px-6 py-3">Oluşturulma Tarihi</th><th scope="col" className="px-6 py-3 text-right">İşlemler</th></tr></thead><tbody>
-                {filteredReports.map(report => (<tr key={report.id} className="border-b border-gray-200 hover:bg-gray-50"><td className="px-6 py-4 font-medium text-gray-900">{report.title}</td><td className="px-6 py-4"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${report.type === 'daily' ? 'bg-blue-100 text-blue-800' : report.type === 'weekly' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'}`}>{report.type}</span></td><td className="px-6 py-4 font-mono text-gray-800">{new Date(report.createdAt).toLocaleString('tr-TR')}</td>
+                <Card className="p-0"><div className="overflow-x-auto"><table className="w-full text-sm text-left text-gray-600 min-w-[640px]"><thead className="text-xs text-gray-700 uppercase bg-gray-100 dark:bg-gray-800"><tr><th scope="col" className="px-6 py-3">Rapor Başlığı</th><th scope="col" className="px-6 py-3">Rapor Tipi</th><th scope="col" className="px-6 py-3">Oluşturulma Tarihi</th><th scope="col" className="px-6 py-3 text-right">İşlemler</th></tr></thead><tbody>
+                {filteredReports.map(report => (<tr key={report.id} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50"><td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">{report.title}</td><td className="px-6 py-4"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${report.type === 'daily' ? 'bg-blue-100 text-blue-800' : report.type === 'weekly' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'}`}>{report.type}</span></td><td className="px-6 py-4 font-mono text-gray-800 dark:text-gray-200">{new Date(report.createdAt).toLocaleString('tr-TR')}</td>
                 <td className="px-6 py-4 text-right flex justify-end items-center gap-2">
                     <button onClick={() => handleDownloadReport(report)} className="flex items-center gap-2 text-accent font-semibold py-1 px-3 rounded-lg hover:bg-accent/10 transition-colors text-sm"><DownloadIcon className="w-4 h-4" /><span>İndir</span></button>
                     <button onClick={() => handleOpenDeleteReportModal(report)} className="text-muted hover:text-danger p-2 rounded-lg hover:bg-danger/10 transition-colors"><DeleteIcon className="w-4 h-4"/></button>
@@ -279,8 +279,8 @@ const Reports: React.FC = () => {
             )}
 
              {activeTab === 'scheduled' && (
-                <Card className="p-0"><div className="overflow-x-auto"><table className="w-full text-sm text-left text-gray-600"><thead className="text-xs text-gray-700 uppercase bg-gray-100"><tr><th scope="col" className="px-6 py-3">Plan Adı</th><th scope="col" className="px-6 py-3">Sıklık</th><th scope="col" className="px-6 py-3">Alıcı</th><th scope="col" className="px-6 py-3">Durum</th><th scope="col" className="px-6 py-3">Son Çalışma</th><th scope="col" className="px-6 py-3 text-right">İşlemler</th></tr></thead><tbody>
-                {schedules.map(schedule => (<tr key={schedule.id} className="border-b border-gray-200 hover:bg-gray-50"><td className="px-6 py-4 font-medium text-gray-900">{schedule.name}</td><td className="px-6 py-4 capitalize">{schedule.frequency} @ {schedule.time}</td><td className="px-6 py-4">{schedule.recipient}</td>
+                <Card className="p-0"><div className="overflow-x-auto"><table className="w-full text-sm text-left text-gray-600 min-w-[720px]"><thead className="text-xs text-gray-700 uppercase bg-gray-100 dark:bg-gray-800"><tr><th scope="col" className="px-6 py-3">Plan Adı</th><th scope="col" className="px-6 py-3">Sıklık</th><th scope="col" className="px-6 py-3">Alıcı</th><th scope="col" className="px-6 py-3">Durum</th><th scope="col" className="px-6 py-3">Son Çalışma</th><th scope="col" className="px-6 py-3 text-right">İşlemler</th></tr></thead><tbody>
+                {schedules.map(schedule => (<tr key={schedule.id} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50"><td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">{schedule.name}</td><td className="px-6 py-4 capitalize">{schedule.frequency} @ {schedule.time}</td><td className="px-6 py-4">{schedule.recipient}</td>
                 <td className="px-6 py-4">
                     <label className="flex items-center cursor-pointer">
                         <div className="relative">
@@ -289,7 +289,7 @@ const Reports: React.FC = () => {
                         </div>
                     </label>
                 </td>
-                <td className="px-6 py-4 font-mono text-gray-800 text-xs">{schedule.lastRun || "Henüz çalışmadı"}</td>
+                <td className="px-6 py-4 font-mono text-gray-800 dark:text-gray-200 text-xs">{schedule.lastRun || "Henüz çalışmadı"}</td>
                 <td className="px-6 py-4 text-right flex justify-end gap-2">
                     <button className="text-muted hover:text-accent p-2 rounded-lg hover:bg-accent/10 transition-colors"><EditIcon className="w-4 h-4"/></button>
                     <button onClick={() => handleOpenDeleteScheduleModal(schedule)} className="text-muted hover:text-danger p-2 rounded-lg hover:bg-danger/10 transition-colors"><DeleteIcon className="w-4 h-4"/></button>

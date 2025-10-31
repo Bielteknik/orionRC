@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="tr">
+<html lang="tr" class="scrollbar-thin">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -26,6 +26,32 @@
       }
       #root, #root > div {
         height: 100%;
+      }
+      .scrollbar-thin {
+        scrollbar-width: thin;
+        scrollbar-color: #A0A0A0 #F0F0F0;
+      }
+      .dark .scrollbar-thin {
+        scrollbar-color: #4B5563 #1F2937;
+      }
+      .scrollbar-thin::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      .scrollbar-thin::-webkit-scrollbar-track {
+        background: #F0F0F0;
+      }
+      .dark .scrollbar-thin::-webkit-scrollbar-track {
+        background: #1F2937;
+      }
+      .scrollbar-thin::-webkit-scrollbar-thumb {
+        background-color: #A0A0A0;
+        border-radius: 10px;
+        border: 2px solid #F0F0F0;
+      }
+      .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+        background-color: #4B5563;
+        border-color: #1F2937;
       }
     </style>
     

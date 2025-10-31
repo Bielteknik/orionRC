@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Page, Notification } from '../../types';
 import { useTheme } from '../ThemeContext';
-import { BellIcon, SunIcon, MoonIcon, CheckIcon } from '../icons/Icons';
+import { BellIcon, SunIcon, MoonIcon, CheckIcon, MenuIcon } from '../icons/Icons';
 
 interface HeaderProps {
   currentPage: Page | string;
@@ -9,6 +9,7 @@ interface HeaderProps {
   onMarkAllNotificationsAsRead: () => void;
   onViewAllNotifications: () => void;
   agentStatus: { status: string; lastUpdate: string | null };
+  onToggleMobileSidebar: () => void;
 }
 
 const formatTimeAgo = (isoString: string | null): string => {
@@ -27,7 +28,7 @@ const formatTimeAgo = (isoString: string | null): string => {
     return `${days} gün önce`;
 };
 
-const Header: React.FC<HeaderProps> = ({ currentPage, notifications, onMarkAllNotificationsAsRead, onViewAllNotifications, agentStatus }) => {
+const Header: React.FC<HeaderProps> = ({ currentPage, notifications, onMarkAllNotificationsAsRead, onViewAllNotifications, agentStatus, onToggleMobileSidebar }) => {
     const { theme, toggleTheme } = useTheme();
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
     const notificationRef = useRef<HTMLDivElement>(null);
@@ -47,10 +48,15 @@ const Header: React.FC<HeaderProps> = ({ currentPage, notifications, onMarkAllNo
     const isOnline = agentStatus.status === 'online';
     
     return (
-        <header className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-3 bg-primary dark:bg-dark-primary border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-            <h1 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-gray-100">{currentPage}</h1>
+        <header className="flex items-center justify-between px-4 md:px-6 py-3 bg-primary dark:bg-dark-primary border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+            <div className="flex items-center gap-2">
+                <button onClick={onToggleMobileSidebar} className="lg:hidden p-2 text-muted dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full">
+                    <MenuIcon className="w-6 h-6" />
+                </button>
+                <h1 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">{currentPage}</h1>
+            </div>
 
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 sm:space-x-4">
                 <div className="flex items-center space-x-2" title={`Son sinyal: ${formatTimeAgo(agentStatus.lastUpdate)}`}>
                     <div className={`relative w-3 h-3 rounded-sm ${isOnline ? 'bg-green-500' : 'bg-red-500'}`}>
                         {isOnline && <div className="absolute inset-0 w-full h-full bg-green-500 rounded-sm animate-ping"></div>}
