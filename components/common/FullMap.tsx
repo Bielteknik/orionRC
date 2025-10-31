@@ -28,7 +28,6 @@ const FullMap: React.FC<FullMapProps> = ({ stations, onViewStationDetails, onSta
     useEffect(() => {
         let map: any;
         if (mapContainerRef.current) {
-            // If map already exists, remove it before re-creating for theme change
             if (mapRef.current) {
                 mapRef.current.remove();
                 mapRef.current = null;
@@ -40,7 +39,6 @@ const FullMap: React.FC<FullMapProps> = ({ stations, onViewStationDetails, onSta
             }).setView([39.90, 41.26], 6);
             mapRef.current = map;
 
-            // Define layers
             const streetLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
             });
@@ -57,29 +55,27 @@ const FullMap: React.FC<FullMapProps> = ({ stations, onViewStationDetails, onSta
                 "Karanlık": darkLayer,
             };
 
-            // Set default layer based on theme
             if (theme === 'dark') {
                 darkLayer.addTo(map);
             } else {
                 streetLayer.addTo(map);
             }
 
-            // Add layer control
-            L.control.layers(baseMaps).addTo(map);
+            const layerControl = L.control.layers(baseMaps, undefined, { position: 'topright' }).addTo(map);
+            
+            const layerControlContainer = layerControl.getContainer();
+            const toggle = layerControlContainer.querySelector('.leaflet-control-layers-toggle');
+            if (toggle) {
+                toggle.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M2.25 12l8.954 8.955c.44.439 1.152.439 1.591 0L21.75 12" /></svg>`;
+            }
+
 
              // Add custom refresh control
             const RefreshControl = L.Control.extend({
                 onAdd: function() {
-                    const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
-                    container.style.backgroundColor = 'white';
-                    container.style.width = '34px';
-                    container.style.height = '34px';
-                    container.style.display = 'flex';
-                    container.style.alignItems = 'center';
-                    container.style.justifyContent = 'center';
-                    container.style.cursor = 'pointer';
-                    container.title = 'Haritayı Yenile';
-                    container.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-gray-700"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0011.664 0l3.181-3.183m-4.991-2.696L7.985 5.985m11.664 0l-3.181 3.183m0 0L7.985 5.985" /></svg>`;
+                    const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-custom-control');
+                    container.title = 'Verileri Yenile';
+                    container.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0011.664 0l3.181-3.183m-4.991-2.696L7.985 5.985m11.664 0l-3.181 3.183m0 0L7.985 5.985" /></svg>`;
                     
                     L.DomEvent.on(container, 'click', (e: MouseEvent) => {
                         L.DomEvent.stopPropagation(e);
@@ -204,13 +200,49 @@ const FullMap: React.FC<FullMapProps> = ({ stations, onViewStationDetails, onSta
                 .leaflet-popup-content-wrapper .leaflet-popup-content { padding: 8px; }
                 .dark .leaflet-popup-content-wrapper, .dark .leaflet-popup-tip { background: #1f2937; color: #f3f4f6; border: 1px solid #374151; }
                 .dark .leaflet-popup-content-wrapper h3 { color: #f9fafb; }
-                .leaflet-control-layers-toggle { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="%23374151"><path d="M26 20v-4l-8-4-8 4v4l8 4zM4 15.5l8-4 8 4-8 4-8-4zM26 12l-8-4-8 4 8 4 8-4z"/></svg>') !important; }
-                .dark .leaflet-control-layers-toggle { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="%23d1d5db"><path d="M26 20v-4l-8-4-8 4v4l8 4zM4 15.5l8-4 8 4-8 4-8-4zM26 12l-8-4-8 4 8 4 8-4z"/></svg>') !important; }
+
+                .leaflet-control-layers-toggle {
+                    background-image: none !important;
+                    width: 34px !important;
+                    height: 34px !important;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .leaflet-control-layers-toggle svg {
+                    width: 20px;
+                    height: 20px;
+                    stroke: #374151;
+                }
+                .dark .leaflet-control-layers-toggle svg {
+                    stroke: #d1d5db;
+                }
+
                 .dark .leaflet-control-layers { background: #1f2937; border: 1px solid #374151; }
                 .dark .leaflet-bar { background-color: #1f2937; border: 1px solid #374151; }
                 .dark .leaflet-bar a, .dark .leaflet-bar a:hover { background-color: #1f2937; color: #d1d5db; }
-                .dark .leaflet-control-custom { background-color: #1f2937 !important; }
-                .dark .leaflet-control-custom svg { stroke: #d1d5db; }
+                
+                .leaflet-custom-control {
+                    background-color: white;
+                    width: 34px;
+                    height: 34px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                }
+                 .leaflet-custom-control svg {
+                    width: 20px;
+                    height: 20px;
+                    stroke: #374151;
+                }
+                .dark .leaflet-custom-control {
+                    background-color: #1f2937 !important;
+                }
+                .dark .leaflet-custom-control svg {
+                    stroke: #d1d5db;
+                }
+
                 @keyframes pulse {
                     0% { transform: scale(0.7); opacity: 0.4; }
                     50% { transform: scale(1.2); opacity: 0.1; }

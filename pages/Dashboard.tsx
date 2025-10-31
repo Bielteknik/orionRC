@@ -120,9 +120,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStationDetails, stations, s
     }
     
     return (
-        <div className="space-y-6">
+        <div className="flex flex-col h-full gap-6">
             {/* Top Stat Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 flex-shrink-0">
                 <StatCard icon={<StationIcon />} label="Aktif İstasyon" value={`${stats.activeStations} / ${stats.totalStations}`} subtitle="Sistemdeki online istasyonlar" iconColorClass="text-blue-500" gradientFromClass="from-blue-50" />
                 <StatCard icon={<SensorIcon />} label="Toplam Sensör" value={stats.totalSensors} subtitle="Tüm istasyonlardaki sensörler" iconColorClass="text-green-500" gradientFromClass="from-green-50" />
                 <StatCard icon={<CameraIcon />} label="Toplam Kamera" value={stats.totalCameras} subtitle="Tüm istasyonlardaki kameralar" iconColorClass="text-purple-500" gradientFromClass="from-purple-50" />
@@ -130,9 +130,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStationDetails, stations, s
             </div>
 
             {/* Map and Sensor Panel */}
-            <div className="flex flex-col lg:flex-row gap-6">
+            <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
                 {/* Map Section */}
-                <div className="w-full lg:w-7/12 h-[400px] lg:h-[500px] bg-primary dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-hidden">
+                <div className="w-full lg:w-7/12 bg-primary dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-hidden">
                     <FullMap 
                         stations={stations} 
                         onViewStationDetails={onViewStationDetails} 
@@ -143,7 +143,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStationDetails, stations, s
                 </div>
 
                 {/* Sensor Data Section */}
-                <div className="w-full lg:w-5/12 h-auto lg:h-[500px] flex flex-col space-y-4">
+                <div className="w-full lg:w-5/12 flex flex-col gap-4">
                     <Card className="flex-shrink-0 p-4">
                         <h2 className="font-bold text-lg text-gray-900 dark:text-gray-100">İstasyon Sensörleri</h2>
                         <select 

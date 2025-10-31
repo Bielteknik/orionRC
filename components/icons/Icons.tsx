@@ -186,6 +186,12 @@ export const MapIcon: React.FC<IconProps> = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M9 20.25l-4.5-2.25m4.5 2.25v-8.25m0 8.25l4.5-2.25m-4.5 2.25L4.5 15.75m4.5 4.5l-4.5-2.25m9-4.5l-4.5 2.25m4.5-2.25v8.25m0-8.25l-4.5 2.25m4.5-2.25L13.5 15.75m-4.5-9.75l4.5-2.25m0 0l4.5 2.25m-4.5-2.25v8.25m0-8.25L9 3.75" /></svg>
 );
 
+export const LayersIcon: React.FC<IconProps> = (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M2.25 12l8.954 8.955c.44.439 1.152.439 1.591 0L21.75 12" />
+    </svg>
+);
+
 export const ChevronDownIcon: React.FC<IconProps> = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
 );
