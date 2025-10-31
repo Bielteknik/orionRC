@@ -34,8 +34,8 @@ const getNumericValue = (value: any): number | null => {
         const numeric = Object.values(value).find(v => typeof v === 'number');
         return typeof numeric === 'number' ? numeric : null;
     }
-    const parsed = parseFloat(value);
-    return isNaN(parsed) ? null : parsed;
+    const parsed = parseFloat(String(value));
+    return isNaN(parsed) || !isFinite(parsed) ? null : parsed;
 }
 
 const blobToBase64 = (blob: Blob): Promise<string> => {
@@ -172,7 +172,7 @@ const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sen
     const handleInterpret = async () => {
         setIsLoadingInterpretation(true);
         setInterpretation('');
-        const diff = (ultrasonicValue !== null && virtualSensorValue !== null) ? Math.abs(ultrasonicValue - virtualSensorValue).toFixed(1) : "hesaplanamadı";
+        const diff = (ultrasonicValue !== null && virtualSensorValue !== null) ? Math.abs(ultrasonicValue - virtualSensorValue).toFixed(2) : "hesaplanamadı";
 
         try {
             const prompt = `Sen bir meteoroloji ve sensör veri analistisin. Bir istasyonda kar yüksekliği iki farklı yöntemle ölçülüyor:
@@ -232,7 +232,7 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
                     {ultrasonicSensor ? (
                         <>
                             <div className="flex-grow flex items-center justify-center text-center my-4">
-                                <p className="text-6xl font-bold text-gray-900 dark:text-gray-100">{ultrasonicValue?.toFixed(1) ?? '--'}<span className="text-3xl text-muted ml-2">cm</span></p>
+                                <p className="text-6xl font-bold text-gray-900 dark:text-gray-100">{ultrasonicValue?.toFixed(2) ?? '--'}<span className="text-3xl text-muted ml-2">cm</span></p>
                             </div>
                             <p className="text-xs text-center text-muted">Son Güncelleme: {formatTimeAgo(ultrasonicSensor.lastUpdate)}</p>
                         </>
@@ -247,7 +247,7 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
                     {virtualSensor ? (
                         <>
                             <div className="flex-grow flex items-center justify-center text-center my-4">
-                                <p className="text-6xl font-bold text-gray-900 dark:text-gray-100">{virtualSensorValue?.toFixed(1) ?? '--'}<span className="text-3xl text-muted ml-2">cm</span></p>
+                                <p className="text-6xl font-bold text-gray-900 dark:text-gray-100">{virtualSensorValue?.toFixed(2) ?? '--'}<span className="text-3xl text-muted ml-2">cm</span></p>
                             </div>
                             <div className="space-y-2">
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -265,7 +265,7 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
                     <div className="md:col-span-1 text-center border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-700 pb-4 md:pb-0 md:pr-6">
                         <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-1">Ölçüm Farkı</h4>
-                         <p className={`text-5xl font-bold ${getDiffColor(diffValue)}`}>{diffValue?.toFixed(1) ?? '--'} <span className="text-3xl text-muted">cm</span></p>
+                         <p className={`text-5xl font-bold ${getDiffColor(diffValue)}`}>{diffValue?.toFixed(2) ?? '--'} <span className="text-3xl text-muted">cm</span></p>
                     </div>
                     <div className="md:col-span-2">
                          <div className="flex justify-between items-center mb-2">
@@ -416,7 +416,6 @@ const CorrelationGraph: React.FC<{ stations: Station[], sensors: Sensor[] }> = (
             const entry = timeMap.get(timestamp);
             
             const numericValue = getNumericValue(reading.value);
-            // FIX: Use getNumericValue to safely extract and format the numeric value.
             if (numericValue !== null) {
                 entry[reading.sensorType] = Number(numericValue.toFixed(2));
             } else {
@@ -489,15 +488,11 @@ const DataExplorer: React.FC<{ stations: Station[], sensors: Sensor[] }> = ({ st
     }, [selectedStations, selectedSensorTypes]);
 
     const formatReadingValue = (reading: any): string => {
-        const { value } = reading;
-        if (value === null || value === undefined) return 'N/A';
-        const numValue = getNumericValue(value);
-        
+        const numValue = getNumericValue(reading.value);
         if (numValue !== null) {
-            return `${numValue.toFixed(2)}`;
+            return numValue.toFixed(2);
         }
-        
-        return JSON.stringify(value);
+        return 'N/A';
     };
 
     const handleExport = () => {

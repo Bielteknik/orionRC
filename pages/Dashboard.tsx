@@ -71,8 +71,8 @@ const SensorDisplayCard: React.FC<{ sensor: Sensor }> = ({ sensor }) => {
              }
              return 'N/A';
         }
-        // Round to 2 decimal places and convert back to a number to remove trailing zeros
-        return Number(numericValue.toFixed(2)).toString();
+        // Always format to 2 decimal places.
+        return numericValue.toFixed(2);
     }, [sensor.value]);
 
 

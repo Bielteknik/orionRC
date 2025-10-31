@@ -44,6 +44,7 @@ const safeJSONParse = (str: string | null | undefined, fallback: any) => {
 const roundNumericValues = (value: any): any => {
     if (typeof value === 'number') {
         // Use toFixed to handle floating point inaccuracies and then convert back to number.
+        // This is more robust than simple multiplication/division rounding for edge cases.
         return parseFloat(value.toFixed(2));
     }
     if (typeof value === 'object' && value !== null && !Array.isArray(value)) {

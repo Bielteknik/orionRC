@@ -30,6 +30,17 @@ const formatTimeAgo = (isoString: string | undefined): string => {
     return `${days} gün önce`;
 };
 
+const getNumericValue = (value: any): number | null => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number') return value;
+    if (typeof value === 'object') {
+        const numeric = Object.values(value).find(v => typeof v === 'number');
+        return typeof numeric === 'number' ? numeric : null;
+    }
+    const parsed = parseFloat(String(value));
+    return isNaN(parsed) || !isFinite(parsed) ? null : parsed;
+};
+
 
 const SensorCard: React.FC<{
     sensor: Sensor;
@@ -60,35 +71,15 @@ const SensorCard: React.FC<{
     };
 
     const displayValue = useMemo(() => {
-        const { value, type, interface: sensorInterface } = sensor;
-        if (value === null || value === undefined) return 'N/A';
-    
-        if (typeof value === 'object') {
-            if (sensorInterface === 'openweather') {
-                if (type === 'Sıcaklık' && typeof value.temperature === 'number') {
-                    return value.temperature.toFixed(1);
-                }
-                if (type === 'Nem' && typeof value.humidity === 'number') {
-                    return value.humidity.toFixed(1);
-                }
-            }
-            const numericValue = Object.values(value).find(v => typeof v === 'number');
-            if (typeof numericValue === 'number') {
-                return numericValue.toFixed(1);
-            }
-            return 'N/A';
+        const numericValue = getNumericValue(sensor.value);
+        if (numericValue === null) {
+            if (sensor.value && typeof sensor.value === 'object' && 'weight_kg' in sensor.value && sensor.value.weight_kg === 'N/A') {
+                 return 'N/A';
+             }
+             return 'N/A';
         }
-    
-        // For non-objects, try to format as a number if possible, otherwise just convert to string.
-        const numValue = Number(value);
-        if (!isNaN(numValue) && isFinite(numValue)) {
-            // Format to 1 decimal place, but don't add .0 for integers.
-            return String(parseFloat(numValue.toFixed(1)));
-        }
-    
-        // For any other primitive type like a non-numeric string or boolean, convert to string to be safe.
-        return String(value);
-    }, [sensor]);
+        return numericValue.toFixed(2);
+    }, [sensor.value]);
 
     return (
         <Card className="p-3 flex flex-col h-full">

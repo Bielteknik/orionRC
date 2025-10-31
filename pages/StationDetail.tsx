@@ -49,6 +49,17 @@ const formatTimeAgo = (isoString: string | undefined): string => {
     return `${days} gün önce`;
 };
 
+const getNumericValue = (value: any): number | null => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number') return value;
+    if (typeof value === 'object') {
+        const numeric = Object.values(value).find(v => typeof v === 'number');
+        return typeof numeric === 'number' ? numeric : null;
+    }
+    const parsed = parseFloat(String(value));
+    return isNaN(parsed) || !isFinite(parsed) ? null : parsed;
+};
+
 
 const statusInfo: Record<string, { text: string, className: string }> = {
     active: { text: 'Aktif', className: 'bg-gray-800 text-white' },
@@ -76,25 +87,15 @@ const SensorCard: React.FC<{ sensor: Sensor, onClick: () => void }> = ({ sensor,
     };
 
     const displayValue = useMemo(() => {
-        if (sensor.value === null || sensor.value === undefined) return 'N/A';
-
-        if (typeof sensor.value === 'object') {
-             // Handle OpenWeather sensors which return a combined object
-            if (sensor.interface === 'openweather') {
-                if (sensor.type === 'Sıcaklık' && sensor.value.temperature !== undefined) {
-                    return sensor.value.temperature;
-                }
-                if (sensor.type === 'Nem' && sensor.value.humidity !== undefined) {
-                    return sensor.value.humidity;
-                }
+        const numericValue = getNumericValue(sensor.value);
+        if (numericValue === null) {
+            if (sensor.value && typeof sensor.value === 'object' && 'weight_kg' in sensor.value && sensor.value.weight_kg === 'N/A') {
+                return 'N/A';
             }
-            // Fallback for other complex objects (like snow depth)
-            const numericValue = Object.values(sensor.value).find(v => typeof v === 'number');
-            return numericValue !== undefined ? numericValue : 'N/A';
+            return 'N/A';
         }
-
-        return sensor.value;
-    }, [sensor]);
+        return numericValue.toFixed(2);
+    }, [sensor.value]);
 
     return (
         <Card className="p-4 flex flex-col space-y-3 h-full cursor-pointer hover:shadow-md hover:border-accent transition-all" onClick={onClick}>
@@ -128,23 +129,9 @@ const SensorCard: React.FC<{ sensor: Sensor, onClick: () => void }> = ({ sensor,
 
 // Helper function to correctly format a sensor reading value for display
 const formatReadingValue = (reading: SensorReading): string => {
-    const { value, sensorType, interface: sensorInterface } = reading;
-    if (value === null || value === undefined) return 'N/A';
-    if (typeof value !== 'object') return String(value);
-
-    // Handle OpenWeather based on sensor type
-    if (sensorInterface === 'openweather') {
-        if (sensorType === 'Sıcaklık' && value.temperature !== undefined) {
-            return String(value.temperature);
-        }
-        if (sensorType === 'Nem' && value.humidity !== undefined) {
-            return String(value.humidity);
-        }
-    }
-    
-    // Generic fallback for any other object: find the first numeric value
-    const numericValue = Object.values(value).find(v => typeof v === 'number');
-    return numericValue !== undefined ? String(numericValue) : JSON.stringify(value);
+    const numericValue = getNumericValue(reading.value);
+    if (numericValue === null) return 'N/A';
+    return numericValue.toFixed(2);
 };
 
 

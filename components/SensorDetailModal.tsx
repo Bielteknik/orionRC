@@ -28,22 +28,23 @@ const getSensorIcon = (type: string) => {
     }
 };
 
-const formatDisplayValue = (reading: SensorReading): string => {
-    const { value, sensorType, interface: sensorInterface } = reading;
-    if (value === null || value === undefined) return 'N/A';
-    if (typeof value !== 'object') return String(value);
-
-    if (sensorInterface === 'openweather') {
-        if (sensorType === 'Sıcaklık' && value.temperature !== undefined) {
-            return String(value.temperature);
-        }
-        if (sensorType === 'Nem' && value.humidity !== undefined) {
-            return String(value.humidity);
-        }
+const getNumericValue = (value: any): number | null => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number') return value;
+    if (typeof value === 'object') {
+        const numeric = Object.values(value).find(v => typeof v === 'number');
+        return typeof numeric === 'number' ? numeric : null;
     }
-    
-    const numericValue = Object.values(value).find(v => typeof v === 'number');
-    return numericValue !== undefined ? String(numericValue) : JSON.stringify(value);
+    const parsed = parseFloat(String(value));
+    return isNaN(parsed) || !isFinite(parsed) ? null : parsed;
+};
+
+const formatDisplayValue = (reading: SensorReading): string => {
+    const numericValue = getNumericValue(reading.value);
+    if (numericValue !== null) {
+        return numericValue.toFixed(2);
+    }
+    return 'N/A';
 };
 
 
