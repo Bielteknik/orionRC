@@ -231,8 +231,8 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
                     </div>
                     {ultrasonicSensor ? (
                         <>
-                            <div className="flex-grow flex items-center justify-center text-center my-8">
-                                <p className="text-7xl font-bold text-gray-900 dark:text-gray-100">{ultrasonicValue?.toFixed(1) ?? '--'}<span className="text-4xl text-muted ml-2">cm</span></p>
+                            <div className="flex-grow flex items-center justify-center text-center my-4">
+                                <p className="text-6xl font-bold text-gray-900 dark:text-gray-100">{ultrasonicValue?.toFixed(1) ?? '--'}<span className="text-3xl text-muted ml-2">cm</span></p>
                             </div>
                             <p className="text-xs text-center text-muted">Son Güncelleme: {formatTimeAgo(ultrasonicSensor.lastUpdate)}</p>
                         </>
@@ -246,8 +246,8 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
                     </div>
                     {virtualSensor ? (
                         <>
-                            <div className="flex-grow flex items-center justify-center text-center my-8">
-                                <p className="text-7xl font-bold text-gray-900 dark:text-gray-100">{virtualSensorValue?.toFixed(1) ?? '--'}<span className="text-4xl text-muted ml-2">cm</span></p>
+                            <div className="flex-grow flex items-center justify-center text-center my-4">
+                                <p className="text-6xl font-bold text-gray-900 dark:text-gray-100">{virtualSensorValue?.toFixed(1) ?? '--'}<span className="text-3xl text-muted ml-2">cm</span></p>
                             </div>
                             <div className="space-y-2">
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
