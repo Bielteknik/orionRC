@@ -33,6 +33,18 @@ const StatCard: React.FC<{
     </div>
 );
 
+const getNumericValue = (value: any): number | null => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number') return value;
+    if (typeof value === 'object') {
+        const numeric = Object.values(value).find(v => typeof v === 'number');
+        return typeof numeric === 'number' ? numeric : null;
+    }
+    const parsed = parseFloat(String(value));
+    return isNaN(parsed) || !isFinite(parsed) ? null : parsed;
+};
+
+
 const SensorDisplayCard: React.FC<{ sensor: Sensor }> = ({ sensor }) => {
     const getSensorIcon = (type: string) => {
         switch (type) {
@@ -49,18 +61,20 @@ const SensorDisplayCard: React.FC<{ sensor: Sensor }> = ({ sensor }) => {
         [SensorStatus.Error]: 'bg-danger/10 text-danger',
         [SensorStatus.Maintenance]: 'bg-warning/10 text-warning',
     };
+    
     const displayValue = useMemo(() => {
-        if (sensor.value === null || sensor.value === undefined) return 'N/A';
-        if (typeof sensor.value === 'object') {
-            const numericValue = Object.values(sensor.value).find(v => typeof v === 'number');
-            if (typeof numericValue === 'number') {
-                return numericValue.toFixed(1);
-            }
-            return 'N/A';
+        const numericValue = getNumericValue(sensor.value);
+        if (numericValue === null) {
+            // Handle cases like "N/A" from weight sensor if value is not numeric
+             if (sensor.value && typeof sensor.value === 'object' && 'weight_kg' in sensor.value && sensor.value.weight_kg === 'N/A') {
+                return 'N/A';
+             }
+             return 'N/A';
         }
-        const numValue = Number(sensor.value);
-        return isFinite(numValue) ? numValue.toFixed(1) : 'N/A';
+        // Round to 2 decimal places and convert back to a number to remove trailing zeros
+        return Number(numericValue.toFixed(2)).toString();
     }, [sensor.value]);
+
 
     return (
         <Card className="p-3 transition-shadow hover:shadow-md">

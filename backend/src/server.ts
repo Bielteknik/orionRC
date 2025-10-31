@@ -43,7 +43,8 @@ const safeJSONParse = (str: string | null | undefined, fallback: any) => {
 // Helper to round numeric values in an object/primitive recursively to 2 decimal places
 const roundNumericValues = (value: any): any => {
     if (typeof value === 'number') {
-        return Math.round(value * 100) / 100;
+        // Use toFixed to handle floating point inaccuracies and then convert back to number.
+        return parseFloat(value.toFixed(2));
     }
     if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
         const newObj: { [key: string]: any } = {};
@@ -955,18 +956,19 @@ app.post('/api/analysis/snow-depth-from-image', async (req: ExpressRequest, res:
         // Clean the response from markdown code blocks
         const cleanedText = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
         const resultJson = JSON.parse(cleanedText);
-        const snowDepth = resultJson.snow_depth_cm;
+        let snowDepth = resultJson.snow_depth_cm;
 
         if (typeof snowDepth !== 'number') {
             throw new Error('Could not parse a numeric snow depth value from Gemini response.');
         }
 
         console.log(`[ANALYSIS] Parsed snow depth: ${snowDepth} cm`);
+        
+        snowDepth = roundNumericValues(snowDepth); // Round the value before saving
 
         // Update the sensor reading
         const timestamp = new Date().toISOString();
-        let value = { snow_depth_cm: snowDepth };
-        value = roundNumericValues(value); // Round the value before saving
+        const value = { snow_depth_cm: snowDepth };
         const valueStr = JSON.stringify(value);
 
         await db.run("INSERT INTO readings (sensor_id, value, timestamp) VALUES (?, ?, ?)", virtualSensorId, valueStr, timestamp);
