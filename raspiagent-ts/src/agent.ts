@@ -39,17 +39,16 @@ interface LocalConfig {
 const GEMINI_SNOW_DEPTH_PROMPT = `Sen meteorolojik veri için görüntü analizi yapan bir uzmansın. Görevin, kar cetveli içeren bu görüntüden santimetre cinsinden kar derinliğini belirlemek.
 
 Bu adımları dikkatlice izle:
-1. Görüntüdeki kar ölçüm cetvelini bul. Genellikle üzerinde sayısal işaretler olan dikey bir nesnedir.
-2. Karla kaplı zemin ile cetvelin görünen kısmı arasındaki sınır olan kar çizgisini belirle.
-3. Cetvel üzerinde karla kaplı olan veya kar seviyesinde olan en yüksek sayıyı oku.
-4. Değeri net bir şekilde belirleyebiliyorsan, bu değeri ver. Görüntü net değilse, cetvel görünmüyorsa veya derinliği belirleyemiyorsan, -1 değerini döndür.
+1.  **Cetveli Bul:** Görüntüdeki kar ölçüm cetvelini bul. Genellikle üzerinde sayısal işaretler olan dikey bir nesnedir.
+2.  **Kar Seviyesini Belirle:** Karla kaplı zemin ile cetvelin görünen kısmı arasındaki ortalama sınırı, yani kar çizgisini belirle. Tekil kar birikintileri veya erimiş alanları değil, genel kar seviyesini dikkate al.
+3.  **Değeri Oku:** Cetvel üzerinde, belirlediğin bu ortalama kar çizgisine denk gelen en yakın sayısal değeri oku.
+4.  **Doğrula ve Yanıtla:** Değeri net bir şekilde belirleyebiliyorsan, bu değeri ver. Görüntü net değilse, cetvel görünmüyorsa, kar seviyesi anlaşılamıyorsa veya derinliği güvenilir bir şekilde belirleyemiyorsan, -1 değerini döndür.
 
 Nihai cevabını SADECE şu JSON formatında ver:
 {"snow_depth_cm": SAYI}
 
-Örnek: Eğer kar seviyesi 80cm işaretindeyse, cevabın şöyle olmalı:
-{"snow_depth_cm": 80}
-`;
+Örnek: Eğer kar seviyesi ortalama 80cm çizgisindeyse, cevabın şöyle olmalı:
+{"snow_depth_cm": 80}`;
 
 class Agent {
     private state: AgentState = AgentState.INITIALIZING;
@@ -531,7 +530,8 @@ class Agent {
         const filename = `ANALYSIS_OCV_${timestamp}_${cameraId}.jpg`;
         const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
         const filepath = path.join(UPLOADS_DIR, filename);
-        const scriptPath = path.join(__dirname, '..', 'src', 'scripts', 'snow_depth_opencv.py');
+        // Corrected path to point to the script's location relative to the source, not the compiled output
+        const scriptPath = path.join(__dirname, 'scripts', 'snow_depth_opencv.py');
 
         try {
             // 1. Capture image
