@@ -92,7 +92,7 @@ const App: React.FC = () => {
       case Page.Dashboard:
         return <Dashboard onViewStationDetails={handleViewStationDetails} stations={stations} sensors={sensors} onRefresh={refreshAllData} />;
       case Page.Analysis:
-        return <Analysis stations={stations} sensors={sensors} cameras={cameras} />;
+        return <Analysis stations={stations} sensors={sensors} cameras={cameras} onRefresh={refreshAllData} />;
       case Page.Stations:
         return <Stations stations={stations} onViewDetails={handleViewStationDetails} onDataChange={refreshAllData} />;
       case Page.Sensors:

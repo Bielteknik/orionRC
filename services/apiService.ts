@@ -33,6 +33,10 @@ export const addSensor = (data: any): Promise<Sensor> => apiClient.post('/sensor
 export const updateSensor = (id: string, data: any): Promise<Sensor> => apiClient.put(`/sensors/${id}`, data).then(res => res.data).catch(e => handleError(e, 'updating sensor'));
 export const deleteSensor = (id: string): Promise<void> => apiClient.delete(`/sensors/${id}`).then(res => res.data).catch(e => handleError(e, 'deleting sensor'));
 export const forceReadSensor = (id: string): Promise<void> => apiClient.post(`/sensors/${id}/read`).then(res => res.data).catch(e => handleError(e, 'forcing sensor read'));
+export const submitManualReading = (sensorId: string, value: number): Promise<any> =>
+    apiClient.post(`/sensors/${sensorId}/manual-reading`, { value })
+             .then(res => res.data)
+             .catch(e => handleError(e, 'submitting manual reading'));
 
 
 // Cameras

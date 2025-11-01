@@ -23,6 +23,12 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Define the root for file uploads. Use an environment variable if provided,
+// otherwise assume it's in a sibling 'uploads' directory relative to the app's CWD.
+// FIX: Cast `process` to `any` to resolve "Property 'cwd' does not exist on type 'Process'" due to a type conflict.
+const UPLOADS_ROOT = process.env.UPLOADS_PATH || path.join((process as any).cwd(), '..', 'uploads');
+console.log(`[Server] Uploads dizini olarak kullanılıyor: ${UPLOADS_ROOT}`);
+
 // FIX: Correctly initialize express app.
 const app: Express = express();
 const port = process.env.PORT || 8000;
@@ -63,9 +69,8 @@ const roundNumericValues = (value: any): any => {
 app.use(cors());
 app.use(express.json({ limit: '10mb' })); // Increase limit for base64 image uploads
 
-// Serve uploaded photos from both camera captures and analysis
-// Corrected path to be a sibling directory to the backend app directory
-app.use('/uploads', express.static(path.join(__dirname, '..', '..', 'uploads')));
+// Serve uploaded photos from the configured uploads path
+app.use('/uploads', express.static(UPLOADS_ROOT));
 
 
 // --- In-memory state for agent and commands ---
@@ -239,7 +244,7 @@ app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: ExpressRe
     const { image, filename } = req.body; // base64 image and filename
 
     try {
-        const UPLOADS_DIR = path.join(__dirname, '..', '..', 'uploads', 'captures');
+        const UPLOADS_DIR = path.join(UPLOADS_ROOT, 'captures');
         await fs.mkdir(UPLOADS_DIR, { recursive: true });
         const imagePath = path.join(UPLOADS_DIR, filename);
         
@@ -265,7 +270,7 @@ app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: ExpressRe
 app.post('/api/analysis/upload-photo', agentAuth, async (req: ExpressRequest, res: ExpressResponse) => {
     const { cameraId, image, filename } = req.body;
     try {
-        const uploadsDir = path.join(__dirname, '..', '..', 'uploads', 'analysis');
+        const uploadsDir = path.join(UPLOADS_ROOT, 'analysis');
         await fs.mkdir(uploadsDir, { recursive: true });
         const imagePath = path.join(uploadsDir, filename);
         await fs.writeFile(imagePath, Buffer.from(image, 'base64'));
@@ -497,6 +502,51 @@ app.post('/api/sensors/:id/read', async (req: ExpressRequest, res: ExpressRespon
     } catch (error) {
         console.error(`Error queueing read command for sensor ${id}:`, error);
         res.status(500).json({ error: "Failed to queue read command." });
+    }
+});
+
+app.post('/api/sensors/:id/manual-reading', async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const { id: sensor_id } = req.params;
+        const { value } = req.body; // Expecting a raw number
+
+        if (sensor_id === undefined || typeof value !== 'number') {
+            return res.status(400).json({ error: 'Bad Request: A numeric value is required.' });
+        }
+
+        const sensor = await db.get("SELECT type FROM sensors WHERE id = ?", sensor_id);
+        if (!sensor) {
+            return res.status(404).json({ error: 'Sensor not found.' });
+        }
+        
+        let valueObject: any;
+        if (sensor.type === 'Kar Yüksekliği') {
+            valueObject = { snow_depth_cm: value };
+        } else if (sensor.type === 'Mesafe') {
+            valueObject = { distance_cm: value };
+        } else {
+             const lastReading = await db.get("SELECT value FROM sensors WHERE id = ?", sensor_id);
+             if (lastReading && lastReading.value) {
+                const lastValue = safeJSONParse(lastReading.value, {});
+                const key = Object.keys(lastValue)[0] || 'value';
+                valueObject = { [key]: value };
+             } else {
+                valueObject = { value };
+             }
+        }
+        
+        const finalValue = roundNumericValues(valueObject);
+        const timestamp = new Date().toISOString();
+        const valueStr = JSON.stringify(finalValue);
+
+        await db.run("INSERT INTO readings (sensor_id, value, timestamp) VALUES (?, ?, ?)", sensor_id, valueStr, timestamp);
+        await db.run("UPDATE sensors SET value = ?, last_update = ? WHERE id = ?", valueStr, timestamp, sensor_id);
+        
+        console.log(`[MANUAL READING] Sensor ${sensor_id} updated to ${valueStr}`);
+        res.status(201).json({ message: 'OK', value: finalValue });
+    } catch (error: any) {
+        console.error(`Error submitting manual reading for sensor ${req.params.id}:`, error.message);
+        res.status(500).json({ error: 'Failed to submit manual reading.' });
     }
 });
 
@@ -862,6 +912,21 @@ app.delete('/api/notifications/clear-all', async (req: ExpressRequest, res: Expr
 });
 
 // ANALYSIS
+const GEMINI_SNOW_DEPTH_PROMPT = `Sen meteorolojik veri için görüntü analizi yapan bir uzmansın. Görevin, kar cetveli içeren bu görüntüden santimetre cinsinden kar derinliğini belirlemek.
+
+Bu adımları dikkatlice izle:
+1. Görüntüdeki kar ölçüm cetvelini bul. Genellikle üzerinde sayısal işaretler olan dikey bir nesnedir.
+2. Karla kaplı zemin ile cetvelin görünen kısmı arasındaki sınır olan kar çizgisini belirle.
+3. Cetvel üzerinde karla kaplı olan veya kar seviyesinde olan en yüksek sayıyı oku.
+4. Değeri net bir şekilde belirleyebiliyorsan, bu değeri ver. Görüntü net değilse, cetvel görünmüyorsa veya derinliği belirleyemiyorsan, -1 değerini döndür.
+
+Nihai cevabını SADECE şu JSON formatında ver:
+{"snow_depth_cm": SAYI}
+
+Örnek: Eğer kar seviyesi 80cm işaretindeyse, cevabın şöyle olmalı:
+{"snow_depth_cm": 80}
+`;
+
 app.post('/api/analysis/snow-depth', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { cameraId, virtualSensorId, analysisType } = req.body;
@@ -925,7 +990,7 @@ app.post('/api/analysis/snow-depth-from-image', async (req: ExpressRequest, res:
             },
         };
         const textPart = {
-            text: "Bu görüntüdeki kar ölçüm cetveline göre karla kaplı en yüksek sayısal değer nedir? Cevabını sadece `{\"snow_depth_cm\": SAYI}` formatında bir JSON olarak ver.",
+            text: GEMINI_SNOW_DEPTH_PROMPT,
         };
 
         // FIX: Use responseSchema for reliable JSON output
@@ -961,6 +1026,11 @@ app.post('/api/analysis/snow-depth-from-image', async (req: ExpressRequest, res:
 
         if (typeof snowDepth !== 'number') {
             throw new Error('Could not parse a numeric snow depth value from Gemini response.');
+        }
+
+        if (snowDepth === -1) {
+            console.log(`[ANALYSIS] Gemini could not determine snow depth from the image.`);
+            throw new Error('Gemini could not determine snow depth from the image.');
         }
 
         console.log(`[ANALYSIS] Parsed snow depth: ${snowDepth} cm`);

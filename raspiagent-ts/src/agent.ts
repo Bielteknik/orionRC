@@ -36,6 +36,21 @@ interface LocalConfig {
     device: { id: string; token: string };
 }
 
+const GEMINI_SNOW_DEPTH_PROMPT = `Sen meteorolojik veri için görüntü analizi yapan bir uzmansın. Görevin, kar cetveli içeren bu görüntüden santimetre cinsinden kar derinliğini belirlemek.
+
+Bu adımları dikkatlice izle:
+1. Görüntüdeki kar ölçüm cetvelini bul. Genellikle üzerinde sayısal işaretler olan dikey bir nesnedir.
+2. Karla kaplı zemin ile cetvelin görünen kısmı arasındaki sınır olan kar çizgisini belirle.
+3. Cetvel üzerinde karla kaplı olan veya kar seviyesinde olan en yüksek sayıyı oku.
+4. Değeri net bir şekilde belirleyebiliyorsan, bu değeri ver. Görüntü net değilse, cetvel görünmüyorsa veya derinliği belirleyemiyorsan, -1 değerini döndür.
+
+Nihai cevabını SADECE şu JSON formatında ver:
+{"snow_depth_cm": SAYI}
+
+Örnek: Eğer kar seviyesi 80cm işaretindeyse, cevabın şöyle olmalı:
+{"snow_depth_cm": 80}
+`;
+
 class Agent {
     private state: AgentState = AgentState.INITIALIZING;
     private config: DeviceConfig | null = null;
@@ -426,7 +441,7 @@ class Agent {
                 },
             };
             const textPart = {
-                text: "Bu görüntüdeki kar ölçüm cetveline göre karla kaplı en yüksek sayısal değer nedir? Cevabını sadece `{\"snow_depth_cm\": SAYI}` formatında bir JSON olarak ver.",
+                text: GEMINI_SNOW_DEPTH_PROMPT,
             };
 
             // FIX: Use responseSchema for reliable JSON output
@@ -463,6 +478,11 @@ class Agent {
             if (typeof snowDepth !== 'number') {
                 console.error('   -> HATA: Gemini yanıtından sayısal bir kar yüksekliği değeri alınamadı.');
                 return false;
+            }
+
+            if (snowDepth === -1) {
+                console.log(`   -> BİLGİ: Gemini görüntüden kar derinliğini belirleyemedi.`);
+                return false; // Command failed
             }
             
             console.log(`   -> Analiz Sonucu: ${snowDepth} cm`);
@@ -511,7 +531,7 @@ class Agent {
         const filename = `ANALYSIS_OCV_${timestamp}_${cameraId}.jpg`;
         const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
         const filepath = path.join(UPLOADS_DIR, filename);
-        const scriptPath = path.join(__dirname, 'scripts', 'snow_depth_opencv.py');
+        const scriptPath = path.join(__dirname, '..', 'src', 'scripts', 'snow_depth_opencv.py');
 
         try {
             // 1. Capture image

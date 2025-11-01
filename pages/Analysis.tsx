@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Station, Sensor, Camera } from '../types.ts';
-import { getReadingsHistory, analyzeSnowDepth, analyzeSnowDepthFromImage } from '../services/apiService.ts';
+import { getReadingsHistory, analyzeSnowDepth, analyzeSnowDepthFromImage, submitManualReading } from '../services/apiService.ts';
 import { sendMessageToGemini } from '../services/geminiService.ts';
 import Card from '../components/common/Card.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
-import { BrainIcon, DownloadIcon, RefreshIcon, InfoIcon, CalculatorIcon, ChartBarIcon, PhotographIcon, SensorIcon as GenericSensorIcon } from '../components/icons/Icons.tsx';
+import { BrainIcon, DownloadIcon, RefreshIcon, InfoIcon, CalculatorIcon, ChartBarIcon, PhotographIcon, SensorIcon as GenericSensorIcon, EditIcon } from '../components/icons/Icons.tsx';
 import { SnowRulerDayIcon, SnowRulerNightIcon } from '../components/icons/RulerIcons.tsx';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useTheme } from '../components/ThemeContext.tsx';
@@ -52,7 +52,7 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
     });
 };
 
-const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sensor[], cameras: Camera[] }> = ({ stations, sensors, cameras }) => {
+const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sensor[], cameras: Camera[], onRefresh: () => void }> = ({ stations, sensors, cameras, onRefresh }) => {
     const { theme } = useTheme();
     const [selectedStationId, setSelectedStationId] = useState<string>('');
     const [isLoadingAnalysis, setIsLoadingAnalysis] = useState<'gemini' | 'opencv' | false>(false);
@@ -62,6 +62,10 @@ const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sen
     const [selectedVirtualSensorId, setSelectedVirtualSensorId] = useState<string>('');
     const [photoDateFilter, setPhotoDateFilter] = useState(new Date().toISOString().split('T')[0]);
     const [analyzingPhotoUrl, setAnalyzingPhotoUrl] = useState<string | null>(null);
+
+    const [editingSensorId, setEditingSensorId] = useState<string | null>(null);
+    const [correctionValue, setCorrectionValue] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
     const virtualSensors = useMemo(() => 
         sensors.filter(s => s.stationId === selectedStationId && s.type === 'Kar Yüksekliği' && s.interface === 'virtual'),
@@ -157,6 +161,7 @@ const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sen
             await analyzeSnowDepthFromImage(base64String, virtualSensor.id, 'gemini');
             
             setAnalysisMessage('Analiz başarılı! Veriler kısa süre içinde güncellenecektir.');
+            onRefresh();
         } catch (error) {
             console.error(error);
             setAnalysisMessage('Fotoğraf analiz edilirken bir hata oluştu.');
@@ -195,6 +200,42 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
             setIsLoadingInterpretation(false);
         }
     };
+
+    const handleStartEditing = (sensor: Sensor | null) => {
+        if (!sensor) return;
+        setEditingSensorId(sensor.id);
+        const numericVal = getNumericValue(sensor.value);
+        setCorrectionValue(numericVal !== null ? String(numericVal.toFixed(2)) : '');
+    };
+    
+    const handleCancelEditing = () => {
+        setEditingSensorId(null);
+        setCorrectionValue('');
+    };
+
+    const handleSaveCorrection = async () => {
+        if (!editingSensorId || correctionValue === '') return;
+        const numericValue = parseFloat(correctionValue);
+        if (isNaN(numericValue)) {
+            setAnalysisMessage('Lütfen geçerli bir sayı girin.');
+            return;
+        }
+        
+        setIsSaving(true);
+        setAnalysisMessage('');
+        try {
+            await submitManualReading(editingSensorId, numericValue);
+            setAnalysisMessage('Değer başarıyla güncellendi.');
+            onRefresh(); // Refresh data to show update
+        } catch (error) {
+            setAnalysisMessage('Değer güncellenirken bir hata oluştu.');
+            console.error(error);
+        } finally {
+            setIsSaving(false);
+            handleCancelEditing();
+            setTimeout(() => setAnalysisMessage(''), 5000);
+        }
+    };
     
     const diffValue = (ultrasonicValue !== null && virtualSensorValue !== null) ? Math.abs(ultrasonicValue - virtualSensorValue) : null;
     
@@ -231,9 +272,22 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
                     </div>
                     {ultrasonicSensor ? (
                         <>
-                            <div className="flex-grow flex items-center justify-center text-center my-4">
-                                <p className="text-6xl font-bold text-gray-900 dark:text-gray-100">{ultrasonicValue?.toFixed(2) ?? '--'}<span className="text-3xl text-muted ml-2">cm</span></p>
-                            </div>
+                            {editingSensorId === ultrasonicSensor.id ? (
+                                <div className="flex-grow flex flex-col items-center justify-center text-center my-4 gap-2">
+                                    <input type="number" value={correctionValue} onChange={e => setCorrectionValue(e.target.value)} className="input-base text-center text-4xl font-bold w-48" autoFocus onKeyPress={e => e.key === 'Enter' && handleSaveCorrection()} />
+                                    <div className="flex gap-2">
+                                        <button onClick={handleSaveCorrection} disabled={isSaving} className="btn-primary text-sm px-4 py-1">{isSaving ? 'Kaydediliyor...' : 'Kaydet'}</button>
+                                        <button onClick={handleCancelEditing} className="btn-secondary text-sm px-4 py-1">İptal</button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex-grow flex items-center justify-center text-center my-4 group relative">
+                                    <p className="text-6xl font-bold text-gray-900 dark:text-gray-100">{ultrasonicValue?.toFixed(2) ?? '--'}<span className="text-3xl text-muted ml-2">cm</span></p>
+                                    <button onClick={() => handleStartEditing(ultrasonicSensor)} className="absolute -top-2 -right-2 p-2 text-muted opacity-0 group-hover:opacity-100 transition-opacity hover:text-accent" title="Değeri Düzelt">
+                                        <EditIcon className="w-5 h-5"/>
+                                    </button>
+                                </div>
+                            )}
                             <p className="text-xs text-center text-muted">Son Güncelleme: {formatTimeAgo(ultrasonicSensor.lastUpdate)}</p>
                         </>
                     ) : <div className="flex-grow flex items-center justify-center text-center py-10 text-muted my-auto">Bu istasyon için atanmış Ultrasonik Mesafe sensörü bulunamadı.</div>}
@@ -244,11 +298,24 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
                         <BrainIcon className="w-6 h-6 text-muted" />
                         <h4 className="font-semibold text-gray-800 dark:text-gray-200">Yapay Zeka Ölçümü (Görüntü İşleme)</h4>
                     </div>
-                    {virtualSensor ? (
+                     {virtualSensor ? (
                         <>
-                            <div className="flex-grow flex items-center justify-center text-center my-4">
-                                <p className="text-6xl font-bold text-gray-900 dark:text-gray-100">{virtualSensorValue?.toFixed(2) ?? '--'}<span className="text-3xl text-muted ml-2">cm</span></p>
-                            </div>
+                           {editingSensorId === virtualSensor.id ? (
+                                <div className="flex-grow flex flex-col items-center justify-center text-center my-4 gap-2">
+                                    <input type="number" value={correctionValue} onChange={e => setCorrectionValue(e.target.value)} className="input-base text-center text-4xl font-bold w-48" autoFocus onKeyPress={e => e.key === 'Enter' && handleSaveCorrection()} />
+                                    <div className="flex gap-2">
+                                        <button onClick={handleSaveCorrection} disabled={isSaving} className="btn-primary text-sm px-4 py-1">{isSaving ? 'Kaydediliyor...' : 'Kaydet'}</button>
+                                        <button onClick={handleCancelEditing} className="btn-secondary text-sm px-4 py-1">İptal</button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex-grow flex items-center justify-center text-center my-4 group relative">
+                                    <p className="text-6xl font-bold text-gray-900 dark:text-gray-100">{virtualSensorValue?.toFixed(2) ?? '--'}<span className="text-3xl text-muted ml-2">cm</span></p>
+                                    <button onClick={() => handleStartEditing(virtualSensor)} className="absolute -top-2 -right-2 p-2 text-muted opacity-0 group-hover:opacity-100 transition-opacity hover:text-accent" title="Değeri Düzelt">
+                                        <EditIcon className="w-5 h-5"/>
+                                    </button>
+                                </div>
+                            )}
                             <div className="space-y-2">
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                     <button onClick={() => handleTriggerAnalysis('gemini')} disabled={isLoadingAnalysis === 'gemini'} className="btn-secondary w-full text-sm flex items-center justify-center gap-2"> {isLoadingAnalysis === 'gemini' ? <LoadingSpinner/> : <BrainIcon className="w-4 h-4"/>} Yeni Gemini Analizi</button>
@@ -604,7 +671,7 @@ const AnomalyDetection: React.FC<{ stations: Station[], sensors: Sensor[] }> = (
 }
 
 
-const Analysis: React.FC<{ stations: Station[], sensors: Sensor[], cameras: Camera[] }> = ({ stations, sensors, cameras }) => {
+const Analysis: React.FC<{ stations: Station[], sensors: Sensor[], cameras: Camera[], onRefresh: () => void }> = ({ stations, sensors, cameras, onRefresh }) => {
     const [activeTab, setActiveTab] = useState('Karşılaştırmalı Analiz');
     const tabs = [
         { name: 'Karşılaştırmalı Analiz', icon: <BrainIcon className="w-5 h-5"/> },
@@ -635,7 +702,7 @@ const Analysis: React.FC<{ stations: Station[], sensors: Sensor[], cameras: Came
                 </nav>
             </div>
 
-            {activeTab === 'Karşılaştırmalı Analiz' && <ComparativeSnowDepthAnalysis stations={stations} sensors={sensors} cameras={cameras} />}
+            {activeTab === 'Karşılaştırmalı Analiz' && <ComparativeSnowDepthAnalysis stations={stations} sensors={sensors} cameras={cameras} onRefresh={onRefresh} />}
             {activeTab === 'SWE Hesaplayıcı' && <SWE_Calculator />}
             {activeTab === 'Korelasyon Grafiği' && <CorrelationGraph stations={stations} sensors={sensors} />}
             {activeTab === 'Veri Gezgini' && <DataExplorer stations={stations} sensors={sensors} />}

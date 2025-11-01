@@ -22,6 +22,7 @@ Bu, ORION Gözlem Platformu için Node.js, Express ve TypeScript ile oluşturulm
     Bu dizinde `.env` adında bir dosya oluşturun. Gerekli değerleri doldurun.
     -   `PORT`: Sunucunun çalışacağı port (örn: 8000).
     -   `DEVICE_AUTH_TOKEN`: IoT agent'ınızın kimlik doğrulaması için kullanacağı güçlü, gizli bir token.
+    -   `UPLOADS_PATH`: (Opsiyonel) Yüklenen dosyaların (kamera görüntüleri vb.) saklanacağı mutlak dosya yolu. Belirtilmezse, backend uygulamasının bir üst dizinindeki `uploads` klasörü kullanılır (örn: `/var/www/vhosts/alanadi.com/httpdocs/uploads`). Bu, paylaşımlı hosting ortamlarında doğru yolu belirtmek için kullanışlıdır.
     -   `OPENWEATHER_API_KEY`: (Opsiyonel) OpenWeatherMap API anahtarınız.
     -   `EMAIL_HOST`: SMTP sunucu adresiniz (örn: 'smtp.gmail.com').
     -   `EMAIL_PORT`: SMTP portunuz (örn: 587 TLS için, 465 SSL için).
