@@ -1,6 +1,6 @@
 {
   "server": {
-    "base_url": "http://meteoroloji.ejderapi.com.tr/api"
+    "base_url": "https://meteoroloji.ejderapi.com.tr/api"
   },
   "device": {
     "id": "ejder3200-01",
