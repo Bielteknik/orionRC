@@ -7,6 +7,8 @@ import Pagination from '../components/common/Pagination.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
 import { ArrowLeftIcon, SensorIcon, CameraIcon, SettingsIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, OnlineIcon, OfflineIcon, PlayIcon, PhotographIcon, SearchIcon, ExclamationIcon, DownloadIcon, CalendarIcon } from '../components/icons/Icons.tsx';
 import SensorDetailModal from '../components/SensorDetailModal.tsx'; // Import the new modal
+import { LineChart, Line, YAxis, ResponsiveContainer, Area } from 'recharts';
+
 
 interface StationDetailProps {
   stationId: string;
@@ -67,21 +69,20 @@ const statusInfo: Record<string, { text: string, className: string }> = {
     maintenance: { text: 'Bakımda', className: 'bg-amber-500/20 text-amber-600' },
 };
 
-const SensorCard: React.FC<{ sensor: Sensor, onClick: () => void }> = ({ sensor, onClick }) => {
+const SensorCard: React.FC<{ sensor: Sensor, historyData: SensorReading[], onClick: () => void }> = ({ sensor, historyData, onClick }) => {
     const getSensorIcon = (type: string) => {
         switch (type) {
-            case 'Sıcaklık': return <ThermometerIcon className="w-6 h-6 text-muted" />;
-            case 'Nem': return <DropletIcon className="w-6 h-6 text-muted" />;
-            case 'Rüzgar Hızı': case 'Rüzgar': return <WindSockIcon className="w-6 h-6 text-muted" />;
-            case 'Basınç': return <GaugeIcon className="w-6 h-6 text-muted" />;
-            default: return <SensorIcon className="w-5 h-5 text-muted" />;
+            case 'Sıcaklık': return <ThermometerIcon className="w-6 h-6 text-muted dark:text-gray-400" />;
+            case 'Nem': return <DropletIcon className="w-6 h-6 text-muted dark:text-gray-400" />;
+            case 'Rüzgar Hızı': case 'Rüzgar': return <WindSockIcon className="w-6 h-6 text-muted dark:text-gray-400" />;
+            case 'Basınç': return <GaugeIcon className="w-6 h-6 text-muted dark:text-gray-400" />;
+            default: return <SensorIcon className="w-5 h-5 text-muted dark:text-gray-400" />;
         }
     };
-    const batteryColor = sensor.battery > 20 ? 'text-green-500' : 'text-danger';
 
     const statusStyles: Record<SensorStatus, string> = {
         [SensorStatus.Active]: 'bg-success/10 text-success',
-        [SensorStatus.Inactive]: 'bg-gray-200 text-gray-600',
+        [SensorStatus.Inactive]: 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
         [SensorStatus.Error]: 'bg-danger/10 text-danger',
         [SensorStatus.Maintenance]: 'bg-warning/10 text-warning',
     };
@@ -91,41 +92,74 @@ const SensorCard: React.FC<{ sensor: Sensor, onClick: () => void }> = ({ sensor,
         if (numericValue === null) {
             if (sensor.value && typeof sensor.value === 'object' && 'weight_kg' in sensor.value && sensor.value.weight_kg === 'N/A') {
                 return 'N/A';
-            }
-            return 'N/A';
+             }
+             return 'N/A';
         }
+        // Always format to 2 decimal places.
         return numericValue.toFixed(2);
     }, [sensor.value]);
 
+    const chartData = useMemo(() => {
+        if (!historyData || historyData.length < 2) return [];
+        const sortedHistory = [...historyData].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        return sortedHistory.map(reading => ({
+            value: getNumericValue(reading.value)
+        })).filter(item => item.value !== null);
+    }, [historyData]);
+
     return (
-        <Card className="p-4 flex flex-col space-y-3 h-full cursor-pointer hover:shadow-md hover:border-accent transition-all" onClick={onClick}>
+        <Card className="p-4 flex flex-col h-full overflow-hidden">
             <div className="flex justify-between items-start">
                  <div className="flex items-center space-x-3">
-                    <div className="bg-gray-100 p-2.5 rounded-lg">{getSensorIcon(sensor.type)}</div>
+                    <div className="bg-gray-100 dark:bg-gray-700 p-2.5 rounded-lg">{getSensorIcon(sensor.type)}</div>
                     <div>
-                        <h3 className="font-semibold text-base text-gray-900">{sensor.name}</h3>
-                        <p className="text-sm text-muted">{sensor.type}</p>
+                        <h3 className="font-semibold text-base text-gray-900 dark:text-gray-100">{sensor.name}</h3>
+                        <p className="text-sm text-muted dark:text-gray-400">{sensor.type}</p>
                     </div>
                 </div>
-                <span className={`px-3 py-1 text-xs font-semibold rounded-full ${statusStyles[sensor.status] || statusStyles[SensorStatus.Inactive]}`}>
-                    {sensor.status || SensorStatus.Inactive}
-                </span>
-            </div>
-            <div className="flex-grow text-center !my-4">
-                <p className="text-5xl font-bold text-gray-900">{displayValue}<span className="text-2xl text-muted ml-1">{sensor.unit}</span></p>
-            </div>
-            <div className="flex justify-between items-center text-sm pt-2 border-t border-gray-200">
-                 <div className="flex items-center space-x-1">
-                    <span className="font-semibold">{sensor.battery}%</span>
-                    <span className={batteryColor}>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10.394 2.08a1 1 0 00-.788 0l-7 3.5a1 1 0 00.788 1.84L5 7.11V14.5a1 1 0 001 1h8a1 1 0 001-1V7.11l1.606.414a1 1 0 00.788-1.84l-7-3.5zM3 15.5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" /></svg>
+                <div className="text-right flex-shrink-0">
+                    <span className={`px-3 py-1 text-xs font-semibold rounded-full ${statusStyles[sensor.status] || statusStyles[SensorStatus.Inactive]}`}>
+                        {sensor.status || SensorStatus.Inactive}
                     </span>
-                 </div>
-                <span className="text-muted">{formatTimeAgo(sensor.lastUpdate)}</span>
+                    <p className="text-xs text-muted dark:text-gray-500 mt-1">{formatTimeAgo(sensor.lastUpdate)}</p>
+                </div>
+            </div>
+            <div className="flex-grow flex items-center justify-center text-center my-4">
+                <p className="text-5xl font-bold text-gray-900 dark:text-gray-100">{displayValue}<span className="text-2xl text-muted dark:text-gray-400 ml-1">{sensor.unit}</span></p>
+            </div>
+            <div className="mt-auto cursor-pointer h-24 -mx-4 -mb-4 rounded-b-lg" onClick={onClick}>
+                {chartData.length > 1 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 5 }}>
+                            <defs>
+                                <linearGradient id={`colorGradient-${sensor.id}`} x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#F97316" stopOpacity={0.3}/>
+                                    <stop offset="95%" stopColor="#F97316" stopOpacity={0}/>
+                                </linearGradient>
+                            </defs>
+                            <YAxis hide={true} domain={['dataMin - 1', 'dataMax + 1']} />
+                            <Line
+                                type="monotone"
+                                dataKey="value"
+                                stroke="#F97316"
+                                strokeWidth={2}
+                                dot={false}
+                                activeDot={{ r: 0 }}
+                            />
+                            {/* FIX: The 'stroke' prop for Area expects a string color value, not a boolean. Changed to "none" to hide the stroke. */}
+                            <Area type="monotone" dataKey="value" stroke="none" fillOpacity={1} fill={`url(#colorGradient-${sensor.id})`} />
+                        </LineChart>
+                    </ResponsiveContainer>
+                ) : (
+                    <div className="w-full h-full flex items-center justify-center text-center text-xs text-muted border-t border-gray-200 dark:border-gray-700">
+                        Grafik için yeterli veri yok
+                    </div>
+                )}
             </div>
         </Card>
     );
 };
+
 
 // Helper function to correctly format a sensor reading value for display
 const formatReadingValue = (reading: SensorReading): string => {
@@ -367,7 +401,18 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
                     {sensors.length > 0 ? (
                         <>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {paginatedSensors.map(sensor => <SensorCard key={sensor.id} sensor={sensor} onClick={() => handleOpenSensorModal(sensor)} />)}
+                                {paginatedSensors.map(sensor => {
+                                     const sensorHistory = readings
+                                        .filter(r => r.sensorId === sensor.id)
+                                        .slice(-15);
+                                    return (
+                                        <SensorCard 
+                                            key={sensor.id} 
+                                            sensor={sensor} 
+                                            historyData={sensorHistory}
+                                            onClick={() => handleOpenSensorModal(sensor)} />
+                                    );
+                                })}
                             </div>
                             <Pagination 
                                 currentPage={sensorPage}

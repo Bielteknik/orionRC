@@ -15,6 +15,7 @@ import { ThemeProvider } from './components/ThemeContext';
 import Notifications from './pages/Notifications';
 import GeminiAssistant from './components/GeminiAssistant';
 import { getNotifications, markAllNotificationsAsRead, getAgentStatus, getStations, getSensors, getCameras } from './services/apiService';
+import { ExclamationIcon } from './components/icons/Icons';
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.Dashboard);
@@ -27,6 +28,7 @@ const App: React.FC = () => {
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [globalError, setGlobalError] = useState<string | null>(null);
 
   const refreshAllData = useCallback(async () => {
     try {
@@ -42,12 +44,17 @@ const App: React.FC = () => {
       setStations(stationsData);
       setSensors(sensorsData);
       setCameras(camerasData);
-    } catch (error) {
-      console.error("Veri yenileme sırasında hata oluştu:", error);
+      
+      // Clear error on successful fetch
+      if (globalError) setGlobalError(null);
+
+    } catch (error: any) {
+      console.error("Veri yenileme sırasında hata oluştu:", error.message);
+      setGlobalError(`Veri yenilenemedi: Sunucuya ulaşılamıyor. Lütfen bağlantınızı ve sunucu durumunu kontrol edin.`);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [globalError]);
 
   useEffect(() => {
     refreshAllData();
@@ -112,7 +119,7 @@ const App: React.FC = () => {
 
   return (
     <ThemeProvider>
-      <div className="flex h-screen bg-secondary dark:bg-dark-secondary font-sans">
+      <div className="flex h-screen bg-secondary dark:bg-dark-secondary font-sans relative">
         <Sidebar 
           currentPage={currentPage} 
           setCurrentPage={handleSetCurrentPage}
@@ -133,6 +140,12 @@ const App: React.FC = () => {
           </main>
         </div>
         <GeminiAssistant />
+        {globalError && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-danger/90 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 z-[100]">
+            <ExclamationIcon className="w-5 h-5"/>
+            {globalError}
+          </div>
+        )}
       </div>
     </ThemeProvider>
   );
