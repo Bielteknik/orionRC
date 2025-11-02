@@ -36,19 +36,30 @@ interface LocalConfig {
     device: { id: string; token: string };
 }
 
-const GEMINI_SNOW_DEPTH_PROMPT = `Sen meteorolojik veri için görüntü analizi yapan bir uzmansın. Görevin, kar cetveli içeren bu görüntüden santimetre cinsinden kar derinliğini belirlemek.
+const GEMINI_SNOW_DEPTH_PROMPT = `Sen meteorolojik veri için görüntü analizi yapan bir uzmansın. Görevin, kar cetveli içeren bu görüntüden santimetre cinsinden kar derinliğini hassas bir şekilde belirlemek.
 
-Bu adımları dikkatlice izle:
-1.  **Cetveli Bul:** Görüntüdeki kar ölçüm cetvelini bul. Genellikle üzerinde sayısal işaretler olan dikey bir nesnedir.
-2.  **Kar Seviyesini Belirle:** Karla kaplı zemin ile cetvelin görünen kısmı arasındaki ortalama sınırı, yani kar çizgisini belirle. Tekil kar birikintileri veya erimiş alanları değil, genel kar seviyesini dikkate al.
-3.  **Değeri Oku:** Cetvel üzerinde, belirlediğin bu ortalama kar çizgisine denk gelen en yakın sayısal değeri oku.
-4.  **Doğrula ve Yanıtla:** Değeri net bir şekilde belirleyebiliyorsan, bu değeri ver. Görüntü net değilse, cetvel görünmüyorsa, kar seviyesi anlaşılamıyorsa veya derinliği güvenilir bir şekilde belirleyemiyorsan, -1 değerini döndür.
+**GÖREVİN:**
+Görüntüdeki kar ölçüm cetvelinden kar derinliğini oku ve sonucu JSON formatında döndür.
 
-Nihai cevabını SADECE şu JSON formatında ver:
+**ADIMLAR:**
+1.  **Cetveli Bul:** Görüntüdeki üzerinde kırmızı ve beyaz şeritler ile sayısal işaretler olan dikey kar ölçüm cetvelini bul.
+2.  **Kar Seviyesini Belirle:** Cetvelin etrafındaki genel kar seviyesini dikkatlice incele. Tekil kar birikintileri veya erimiş alanları değil, cetvelin dibindeki ortalama kar çizgisini temel al.
+3.  **Değeri Oku:** Cetvel üzerindeki sayılar santimetreyi gösterir. Belirlediğin kar çizgisine denk gelen sayısal değeri oku. Ara değerleri hassas bir şekilde tahmin et. Örneğin, kar seviyesi "10" işaretinin hemen altındaysa, bu 9 olabilir. "10" işaretinin çok altındaysa, 4 veya 5 gibi bir değer olabilir.
+4.  **Doğrula ve Yanıtla:**
+    *   Değeri net bir şekilde belirleyebiliyorsan, bu değeri ver.
+    *   Görüntü net değilse, cetvel görünmüyorsa, kar seviyesi anlaşılamıyorsa veya derinliği güvenilir bir şekilde belirleyemiyorsan, **-1** değerini döndür.
+
+**ÇIKTI FORMATI:**
+Nihai cevabını SADECE aşağıdaki JSON formatında ver, başka hiçbir metin ekleme:
 {"snow_depth_cm": SAYI}
 
-Örnek: Eğer kar seviyesi ortalama 80cm çizgisindeyse, cevabın şöyle olmalı:
-{"snow_depth_cm": 80}`;
+**ÖRNEKLER:**
+*   **Örnek 1:** Görüntüde kar seviyesi, cetveldeki "10" santimetre işaretinin neredeyse üzerini kapatacak şekilde hemen altındaysa, bu yaklaşık 9 cm'dir. Cevabın şöyle olmalı:
+    {"snow_depth_cm": 9}
+*   **Örnek 2:** Görüntüde kar seviyesi, cetveldeki "10" santimetre işaretinin oldukça altındaysa, neredeyse sıfır ile 10'un orta noktasının biraz altında ise, bu yaklaşık 4 cm'dir. Cevabın şöyle olmalı:
+    {"snow_depth_cm": 4}
+*   **Örnek 3:** Eğer kar seviyesi tam olarak "80" işaretinin üzerindeyse, cevabın şöyle olmalı:
+    {"snow_depth_cm": 80}`;
 
 class Agent {
     private state: AgentState = AgentState.INITIALIZING;
