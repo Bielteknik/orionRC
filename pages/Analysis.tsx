@@ -144,7 +144,7 @@ const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sen
         }
     };
 
-    const handlePhotoDoubleClick = async (photoUrl: string) => {
+    const handleAnalyzeFromPhoto = async (photoUrl: string) => {
         if (!virtualSensor) {
             setAnalysisMessage('Analiz için sanal sensör seçilmemiş.');
             return;
@@ -281,10 +281,11 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
                                     </div>
                                 </div>
                             ) : (
-                                <div className="flex-grow flex items-center justify-center text-center my-4 group relative">
+                                <div className="flex-grow flex flex-col items-center justify-center text-center my-4">
                                     <p className="text-6xl font-bold text-gray-900 dark:text-gray-100">{ultrasonicValue?.toFixed(2) ?? '--'}<span className="text-3xl text-muted ml-2">cm</span></p>
-                                    <button onClick={() => handleStartEditing(ultrasonicSensor)} className="absolute -top-2 -right-2 p-2 text-muted opacity-0 group-hover:opacity-100 transition-opacity hover:text-accent" title="Değeri Düzelt">
-                                        <EditIcon className="w-5 h-5"/>
+                                     <button onClick={() => handleStartEditing(ultrasonicSensor)} className="flex items-center gap-2 text-sm text-muted hover:text-accent font-semibold mt-4 px-3 py-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
+                                        <CalculatorIcon className="w-4 h-4" />
+                                        Değeri Düzelt
                                     </button>
                                 </div>
                             )}
@@ -309,10 +310,11 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
                                     </div>
                                 </div>
                             ) : (
-                                <div className="flex-grow flex items-center justify-center text-center my-4 group relative">
+                                <div className="flex-grow flex flex-col items-center justify-center text-center my-4">
                                     <p className="text-6xl font-bold text-gray-900 dark:text-gray-100">{virtualSensorValue?.toFixed(2) ?? '--'}<span className="text-3xl text-muted ml-2">cm</span></p>
-                                    <button onClick={() => handleStartEditing(virtualSensor)} className="absolute -top-2 -right-2 p-2 text-muted opacity-0 group-hover:opacity-100 transition-opacity hover:text-accent" title="Değeri Düzelt">
-                                        <EditIcon className="w-5 h-5"/>
+                                     <button onClick={() => handleStartEditing(virtualSensor)} className="flex items-center gap-2 text-sm text-muted hover:text-accent font-semibold mt-4 px-3 py-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
+                                        <CalculatorIcon className="w-4 h-4" />
+                                        Değeri Düzelt
                                     </button>
                                 </div>
                             )}
@@ -340,9 +342,13 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
                             <button onClick={handleInterpret} disabled={isLoadingInterpretation} className="btn-primary flex items-center justify-center gap-2"> {isLoadingInterpretation ? <LoadingSpinner className="text-white"/> : <BrainIcon className="w-5 h-5"/>} Farkları Yorumla</button>
                          </div>
                          {analysisMessage && <p className="text-xs text-center text-accent pt-2">{analysisMessage}</p>}
-                         {interpretation || isLoadingInterpretation ? (
+                         {isLoadingInterpretation || interpretation ? (
                             <div className="text-sm text-gray-700 dark:text-gray-300 p-3 bg-secondary dark:bg-gray-800/50 rounded-md border dark:border-gray-600 min-h-[80px] max-h-40 overflow-y-auto mt-3 prose-sm dark:prose-invert">
-                                {isLoadingInterpretation ? <p>Yorum oluşturuluyor...</p> : <p dangerouslySetInnerHTML={{ __html: interpretation.replace(/\n/g, '<br />') }} />}
+                                {interpretation ? (
+                                    <p dangerouslySetInnerHTML={{ __html: interpretation.replace(/\n/g, '<br />') + (isLoadingInterpretation ? '...' : '') }} />
+                                ) : (
+                                    <p>Yorum oluşturuluyor...</p>
+                                )}
                             </div>
                          ) : null}
                     </div>
@@ -366,7 +372,7 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
                                         </div>
                                     ) : (
                                         <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center rounded-lg p-2">
-                                            <button onClick={() => handlePhotoDoubleClick(photoUrl)} className="btn-secondary !bg-white/20 !text-white hover:!bg-white/30 border border-white/30 text-xs flex items-center gap-1.5">
+                                            <button onClick={() => handleAnalyzeFromPhoto(photoUrl)} className="btn-secondary !bg-white/20 !text-white hover:!bg-white/30 border border-white/30 text-xs flex items-center gap-1.5">
                                                 <BrainIcon className="w-4 h-4"/>
                                                 <span>Analiz Et</span>
                                             </button>

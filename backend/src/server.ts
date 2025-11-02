@@ -1,7 +1,8 @@
 // Use standard express types now that tsconfig is corrected.
 // FIX: Changed to default import to use namespaced types (express.Request, etc.) to avoid global type conflicts.
 // Fix: Import Request, Response, and NextFunction to resolve type conflicts with global DOM types.
-import express, { Request, Response, NextFunction } from 'express';
+// Fix: Aliased express types to avoid conflicts with global DOM types.
+import express, { Request as ExpressRequest, Response as ExpressResponse, NextFunction as ExpressNextFunction } from 'express';
 import cors from 'cors';
 import { openDb, db, migrate } from './database.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -81,7 +82,7 @@ let commandQueue: { [deviceId: string]: any[] } = {};
 
 
 // --- AUTH MIDDLEWARE (simple token check) ---
-const agentAuth = (req: Request, res: Response, next: NextFunction) => {
+const agentAuth = (req: ExpressRequest, res: ExpressResponse, next: ExpressNextFunction) => {
     const token = req.headers.authorization?.split(' ')[1];
     // This token MUST match the one in the agent's config.json
     if (token && token === (process.env.DEVICE_AUTH_TOKEN || "EjderMeteo_Rpi_SecretKey_2025!")) { 
@@ -99,7 +100,7 @@ const apiRouter = express.Router();
 
 // --- AGENT-FACING ENDPOINTS ---
 
-apiRouter.get('/config/:deviceId', agentAuth, async (req: Request, res: Response) => {
+apiRouter.get('/config/:deviceId', agentAuth, async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { deviceId } = req.params;
 
@@ -145,7 +146,7 @@ apiRouter.get('/config/:deviceId', agentAuth, async (req: Request, res: Response
     }
 });
 
-apiRouter.post('/submit-reading', agentAuth, async (req: Request, res: Response) => {
+apiRouter.post('/submit-reading', agentAuth, async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { sensor: sensor_id, value: rawValue } = req.body;
 
@@ -202,7 +203,7 @@ apiRouter.post('/submit-reading', agentAuth, async (req: Request, res: Response)
 });
 
 
-apiRouter.get('/commands/:deviceId', agentAuth, (req: Request, res: Response) => {
+apiRouter.get('/commands/:deviceId', agentAuth, (req: ExpressRequest, res: ExpressResponse) => {
     const { deviceId } = req.params;
     const pendingCommands = commandQueue[deviceId]?.filter(cmd => cmd.status === 'pending') || [];
     if (pendingCommands.length > 0) {
@@ -213,7 +214,7 @@ apiRouter.get('/commands/:deviceId', agentAuth, (req: Request, res: Response) =>
 });
 
 
-apiRouter.post('/commands/:id/:status', agentAuth, async (req: Request, res: Response) => {
+apiRouter.post('/commands/:id/:status', agentAuth, async (req: ExpressRequest, res: ExpressResponse) => {
     const { id, status } = req.params;
     const commandId = parseInt(id, 10);
 
@@ -242,7 +243,7 @@ apiRouter.post('/commands/:id/:status', agentAuth, async (req: Request, res: Res
 });
 
 
-apiRouter.post('/cameras/:cameraId/upload-photo', agentAuth, async (req: Request, res: Response) => {
+apiRouter.post('/cameras/:cameraId/upload-photo', agentAuth, async (req: ExpressRequest, res: ExpressResponse) => {
     const { cameraId } = req.params;
     const { image, filename } = req.body; // base64 image and filename
 
@@ -270,7 +271,7 @@ apiRouter.post('/cameras/:cameraId/upload-photo', agentAuth, async (req: Request
 });
 
 // Endpoint for analysis photos
-apiRouter.post('/analysis/upload-photo', agentAuth, async (req: Request, res: Response) => {
+apiRouter.post('/analysis/upload-photo', agentAuth, async (req: ExpressRequest, res: ExpressResponse) => {
     const { cameraId, image, filename } = req.body;
     try {
         const uploadsDir = path.join(UPLOADS_ROOT, 'analysis');
@@ -288,7 +289,7 @@ apiRouter.post('/analysis/upload-photo', agentAuth, async (req: Request, res: Re
 
 
 // --- FRONTEND-FACING ENDPOINTS ---
-apiRouter.get('/agent-status', (req: Request, res: Response) => {
+apiRouter.get('/agent-status', (req: ExpressRequest, res: ExpressResponse) => {
     // Add logic to check if lastUpdate is recent
     if (agentStatus.lastUpdate && (new Date().getTime() - new Date(agentStatus.lastUpdate).getTime()) > 30000) {
         agentStatus.status = 'offline';
@@ -297,7 +298,7 @@ apiRouter.get('/agent-status', (req: Request, res: Response) => {
 });
 
 // STATIONS
-apiRouter.get('/stations', async (req: Request, res: Response) => {
+apiRouter.get('/stations', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const stationsFromDb = await db.all(`
             SELECT 
@@ -321,7 +322,7 @@ apiRouter.get('/stations', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch stations." });
     }
 });
-apiRouter.post('/stations', async (req: Request, res: Response) => {
+apiRouter.post('/stations', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { id, name, location, locationCoords, selectedSensorIds = [], selectedCameraIds = [] } = req.body;
         await db.run(
@@ -340,7 +341,7 @@ apiRouter.post('/stations', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to create station." });
     }
 });
-apiRouter.put('/stations/:id', async (req: Request, res: Response) => {
+apiRouter.put('/stations/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     const { id } = req.params;
     try {
         const fields = req.body;
@@ -369,7 +370,7 @@ apiRouter.put('/stations/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to update station." });
     }
 });
-apiRouter.delete('/stations/:id', async (req: Request, res: Response) => {
+apiRouter.delete('/stations/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         await db.run("DELETE FROM stations WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -381,7 +382,7 @@ apiRouter.delete('/stations/:id', async (req: Request, res: Response) => {
 
 
 // SENSORS
-apiRouter.get('/sensors', async (req: Request, res: Response) => {
+apiRouter.get('/sensors', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const unassigned = req.query.unassigned === 'true';
         const query = unassigned
@@ -410,7 +411,7 @@ apiRouter.get('/sensors', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch sensors." });
     }
 });
-apiRouter.post('/sensors', async (req: Request, res: Response) => {
+apiRouter.post('/sensors', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
         const id = `S${Date.now()}`;
@@ -428,7 +429,7 @@ apiRouter.post('/sensors', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to create sensor." });
     }
 });
-apiRouter.put('/sensors/:id', async (req: Request, res: Response) => {
+apiRouter.put('/sensors/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     const { id } = req.params;
     try {
         const fields = req.body;
@@ -477,7 +478,7 @@ apiRouter.put('/sensors/:id', async (req: Request, res: Response) => {
     }
 });
 
-apiRouter.delete('/sensors/:id', async (req: Request, res: Response) => {
+apiRouter.delete('/sensors/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         await db.run("DELETE FROM sensors WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -486,7 +487,7 @@ apiRouter.delete('/sensors/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to delete sensor." });
     }
 });
-apiRouter.post('/sensors/:id/read', async (req: Request, res: Response) => {
+apiRouter.post('/sensors/:id/read', async (req: ExpressRequest, res: ExpressResponse) => {
     const { id } = req.params;
     try {
         const sensor = await db.get("SELECT * FROM sensors WHERE id = ?", id);
@@ -508,7 +509,7 @@ apiRouter.post('/sensors/:id/read', async (req: Request, res: Response) => {
     }
 });
 
-apiRouter.post('/sensors/:id/manual-reading', async (req: Request, res: Response) => {
+apiRouter.post('/sensors/:id/manual-reading', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { id: sensor_id } = req.params;
         const { value } = req.body; // Expecting a raw number
@@ -554,7 +555,7 @@ apiRouter.post('/sensors/:id/manual-reading', async (req: Request, res: Response
 });
 
 // CAMERAS
-apiRouter.get('/cameras', async (req: Request, res: Response) => {
+apiRouter.get('/cameras', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const unassigned = req.query.unassigned === 'true';
         const query = unassigned
@@ -579,7 +580,7 @@ apiRouter.get('/cameras', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch cameras." });
     }
 });
-apiRouter.post('/cameras', async (req: Request, res: Response) => {
+apiRouter.post('/cameras', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
         const id = `C${Date.now()}`;
@@ -593,7 +594,7 @@ apiRouter.post('/cameras', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to create camera." });
     }
 });
-apiRouter.put('/cameras/:id', async (req: Request, res: Response) => {
+apiRouter.put('/cameras/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     const { id } = req.params;
     try {
         const fields = req.body;
@@ -621,7 +622,7 @@ apiRouter.put('/cameras/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to update camera." });
     }
 });
-apiRouter.delete('/cameras/:id', async (req: Request, res: Response) => {
+apiRouter.delete('/cameras/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         await db.run("DELETE FROM cameras WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -630,7 +631,7 @@ apiRouter.delete('/cameras/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to delete camera." });
     }
 });
-apiRouter.post('/cameras/:id/capture', async (req: Request, res: Response) => {
+apiRouter.post('/cameras/:id/capture', async (req: ExpressRequest, res: ExpressResponse) => {
     const { id } = req.params;
     try {
         const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", id);
@@ -653,7 +654,7 @@ apiRouter.post('/cameras/:id/capture', async (req: Request, res: Response) => {
 });
 
 // READINGS
-apiRouter.get('/readings', async (req: Request, res: Response) => {
+apiRouter.get('/readings', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const readings = await db.all(`
             SELECT r.id, r.sensor_id as sensorId, s.name as sensorName, s.type as sensorType, s.unit, s.interface, st.id as stationId, st.name as stationName, r.value, r.timestamp 
@@ -669,7 +670,7 @@ apiRouter.get('/readings', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch readings." });
     }
 });
-apiRouter.get('/readings/history', async (req: Request, res: Response) => {
+apiRouter.get('/readings/history', async (req: ExpressRequest, res: ExpressResponse) => {
     const { stationIds: stationIdsQuery, sensorTypes: sensorTypesQuery } = req.query;
 
     if (typeof stationIdsQuery !== 'string' || typeof sensorTypesQuery !== 'string' || stationIdsQuery.length === 0 || sensorTypesQuery.length === 0) {
@@ -711,7 +712,7 @@ const isValidDefinitionType = (type: string): boolean => {
     return ['station_types', 'sensor_types', 'camera_types'].includes(type);
 };
 
-apiRouter.get('/definitions', async (req: Request, res: Response) => {
+apiRouter.get('/definitions', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const [stationTypes, sensorTypes, cameraTypes] = await Promise.all([
             db.all("SELECT * FROM station_types"),
@@ -724,7 +725,7 @@ apiRouter.get('/definitions', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch definitions." });
     }
 });
-apiRouter.post('/definitions/:type', async (req: Request, res: Response) => {
+apiRouter.post('/definitions/:type', async (req: ExpressRequest, res: ExpressResponse) => {
     const { type } = req.params;
     if (!isValidDefinitionType(type)) {
         return res.status(400).json({ error: 'Invalid definition type.' });
@@ -741,7 +742,7 @@ apiRouter.post('/definitions/:type', async (req: Request, res: Response) => {
         res.status(500).json({ error: `Failed to create definition for ${type}.` });
     }
 });
-apiRouter.put('/definitions/:type/:id', async (req: Request, res: Response) => {
+apiRouter.put('/definitions/:type/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     const { type, id } = req.params;
     if (!isValidDefinitionType(type)) {
         return res.status(400).json({ error: 'Invalid definition type.' });
@@ -758,7 +759,7 @@ apiRouter.put('/definitions/:type/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: `Failed to update definition.` });
     }
 });
-apiRouter.delete('/definitions/:type/:id', async (req: Request, res: Response) => {
+apiRouter.delete('/definitions/:type/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     const { type, id } = req.params;
     if (!isValidDefinitionType(type)) {
         return res.status(400).json({ error: 'Invalid definition type.' });
@@ -772,7 +773,7 @@ apiRouter.delete('/definitions/:type/:id', async (req: Request, res: Response) =
     }
 });
 
-apiRouter.get('/alert-rules', async (req: Request, res: Response) => {
+apiRouter.get('/alert-rules', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         res.json(await db.all("SELECT * FROM alert_rules"));
     } catch (error) {
@@ -781,7 +782,7 @@ apiRouter.get('/alert-rules', async (req: Request, res: Response) => {
     }
 });
 
-apiRouter.get('/settings/global_read_frequency', async (req: Request, res: Response) => {
+apiRouter.get('/settings/global_read_frequency', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const setting = await db.get("SELECT value FROM global_settings WHERE key = 'global_read_frequency_minutes'");
         res.json(setting || { value: '0' });
@@ -790,7 +791,7 @@ apiRouter.get('/settings/global_read_frequency', async (req: Request, res: Respo
         res.status(500).json({ error: "Failed to get global read frequency." });
     }
 });
-apiRouter.put('/settings/global_read_frequency', async (req: Request, res: Response) => {
+apiRouter.put('/settings/global_read_frequency', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { value } = req.body;
         await db.run("UPDATE global_settings SET value = ? WHERE key = 'global_read_frequency_minutes'", value);
@@ -802,7 +803,7 @@ apiRouter.put('/settings/global_read_frequency', async (req: Request, res: Respo
 });
 
 // REPORTS
-apiRouter.get('/reports', async (req: Request, res: Response) => {
+apiRouter.get('/reports', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         res.json(await db.all("SELECT * FROM reports"));
     } catch (error) {
@@ -810,7 +811,7 @@ apiRouter.get('/reports', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch reports." });
     }
 });
-apiRouter.delete('/reports/:id', async (req: Request, res: Response) => {
+apiRouter.delete('/reports/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         await db.run("DELETE FROM reports WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -819,7 +820,7 @@ apiRouter.delete('/reports/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to delete report." });
     }
 });
-apiRouter.get('/report-schedules', async (req: Request, res: Response) => {
+apiRouter.get('/report-schedules', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const schedules = await db.all("SELECT * FROM report_schedules");
         res.json(schedules.map(s => ({
@@ -831,7 +832,7 @@ apiRouter.get('/report-schedules', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch report schedules." });
     }
 });
-apiRouter.post('/report-schedules', async (req: Request, res: Response) => {
+apiRouter.post('/report-schedules', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { name, frequency, time, recipient, reportConfig, isEnabled } = req.body;
         const id = `SCH_${uuidv4()}`;
@@ -845,7 +846,7 @@ apiRouter.post('/report-schedules', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to create report schedule." });
     }
 });
-apiRouter.put('/report-schedules/:id', async (req: Request, res: Response) => {
+apiRouter.put('/report-schedules/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     const { id } = req.params;
     try {
         const fields = req.body;
@@ -876,7 +877,7 @@ apiRouter.put('/report-schedules/:id', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to update report schedule." });
     }
 });
-apiRouter.delete('/report-schedules/:id', async (req: Request, res: Response) => {
+apiRouter.delete('/report-schedules/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         await db.run("DELETE FROM report_schedules WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -887,7 +888,7 @@ apiRouter.delete('/report-schedules/:id', async (req: Request, res: Response) =>
 });
 
 // NOTIFICATIONS
-apiRouter.get('/notifications', async (req: Request, res: Response) => {
+apiRouter.get('/notifications', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         res.json(await db.all("SELECT * FROM notifications ORDER BY timestamp DESC"));
     } catch (error) {
@@ -895,7 +896,7 @@ apiRouter.get('/notifications', async (req: Request, res: Response) => {
         res.status(500).json({ error: "Failed to fetch notifications." });
     }
 });
-apiRouter.post('/notifications/mark-all-read', async (req: Request, res: Response) => {
+apiRouter.post('/notifications/mark-all-read', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         await db.run("UPDATE notifications SET is_read = ? WHERE is_read = ?", [true, false]);
         res.status(200).send('OK');
@@ -904,7 +905,7 @@ apiRouter.post('/notifications/mark-all-read', async (req: Request, res: Respons
         res.status(500).json({ error: "Failed to mark all notifications as read." });
     }
 });
-apiRouter.delete('/notifications/clear-all', async (req: Request, res: Response) => {
+apiRouter.delete('/notifications/clear-all', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         await db.run("DELETE FROM notifications");
         res.status(204).send();
@@ -929,7 +930,7 @@ Nihai cevabını SADECE şu JSON formatında ver:
 Örnek: Eğer kar seviyesi ortalama 80cm çizgisindeyse, cevabın şöyle olmalı:
 {"snow_depth_cm": 80}`;
 
-apiRouter.post('/analysis/snow-depth', async (req: Request, res: Response) => {
+apiRouter.post('/analysis/snow-depth', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { cameraId, virtualSensorId, analysisType } = req.body;
         const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", cameraId);
@@ -961,7 +962,7 @@ apiRouter.post('/analysis/snow-depth', async (req: Request, res: Response) => {
     }
 });
 
-apiRouter.post('/analysis/snow-depth-from-image', async (req: Request, res: Response) => {
+apiRouter.post('/analysis/snow-depth-from-image', async (req: ExpressRequest, res: ExpressResponse) => {
     const { imageBase64, virtualSensorId, analysisType } = req.body;
 
     if (!imageBase64 || !virtualSensorId || !analysisType) {
@@ -1218,7 +1219,7 @@ fs.access(path.join(publicPath, 'index.html')).catch(() => {
 app.use(express.static(publicPath));
 
 // Catch-all to serve index.html for any other request (for client-side routing)
-app.get('*', (req: Request, res: Response) => {
+app.get('*', (req: ExpressRequest, res: ExpressResponse) => {
     // Exclude API routes from being caught by this
     if (req.path.startsWith('/api/')) {
         return res.status(404).send('API endpoint not found.');
