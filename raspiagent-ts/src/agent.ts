@@ -36,6 +36,20 @@ interface LocalConfig {
     device: { id: string; token: string };
 }
 
+const GEMINI_SNOW_DEPTH_PROMPT = `Sen meteorolojik veri için görüntü analizi yapan bir uzmansın. Görevin, kar cetveli içeren bu görüntüden santimetre cinsinden kar derinliğini belirlemek.
+
+Bu adımları dikkatlice izle:
+1.  **Cetveli Bul:** Görüntüdeki kar ölçüm cetvelini bul. Genellikle üzerinde sayısal işaretler olan dikey bir nesnedir.
+2.  **Kar Seviyesini Belirle:** Karla kaplı zemin ile cetvelin görünen kısmı arasındaki ortalama sınırı, yani kar çizgisini belirle. Tekil kar birikintileri veya erimiş alanları değil, genel kar seviyesini dikkate al.
+3.  **Değeri Oku:** Cetvel üzerinde, belirlediğin bu ortalama kar çizgisine denk gelen en yakın sayısal değeri oku.
+4.  **Doğrula ve Yanıtla:** Değeri net bir şekilde belirleyebiliyorsan, bu değeri ver. Görüntü net değilse, cetvel görünmüyorsa, kar seviyesi anlaşılamıyorsa veya derinliği güvenilir bir şekilde belirleyemiyorsan, -1 değerini döndür.
+
+Nihai cevabını SADECE şu JSON formatında ver:
+{"snow_depth_cm": SAYI}
+
+Örnek: Eğer kar seviyesi ortalama 80cm çizgisindeyse, cevabın şöyle olmalı:
+{"snow_depth_cm": 80}`;
+
 class Agent {
     private state: AgentState = AgentState.INITIALIZING;
     private config: DeviceConfig | null = null;
@@ -54,7 +68,7 @@ class Agent {
     private timers: ReturnType<typeof setTimeout>[] = [];
 
     constructor(localConfig: LocalConfig) {
-        this.apiBaseUrl = `${localConfig.server.base_url}/api`;
+        this.apiBaseUrl = localConfig.server.base_url;
         this.deviceId = localConfig.device.id;
         this.authToken = localConfig.device.token;
 
@@ -177,29 +191,29 @@ class Agent {
             const readFrequency = this.getEffectiveFrequency(sensorConfig);
 
             if (now - lastRead >= readFrequency * 1000) {
-                // It's time to read this sensor.
                 console.log(`[OKUMA BAŞLADI] ${sensorConfig.name} (ID: ${sensorConfig.id})`);
-                
-                // Update time immediately to prevent re-triggering while the async read is in progress.
-                this.lastReadTimes.set(sensorConfig.id, now); 
+                this.lastReadTimes.set(sensorConfig.id, now);
+
+                const driverName = sensorConfig.parser_config?.driver;
+                if (!driverName || typeof driverName !== 'string') {
+                    console.error(`  -> HATA: ${sensorConfig.name} (ID: ${sensorConfig.id}) için 'driver' tanımlanmamış. Lütfen web arayüzünden sensörün 'Ayrıştırıcı Yapılandırması' alanını kontrol edin.`);
+                    console.log(`[OKUMA BİTTİ] ${sensorConfig.name} - Hatalı Yapılandırma`);
+                    continue; // Skip this misconfigured sensor
+                }
 
                 try {
-                    const driver = await this.loadDriver(sensorConfig.parser_config.driver);
+                    const driver = await this.loadDriver(driverName);
                     if (!driver) {
-                        console.error(`  -> HATA: Sürücü yüklenemedi: ${sensorConfig.parser_config.driver}`);
-                        // Continue to the next sensor in the loop
+                        // loadDriver already logs the detailed error
+                        console.log(`[OKUMA BİTTİ] ${sensorConfig.name} - Sürücü Yüklenemedi`);
                         continue;
                     }
-
-                    // Await the read operation to FULLY COMPLETE before moving to the next sensor in the `for` loop.
-                    // This is the key to preventing hardware bus conflicts.
+                    
                     const reading = await driver.read(sensorConfig.config);
                     
                     if (reading !== null) {
                         let valueToSend = reading;
 
-                        // For multi-value drivers like SHT3x or OpenWeather, extract the relevant value
-                        // based on the sensor's configured type.
                         if (typeof reading === 'object' && Object.keys(reading).length > 1) {
                             const sensorType = sensorConfig.type.toLowerCase();
                             let keyToExtract: string | undefined;
@@ -257,6 +271,9 @@ class Agent {
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 console.error(`     -> ❌ Değer gönderilemedi: ${error.message}`);
+                if (error.response) {
+                    console.error(`     -> Sunucu Yanıtı (${error.response.status}): ${JSON.stringify(error.response.data)}`);
+                }
             } else {
                 console.error('     -> ❌ Değer gönderilirken beklenmedik hata:', error);
             }
@@ -426,7 +443,7 @@ class Agent {
                 },
             };
             const textPart = {
-                text: "Bu görüntüdeki kar ölçüm cetveline göre karla kaplı en yüksek sayısal değer nedir? Cevabını sadece `{\"snow_depth_cm\": SAYI}` formatında bir JSON olarak ver.",
+                text: GEMINI_SNOW_DEPTH_PROMPT,
             };
 
             // FIX: Use responseSchema for reliable JSON output
@@ -463,6 +480,11 @@ class Agent {
             if (typeof snowDepth !== 'number') {
                 console.error('   -> HATA: Gemini yanıtından sayısal bir kar yüksekliği değeri alınamadı.');
                 return false;
+            }
+
+            if (snowDepth === -1) {
+                console.log(`   -> BİLGİ: Gemini görüntüden kar derinliğini belirleyemedi.`);
+                return false; // Command failed
             }
             
             console.log(`   -> Analiz Sonucu: ${snowDepth} cm`);
@@ -511,6 +533,7 @@ class Agent {
         const filename = `ANALYSIS_OCV_${timestamp}_${cameraId}.jpg`;
         const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
         const filepath = path.join(UPLOADS_DIR, filename);
+        // Corrected path to point to the script's location relative to the source, not the compiled output
         const scriptPath = path.join(__dirname, 'scripts', 'snow_depth_opencv.py');
 
         try {

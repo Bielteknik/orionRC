@@ -3,8 +3,8 @@ import { SerialPort } from 'serialport';
 import { ReadlineParser } from '@serialport/parser-readline';
 
 /**
- * Driver to read from a generic UART weight sensor that outputs lines of text containing a weight value.
- * This driver reads lines from the serial port and parses the first floating-point number it finds.
+ * Driver to read from a generic UART weight sensor that outputs lines of text with a specific prefix.
+ * It looks for lines like "Agirlik: = 0.19B0" and parses the floating-point number.
  */
 export default class Hx711UartDriver implements ISensorDriver {
     /**
@@ -54,10 +54,16 @@ export default class Hx711UartDriver implements ISensorDriver {
                 const trimmedLine = line.trim();
                 console.log(`     -> Ham Veri [HX711 UART]: "${trimmedLine}"`);
 
-                const match = trimmedLine.match(/([0-9]*\.?[0-9]+)/);
+                const prefix = "Agirlik: =";
+                const prefixIndex = trimmedLine.indexOf(prefix);
                 
-                if (match && match[0]) {
-                    const weight = parseFloat(match[0]);
+                if (prefixIndex !== -1) {
+                    // Find the value part after the prefix
+                    const valueStr = trimmedLine.substring(prefixIndex + prefix.length).trim();
+                    
+                    // parseFloat will parse the number and stop at the first non-numeric character (like 'B' in '0.19B0')
+                    const weight = parseFloat(valueStr);
+
                     if (!isNaN(weight)) {
                         console.log(`     -> Ayrıştırılan Veri [HX711 UART]: ${weight} kg`);
                         cleanupAndResolve({ weight_kg: weight });
@@ -75,7 +81,7 @@ export default class Hx711UartDriver implements ISensorDriver {
 
             // Timeout after 7 seconds
             timeout = setTimeout(() => {
-                console.warn(`     -> UYARI (HX711 UART): Veri okuma ${port} portunda zaman aşımına uğradı. Sayısal bir değer içeren satır bulunamadı.`);
+                console.warn(`     -> UYARI (HX711 UART): Veri okuma ${port} portunda zaman aşımına uğradı. "Agirlik: = ..." formatında bir satır bulunamadı.`);
                 cleanupAndResolve(null);
             }, 7000);
 

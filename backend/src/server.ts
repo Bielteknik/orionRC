@@ -1,8 +1,6 @@
-// Use fully qualified express types to avoid conflict with global DOM types.
-// FIX: Use ES6 style import for express to be compatible with ES modules and get correct types.
-// FIX: Import specific Request, Response, NextFunction, and Express types from 'express' to avoid name conflicts with global DOM types.
-// FIX: Alias express types to avoid conflict with global DOM types.
-import express, { Request as ExpressRequest, Response as ExpressResponse, NextFunction as ExpressNextFunction, Express } from 'express';
+// Use standard express types now that tsconfig is corrected.
+// FIX: Changed to default import to use namespaced types (express.Request, etc.) to avoid global type conflicts.
+import express from 'express';
 import cors from 'cors';
 import { openDb, db, migrate } from './database.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -10,12 +8,12 @@ import { DeviceConfig, SensorConfig, ReportSchedule } from './types.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
-// FIX: Explicitly import 'Buffer' to resolve "Cannot find name 'Buffer'" due to missing Node.js types.
+// Explicitly import 'Buffer' to resolve "Cannot find name 'Buffer'" due to missing Node.js types.
 import { Buffer } from 'buffer';
 import XLSX from 'xlsx';
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
-// FIX: Import Type for responseSchema
+// Import Type for responseSchema
 import { GoogleGenAI, Type } from "@google/genai";
 
 dotenv.config();
@@ -23,8 +21,14 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// FIX: Correctly initialize express app.
-const app: Express = express();
+// Define the root for file uploads. Use an environment variable if provided,
+// otherwise assume it's in a sibling 'uploads' directory relative to the app's CWD.
+// The "(process as any)" cast is removed as tsconfig.json should now correctly provide Node.js types.
+// FIX: Cast `process` to `any` to work around a TypeScript type definition issue where Node.js types for `process.cwd` are not correctly resolved.
+const UPLOADS_ROOT = process.env.UPLOADS_PATH || path.join((process as any).cwd(), '..', 'uploads');
+console.log(`[Server] Uploads dizini olarak kullanılıyor: ${UPLOADS_ROOT}`);
+
+const app: express.Express = express();
 const port = process.env.PORT || 8000;
 
 // Helper to safely parse JSON that might be invalid or empty
@@ -63,9 +67,8 @@ const roundNumericValues = (value: any): any => {
 app.use(cors());
 app.use(express.json({ limit: '10mb' })); // Increase limit for base64 image uploads
 
-// Serve uploaded photos from both camera captures and analysis
-// Corrected path to be a sibling directory to the backend app directory
-app.use('/uploads', express.static(path.join(__dirname, '..', '..', 'uploads')));
+// Serve uploaded photos from the configured uploads path
+app.use('/uploads', express.static(UPLOADS_ROOT));
 
 
 // --- In-memory state for agent and commands ---
@@ -77,7 +80,7 @@ let commandQueue: { [deviceId: string]: any[] } = {};
 
 
 // --- AUTH MIDDLEWARE (simple token check) ---
-const agentAuth = (req: ExpressRequest, res: ExpressResponse, next: ExpressNextFunction) => {
+const agentAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const token = req.headers.authorization?.split(' ')[1];
     // This token MUST match the one in the agent's config.json
     if (token && token === (process.env.DEVICE_AUTH_TOKEN || "EjderMeteo_Rpi_SecretKey_2025!")) { 
@@ -89,9 +92,13 @@ const agentAuth = (req: ExpressRequest, res: ExpressResponse, next: ExpressNextF
     }
 };
 
+// --- API ROUTER SETUP ---
+const apiRouter = express.Router();
+
+
 // --- AGENT-FACING ENDPOINTS ---
 
-app.get('/api/config/:deviceId', agentAuth, async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/config/:deviceId', agentAuth, async (req: express.Request, res: express.Response) => {
     try {
         const { deviceId } = req.params;
 
@@ -128,7 +135,7 @@ app.get('/api/config/:deviceId', agentAuth, async (req: ExpressRequest, res: Exp
             sensors: processedSensors,
             cameras: cameras,
             global_read_frequency_seconds: (parseInt(globalFreq?.value, 10) || 0) * 60,
-            gemini_api_key: process.env.API_KEY,
+            gemini_api_key: process.env.GEMINI_API_KEY,
         };
         res.json(config);
     } catch (error) {
@@ -137,7 +144,7 @@ app.get('/api/config/:deviceId', agentAuth, async (req: ExpressRequest, res: Exp
     }
 });
 
-app.post('/api/submit-reading', agentAuth, async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.post('/submit-reading', agentAuth, async (req: express.Request, res: express.Response) => {
     try {
         const { sensor: sensor_id, value: rawValue } = req.body;
 
@@ -194,7 +201,7 @@ app.post('/api/submit-reading', agentAuth, async (req: ExpressRequest, res: Expr
 });
 
 
-app.get('/api/commands/:deviceId', agentAuth, (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/commands/:deviceId', agentAuth, (req: express.Request, res: express.Response) => {
     const { deviceId } = req.params;
     const pendingCommands = commandQueue[deviceId]?.filter(cmd => cmd.status === 'pending') || [];
     if (pendingCommands.length > 0) {
@@ -205,7 +212,7 @@ app.get('/api/commands/:deviceId', agentAuth, (req: ExpressRequest, res: Express
 });
 
 
-app.post('/api/commands/:id/:status', agentAuth, async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.post('/commands/:id/:status', agentAuth, async (req: express.Request, res: express.Response) => {
     const { id, status } = req.params;
     const commandId = parseInt(id, 10);
 
@@ -234,12 +241,12 @@ app.post('/api/commands/:id/:status', agentAuth, async (req: ExpressRequest, res
 });
 
 
-app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.post('/cameras/:cameraId/upload-photo', agentAuth, async (req: express.Request, res: express.Response) => {
     const { cameraId } = req.params;
     const { image, filename } = req.body; // base64 image and filename
 
     try {
-        const UPLOADS_DIR = path.join(__dirname, '..', '..', 'uploads', 'captures');
+        const UPLOADS_DIR = path.join(UPLOADS_ROOT, 'captures');
         await fs.mkdir(UPLOADS_DIR, { recursive: true });
         const imagePath = path.join(UPLOADS_DIR, filename);
         
@@ -262,10 +269,10 @@ app.post('/api/cameras/:cameraId/upload-photo', agentAuth, async (req: ExpressRe
 });
 
 // Endpoint for analysis photos
-app.post('/api/analysis/upload-photo', agentAuth, async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.post('/analysis/upload-photo', agentAuth, async (req: express.Request, res: express.Response) => {
     const { cameraId, image, filename } = req.body;
     try {
-        const uploadsDir = path.join(__dirname, '..', '..', 'uploads', 'analysis');
+        const uploadsDir = path.join(UPLOADS_ROOT, 'analysis');
         await fs.mkdir(uploadsDir, { recursive: true });
         const imagePath = path.join(uploadsDir, filename);
         await fs.writeFile(imagePath, Buffer.from(image, 'base64'));
@@ -280,7 +287,7 @@ app.post('/api/analysis/upload-photo', agentAuth, async (req: ExpressRequest, re
 
 
 // --- FRONTEND-FACING ENDPOINTS ---
-app.get('/api/agent-status', (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/agent-status', (req: express.Request, res: express.Response) => {
     // Add logic to check if lastUpdate is recent
     if (agentStatus.lastUpdate && (new Date().getTime() - new Date(agentStatus.lastUpdate).getTime()) > 30000) {
         agentStatus.status = 'offline';
@@ -289,7 +296,7 @@ app.get('/api/agent-status', (req: ExpressRequest, res: ExpressResponse) => {
 });
 
 // STATIONS
-app.get('/api/stations', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/stations', async (req: express.Request, res: express.Response) => {
     try {
         const stationsFromDb = await db.all(`
             SELECT 
@@ -313,7 +320,7 @@ app.get('/api/stations', async (req: ExpressRequest, res: ExpressResponse) => {
         res.status(500).json({ error: "Failed to fetch stations." });
     }
 });
-app.post('/api/stations', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.post('/stations', async (req: express.Request, res: express.Response) => {
     try {
         const { id, name, location, locationCoords, selectedSensorIds = [], selectedCameraIds = [] } = req.body;
         await db.run(
@@ -332,7 +339,7 @@ app.post('/api/stations', async (req: ExpressRequest, res: ExpressResponse) => {
         res.status(500).json({ error: "Failed to create station." });
     }
 });
-app.put('/api/stations/:id', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.put('/stations/:id', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     try {
         const fields = req.body;
@@ -361,7 +368,7 @@ app.put('/api/stations/:id', async (req: ExpressRequest, res: ExpressResponse) =
         res.status(500).json({ error: "Failed to update station." });
     }
 });
-app.delete('/api/stations/:id', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.delete('/stations/:id', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("DELETE FROM stations WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -373,7 +380,7 @@ app.delete('/api/stations/:id', async (req: ExpressRequest, res: ExpressResponse
 
 
 // SENSORS
-app.get('/api/sensors', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/sensors', async (req: express.Request, res: express.Response) => {
     try {
         const unassigned = req.query.unassigned === 'true';
         const query = unassigned
@@ -402,7 +409,7 @@ app.get('/api/sensors', async (req: ExpressRequest, res: ExpressResponse) => {
         res.status(500).json({ error: "Failed to fetch sensors." });
     }
 });
-app.post('/api/sensors', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.post('/sensors', async (req: express.Request, res: express.Response) => {
     try {
         const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
         const id = `S${Date.now()}`;
@@ -420,7 +427,7 @@ app.post('/api/sensors', async (req: ExpressRequest, res: ExpressResponse) => {
         res.status(500).json({ error: "Failed to create sensor." });
     }
 });
-app.put('/api/sensors/:id', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.put('/sensors/:id', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     try {
         const fields = req.body;
@@ -469,7 +476,7 @@ app.put('/api/sensors/:id', async (req: ExpressRequest, res: ExpressResponse) =>
     }
 });
 
-app.delete('/api/sensors/:id', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.delete('/sensors/:id', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("DELETE FROM sensors WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -478,7 +485,7 @@ app.delete('/api/sensors/:id', async (req: ExpressRequest, res: ExpressResponse)
         res.status(500).json({ error: "Failed to delete sensor." });
     }
 });
-app.post('/api/sensors/:id/read', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.post('/sensors/:id/read', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     try {
         const sensor = await db.get("SELECT * FROM sensors WHERE id = ?", id);
@@ -500,8 +507,53 @@ app.post('/api/sensors/:id/read', async (req: ExpressRequest, res: ExpressRespon
     }
 });
 
+apiRouter.post('/sensors/:id/manual-reading', async (req: express.Request, res: express.Response) => {
+    try {
+        const { id: sensor_id } = req.params;
+        const { value } = req.body; // Expecting a raw number
+
+        if (sensor_id === undefined || typeof value !== 'number') {
+            return res.status(400).json({ error: 'Bad Request: A numeric value is required.' });
+        }
+
+        const sensor = await db.get("SELECT type FROM sensors WHERE id = ?", sensor_id);
+        if (!sensor) {
+            return res.status(404).json({ error: 'Sensor not found.' });
+        }
+        
+        let valueObject: any;
+        if (sensor.type === 'Kar Yüksekliği') {
+            valueObject = { snow_depth_cm: value };
+        } else if (sensor.type === 'Mesafe') {
+            valueObject = { distance_cm: value };
+        } else {
+             const lastReading = await db.get("SELECT value FROM sensors WHERE id = ?", sensor_id);
+             if (lastReading && lastReading.value) {
+                const lastValue = safeJSONParse(lastReading.value, {});
+                const key = Object.keys(lastValue)[0] || 'value';
+                valueObject = { [key]: value };
+             } else {
+                valueObject = { value };
+             }
+        }
+        
+        const finalValue = roundNumericValues(valueObject);
+        const timestamp = new Date().toISOString();
+        const valueStr = JSON.stringify(finalValue);
+
+        await db.run("INSERT INTO readings (sensor_id, value, timestamp) VALUES (?, ?, ?)", sensor_id, valueStr, timestamp);
+        await db.run("UPDATE sensors SET value = ?, last_update = ? WHERE id = ?", valueStr, timestamp, sensor_id);
+        
+        console.log(`[MANUAL READING] Sensor ${sensor_id} updated to ${valueStr}`);
+        res.status(201).json({ message: 'OK', value: finalValue });
+    } catch (error: any) {
+        console.error(`Error submitting manual reading for sensor ${req.params.id}:`, error.message);
+        res.status(500).json({ error: 'Failed to submit manual reading.' });
+    }
+});
+
 // CAMERAS
-app.get('/api/cameras', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/cameras', async (req: express.Request, res: express.Response) => {
     try {
         const unassigned = req.query.unassigned === 'true';
         const query = unassigned
@@ -526,7 +578,7 @@ app.get('/api/cameras', async (req: ExpressRequest, res: ExpressResponse) => {
         res.status(500).json({ error: "Failed to fetch cameras." });
     }
 });
-app.post('/api/cameras', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.post('/cameras', async (req: express.Request, res: express.Response) => {
     try {
         const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
         const id = `C${Date.now()}`;
@@ -540,7 +592,7 @@ app.post('/api/cameras', async (req: ExpressRequest, res: ExpressResponse) => {
         res.status(500).json({ error: "Failed to create camera." });
     }
 });
-app.put('/api/cameras/:id', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.put('/cameras/:id', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     try {
         const fields = req.body;
@@ -568,7 +620,7 @@ app.put('/api/cameras/:id', async (req: ExpressRequest, res: ExpressResponse) =>
         res.status(500).json({ error: "Failed to update camera." });
     }
 });
-app.delete('/api/cameras/:id', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.delete('/cameras/:id', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("DELETE FROM cameras WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -577,7 +629,7 @@ app.delete('/api/cameras/:id', async (req: ExpressRequest, res: ExpressResponse)
         res.status(500).json({ error: "Failed to delete camera." });
     }
 });
-app.post('/api/cameras/:id/capture', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.post('/cameras/:id/capture', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     try {
         const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", id);
@@ -600,7 +652,7 @@ app.post('/api/cameras/:id/capture', async (req: ExpressRequest, res: ExpressRes
 });
 
 // READINGS
-app.get('/api/readings', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/readings', async (req: express.Request, res: express.Response) => {
     try {
         const readings = await db.all(`
             SELECT r.id, r.sensor_id as sensorId, s.name as sensorName, s.type as sensorType, s.unit, s.interface, st.id as stationId, st.name as stationName, r.value, r.timestamp 
@@ -616,7 +668,7 @@ app.get('/api/readings', async (req: ExpressRequest, res: ExpressResponse) => {
         res.status(500).json({ error: "Failed to fetch readings." });
     }
 });
-app.get('/api/readings/history', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/readings/history', async (req: express.Request, res: express.Response) => {
     const { stationIds: stationIdsQuery, sensorTypes: sensorTypesQuery } = req.query;
 
     if (typeof stationIdsQuery !== 'string' || typeof sensorTypesQuery !== 'string' || stationIdsQuery.length === 0 || sensorTypesQuery.length === 0) {
@@ -658,7 +710,7 @@ const isValidDefinitionType = (type: string): boolean => {
     return ['station_types', 'sensor_types', 'camera_types'].includes(type);
 };
 
-app.get('/api/definitions', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/definitions', async (req: express.Request, res: express.Response) => {
     try {
         const [stationTypes, sensorTypes, cameraTypes] = await Promise.all([
             db.all("SELECT * FROM station_types"),
@@ -671,7 +723,7 @@ app.get('/api/definitions', async (req: ExpressRequest, res: ExpressResponse) =>
         res.status(500).json({ error: "Failed to fetch definitions." });
     }
 });
-app.post('/api/definitions/:type', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.post('/definitions/:type', async (req: express.Request, res: express.Response) => {
     const { type } = req.params;
     if (!isValidDefinitionType(type)) {
         return res.status(400).json({ error: 'Invalid definition type.' });
@@ -688,7 +740,7 @@ app.post('/api/definitions/:type', async (req: ExpressRequest, res: ExpressRespo
         res.status(500).json({ error: `Failed to create definition for ${type}.` });
     }
 });
-app.put('/api/definitions/:type/:id', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.put('/definitions/:type/:id', async (req: express.Request, res: express.Response) => {
     const { type, id } = req.params;
     if (!isValidDefinitionType(type)) {
         return res.status(400).json({ error: 'Invalid definition type.' });
@@ -705,7 +757,7 @@ app.put('/api/definitions/:type/:id', async (req: ExpressRequest, res: ExpressRe
         res.status(500).json({ error: `Failed to update definition.` });
     }
 });
-app.delete('/api/definitions/:type/:id', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.delete('/definitions/:type/:id', async (req: express.Request, res: express.Response) => {
     const { type, id } = req.params;
     if (!isValidDefinitionType(type)) {
         return res.status(400).json({ error: 'Invalid definition type.' });
@@ -719,7 +771,7 @@ app.delete('/api/definitions/:type/:id', async (req: ExpressRequest, res: Expres
     }
 });
 
-app.get('/api/alert-rules', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/alert-rules', async (req: express.Request, res: express.Response) => {
     try {
         res.json(await db.all("SELECT * FROM alert_rules"));
     } catch (error) {
@@ -728,7 +780,7 @@ app.get('/api/alert-rules', async (req: ExpressRequest, res: ExpressResponse) =>
     }
 });
 
-app.get('/api/settings/global_read_frequency', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/settings/global_read_frequency', async (req: express.Request, res: express.Response) => {
     try {
         const setting = await db.get("SELECT value FROM global_settings WHERE key = 'global_read_frequency_minutes'");
         res.json(setting || { value: '0' });
@@ -737,7 +789,7 @@ app.get('/api/settings/global_read_frequency', async (req: ExpressRequest, res: 
         res.status(500).json({ error: "Failed to get global read frequency." });
     }
 });
-app.put('/api/settings/global_read_frequency', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.put('/settings/global_read_frequency', async (req: express.Request, res: express.Response) => {
     try {
         const { value } = req.body;
         await db.run("UPDATE global_settings SET value = ? WHERE key = 'global_read_frequency_minutes'", value);
@@ -749,7 +801,7 @@ app.put('/api/settings/global_read_frequency', async (req: ExpressRequest, res: 
 });
 
 // REPORTS
-app.get('/api/reports', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/reports', async (req: express.Request, res: express.Response) => {
     try {
         res.json(await db.all("SELECT * FROM reports"));
     } catch (error) {
@@ -757,7 +809,7 @@ app.get('/api/reports', async (req: ExpressRequest, res: ExpressResponse) => {
         res.status(500).json({ error: "Failed to fetch reports." });
     }
 });
-app.delete('/api/reports/:id', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.delete('/reports/:id', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("DELETE FROM reports WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -766,7 +818,7 @@ app.delete('/api/reports/:id', async (req: ExpressRequest, res: ExpressResponse)
         res.status(500).json({ error: "Failed to delete report." });
     }
 });
-app.get('/api/report-schedules', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/report-schedules', async (req: express.Request, res: express.Response) => {
     try {
         const schedules = await db.all("SELECT * FROM report_schedules");
         res.json(schedules.map(s => ({
@@ -778,7 +830,7 @@ app.get('/api/report-schedules', async (req: ExpressRequest, res: ExpressRespons
         res.status(500).json({ error: "Failed to fetch report schedules." });
     }
 });
-app.post('/api/report-schedules', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.post('/report-schedules', async (req: express.Request, res: express.Response) => {
     try {
         const { name, frequency, time, recipient, reportConfig, isEnabled } = req.body;
         const id = `SCH_${uuidv4()}`;
@@ -792,7 +844,7 @@ app.post('/api/report-schedules', async (req: ExpressRequest, res: ExpressRespon
         res.status(500).json({ error: "Failed to create report schedule." });
     }
 });
-app.put('/api/report-schedules/:id', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.put('/report-schedules/:id', async (req: express.Request, res: express.Response) => {
     const { id } = req.params;
     try {
         const fields = req.body;
@@ -823,7 +875,7 @@ app.put('/api/report-schedules/:id', async (req: ExpressRequest, res: ExpressRes
         res.status(500).json({ error: "Failed to update report schedule." });
     }
 });
-app.delete('/api/report-schedules/:id', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.delete('/report-schedules/:id', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("DELETE FROM report_schedules WHERE id = ?", req.params.id);
         res.status(204).send();
@@ -834,7 +886,7 @@ app.delete('/api/report-schedules/:id', async (req: ExpressRequest, res: Express
 });
 
 // NOTIFICATIONS
-app.get('/api/notifications', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/notifications', async (req: express.Request, res: express.Response) => {
     try {
         res.json(await db.all("SELECT * FROM notifications ORDER BY timestamp DESC"));
     } catch (error) {
@@ -842,7 +894,7 @@ app.get('/api/notifications', async (req: ExpressRequest, res: ExpressResponse) 
         res.status(500).json({ error: "Failed to fetch notifications." });
     }
 });
-app.post('/api/notifications/mark-all-read', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.post('/notifications/mark-all-read', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("UPDATE notifications SET is_read = ? WHERE is_read = ?", [true, false]);
         res.status(200).send('OK');
@@ -851,7 +903,7 @@ app.post('/api/notifications/mark-all-read', async (req: ExpressRequest, res: Ex
         res.status(500).json({ error: "Failed to mark all notifications as read." });
     }
 });
-app.delete('/api/notifications/clear-all', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.delete('/notifications/clear-all', async (req: express.Request, res: express.Response) => {
     try {
         await db.run("DELETE FROM notifications");
         res.status(204).send();
@@ -862,7 +914,21 @@ app.delete('/api/notifications/clear-all', async (req: ExpressRequest, res: Expr
 });
 
 // ANALYSIS
-app.post('/api/analysis/snow-depth', async (req: ExpressRequest, res: ExpressResponse) => {
+const GEMINI_SNOW_DEPTH_PROMPT = `Sen meteorolojik veri için görüntü analizi yapan bir uzmansın. Görevin, kar cetveli içeren bu görüntüden santimetre cinsinden kar derinliğini belirlemek.
+
+Bu adımları dikkatlice izle:
+1.  **Cetveli Bul:** Görüntüdeki kar ölçüm cetvelini bul. Genellikle üzerinde sayısal işaretler olan dikey bir nesnedir.
+2.  **Kar Seviyesini Belirle:** Karla kaplı zemin ile cetvelin görünen kısmı arasındaki ortalama sınırı, yani kar çizgisini belirle. Tekil kar birikintileri veya erimiş alanları değil, genel kar seviyesini dikkate al.
+3.  **Değeri Oku:** Cetvel üzerinde, belirlediğin bu ortalama kar çizgisine denk gelen en yakın sayısal değeri oku.
+4.  **Doğrula ve Yanıtla:** Değeri net bir şekilde belirleyebiliyorsan, bu değeri ver. Görüntü net değilse, cetvel görünmüyorsa, kar seviyesi anlaşılamıyorsa veya derinliği güvenilir bir şekilde belirleyemiyorsan, -1 değerini döndür.
+
+Nihai cevabını SADECE şu JSON formatında ver:
+{"snow_depth_cm": SAYI}
+
+Örnek: Eğer kar seviyesi ortalama 80cm çizgisindeyse, cevabın şöyle olmalı:
+{"snow_depth_cm": 80}`;
+
+apiRouter.post('/analysis/snow-depth', async (req: express.Request, res: express.Response) => {
     try {
         const { cameraId, virtualSensorId, analysisType } = req.body;
         const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", cameraId);
@@ -894,7 +960,7 @@ app.post('/api/analysis/snow-depth', async (req: ExpressRequest, res: ExpressRes
     }
 });
 
-app.post('/api/analysis/snow-depth-from-image', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.post('/analysis/snow-depth-from-image', async (req: express.Request, res: express.Response) => {
     const { imageBase64, virtualSensorId, analysisType } = req.body;
 
     if (!imageBase64 || !virtualSensorId || !analysisType) {
@@ -905,18 +971,15 @@ app.post('/api/analysis/snow-depth-from-image', async (req: ExpressRequest, res:
         return res.status(400).json({ error: 'Only "gemini" analysis type is supported for this endpoint.' });
     }
     
-    // FIX: Use API_KEY instead of GEMINI_API_KEY
-    if (!process.env.API_KEY) {
-        // FIX: Update error message to reflect the correct environment variable name
-        console.error('HATA: Gemini API anahtarı (API_KEY) .env dosyasında ayarlanmamış.');
+    if (!process.env.GEMINI_API_KEY) {
+        console.error('HATA: Gemini API anahtarı (GEMINI_API_KEY) .env dosyasında ayarlanmamış.');
         return res.status(500).json({ error: 'Gemini API key is not configured on the server.' });
     }
 
     try {
         console.log(`[ANALYSIS] Starting ${analysisType} analysis for sensor ${virtualSensorId} from provided image.`);
         
-        // FIX: Use API_KEY instead of GEMINI_API_KEY
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
         
         const imagePart = {
             inlineData: {
@@ -925,10 +988,9 @@ app.post('/api/analysis/snow-depth-from-image', async (req: ExpressRequest, res:
             },
         };
         const textPart = {
-            text: "Bu görüntüdeki kar ölçüm cetveline göre karla kaplı en yüksek sayısal değer nedir? Cevabını sadece `{\"snow_depth_cm\": SAYI}` formatında bir JSON olarak ver.",
+            text: GEMINI_SNOW_DEPTH_PROMPT,
         };
 
-        // FIX: Use responseSchema for reliable JSON output
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: { parts: [imagePart, textPart] },
@@ -961,6 +1023,11 @@ app.post('/api/analysis/snow-depth-from-image', async (req: ExpressRequest, res:
 
         if (typeof snowDepth !== 'number') {
             throw new Error('Could not parse a numeric snow depth value from Gemini response.');
+        }
+
+        if (snowDepth === -1) {
+            console.log(`[ANALYSIS] Gemini could not determine snow depth from the image.`);
+            throw new Error('Gemini could not determine snow depth from the image.');
         }
 
         console.log(`[ANALYSIS] Parsed snow depth: ${snowDepth} cm`);
@@ -1131,6 +1198,9 @@ async function checkAndSendScheduledReports() {
     }
 }
 
+// --- Mount API Router ---
+app.use('/api', apiRouter);
+
 
 // --- SERVE FRONTEND ---
 // This robust path serves the frontend from a 'public' directory
@@ -1147,7 +1217,7 @@ fs.access(path.join(publicPath, 'index.html')).catch(() => {
 app.use(express.static(publicPath));
 
 // Catch-all to serve index.html for any other request (for client-side routing)
-app.get('*', (req: ExpressRequest, res: ExpressResponse) => {
+app.get('*', (req: express.Request, res: express.Response) => {
     // Exclude API routes from being caught by this
     if (req.path.startsWith('/api/')) {
         return res.status(404).send('API endpoint not found.');
