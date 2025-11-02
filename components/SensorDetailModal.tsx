@@ -100,15 +100,15 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
                 </header>
                 
                 {/* Main Content */}
-                <main className="flex-1 overflow-y-auto p-6 space-y-6">
+                <main className="flex-1 overflow-hidden p-6 flex flex-col gap-6">
                     {/* Current Value */}
-                    <div className="text-center">
+                    <div className="text-center flex-shrink-0">
                         <p className="text-sm text-muted dark:text-gray-400">Son Değer</p>
                         <p className="text-6xl font-bold text-gray-900 dark:text-gray-100">{latestValue}<span className="text-3xl text-muted dark:text-gray-400 ml-2">{sensor.unit}</span></p>
                     </div>
 
                     {/* Chart */}
-                    <div className="space-y-2">
+                    <div className="space-y-2 flex-shrink-0">
                         <h3 className="font-semibold text-gray-800 dark:text-gray-200">Geçmiş Veriler Grafiği</h3>
                         {chartData.length > 1 ? (
                             <div className="h-64 bg-primary dark:bg-dark-primary p-4 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -137,19 +137,19 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
                     </div>
 
                     {/* Readings Table */}
-                    <div className="space-y-2">
-                        <h3 className="font-semibold text-gray-800 dark:text-gray-200">Son Okunan Değerler</h3>
-                        <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-primary dark:bg-dark-primary">
+                     <div className="space-y-2 flex flex-col flex-1 min-h-0">
+                        <h3 className="font-semibold text-gray-800 dark:text-gray-200 flex-shrink-0">Son Okunan Değerler</h3>
+                        <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-y-auto bg-primary dark:bg-dark-primary flex-1">
                             {latestReadings.length > 0 ? (
                                 <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
-                                    <thead className="text-xs text-gray-700 dark:text-gray-400 uppercase bg-gray-100 dark:bg-gray-700">
+                                    <thead className="text-xs text-gray-700 dark:text-gray-400 uppercase bg-gray-100 dark:bg-gray-700 sticky top-0">
                                         <tr>
                                             <th scope="col" className="px-6 py-3">Zaman Damgası</th>
                                             <th scope="col" className="px-6 py-3 text-right">Değer</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {latestReadings.slice(0, 100).map(reading => { // Limit for display
+                                        {latestReadings.map(reading => { // Limit for display
                                             const date = new Date(reading.timestamp);
                                             const displayTimestamp = !isNaN(date.getTime())
                                                 ? date.toLocaleString('tr-TR')
@@ -164,7 +164,7 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
                                     </tbody>
                                 </table>
                             ) : (
-                                <div className="text-center py-10 text-muted dark:text-gray-400">
+                                <div className="h-full flex items-center justify-center text-center text-muted dark:text-gray-400">
                                     <p>Bu sensör için geçmiş veri bulunamadı.</p>
                                 </div>
                             )}

@@ -20,6 +20,7 @@ interface StationDetailProps {
 interface SensorReading {
     id: string;
     sensorId: string;
+    stationId: string;
     sensorName: string;
     sensorType: string;
     value: any; // Can be object or primitive
@@ -108,7 +109,7 @@ const SensorCard: React.FC<{ sensor: Sensor, historyData: SensorReading[], onCli
     }, [historyData]);
 
     return (
-        <Card className="p-4 flex flex-col h-full overflow-hidden">
+        <Card className="p-3 flex flex-col h-full overflow-hidden">
             <div className="flex justify-between items-start">
                  <div className="flex items-center space-x-3">
                     <div className="bg-gray-100 dark:bg-gray-700 p-2.5 rounded-lg">{getSensorIcon(sensor.type)}</div>
@@ -124,10 +125,10 @@ const SensorCard: React.FC<{ sensor: Sensor, historyData: SensorReading[], onCli
                     <p className="text-xs text-muted dark:text-gray-500 mt-1">{formatTimeAgo(sensor.lastUpdate)}</p>
                 </div>
             </div>
-            <div className="flex-grow flex items-center justify-center text-center my-4">
-                <p className="text-5xl font-bold text-gray-900 dark:text-gray-100">{displayValue}<span className="text-2xl text-muted dark:text-gray-400 ml-1">{sensor.unit}</span></p>
+            <div className="flex-grow flex items-center justify-center text-center my-2">
+                <p className="text-4xl font-bold text-gray-900 dark:text-gray-100">{displayValue}<span className="text-lg text-muted dark:text-gray-400 ml-1">{sensor.unit}</span></p>
             </div>
-            <div className="mt-auto cursor-pointer h-24 -mx-4 -mb-4 rounded-b-lg" onClick={onClick}>
+            <div className="mt-auto cursor-pointer h-20 -mx-3 -mb-3 rounded-b-lg" onClick={onClick}>
                 {chartData.length > 1 ? (
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 5 }}>
