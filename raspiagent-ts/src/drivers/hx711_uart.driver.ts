@@ -29,7 +29,7 @@ export default class Hx711UartDriver implements ISensorDriver {
                 autoOpen: false,
             });
 
-            const parser = serialPort.pipe(new ReadlineParser({ delimiter: '\r\n' }));
+            const parser = serialPort.pipe(new ReadlineParser({ delimiter: '\n' }));
 
             let timeout: ReturnType<typeof setTimeout> | null = null;
 
