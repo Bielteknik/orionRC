@@ -4,7 +4,7 @@ import { ReadlineParser } from '@serialport/parser-readline';
 
 /**
  * Driver to read from a generic UART weight sensor that outputs lines of text.
- * It now supports both "Agirlik: = 0.19B0" and simple "0.19" formats.
+ * It now uses a regular expression to robustly parse numbers from various formats.
  */
 export default class Hx711UartDriver implements ISensorDriver {
     /**
@@ -52,31 +52,33 @@ export default class Hx711UartDriver implements ISensorDriver {
             
             const onData = (line: string) => {
                 const trimmedLine = line.trim();
-                // Gelen satır boşsa dikkate alma
                 if (!trimmedLine) {
                     return;
                 }
 
                 console.log(`     -> Ham Veri [HX711 UART]: "${trimmedLine}"`);
 
-                let weight: number;
-
-                const prefix = "Agirlik: =";
-                const prefixIndex = trimmedLine.indexOf(prefix);
-                
-                if (prefixIndex !== -1) {
-                    // Case 1: Handle lines with the prefix, e.g., "Agirlik: = 0.19B0"
-                    const valueStr = trimmedLine.substring(prefixIndex + prefix.length).trim();
-                    weight = parseFloat(valueStr); // parseFloat handles trailing non-numeric characters
-                } else {
-                    // Case 2: Handle lines that are just a number, possibly with junk
-                    weight = parseFloat(trimmedLine);
+                // Per user requirement, if the line contains a '-', it's an invalid/tare reading, so treat as 0.
+                if (trimmedLine.includes('-')) {
+                    console.log(`     -> Ayrıştırılan Veri [HX711 UART]: 0.00 kg ("-" karakteri algılandı)`);
+                    cleanupAndResolve({ weight_kg: 0.0 });
+                    return;
                 }
 
-                if (!isNaN(weight) && isFinite(weight)) {
-                    console.log(`     -> Ayrıştırılan Veri [HX711 UART]: ${weight} kg`);
-                    cleanupAndResolve({ weight_kg: weight });
+                // Use a regular expression to find the first floating point number in the string.
+                // This is more robust and can handle formats like "Weight: 12.34 kg", "+00.19kg", etc.
+                const match = trimmedLine.match(/\d+(\.\d+)?/);
+
+                if (match && match[0]) {
+                    const weight = parseFloat(match[0]);
+                    if (!isNaN(weight) && isFinite(weight)) {
+                        console.log(`     -> Ayrıştırılan Veri [HX711 UART]: ${weight} kg`);
+                        cleanupAndResolve({ weight_kg: weight });
+                        return; // Found a valid number, stop processing
+                    }
                 }
+
+                // If no number is found, we wait for the next line or timeout.
             };
 
             const onError = (err: Error | null) => {
@@ -86,7 +88,7 @@ export default class Hx711UartDriver implements ISensorDriver {
                 cleanupAndResolve(null);
             };
 
-            // Timeout'u 15 saniyeye çıkararak Arduino'nun reset sonrası başlaması için daha fazla zaman tanıyoruz.
+            // Increased timeout to allow Arduino to reset and start sending data
             timeout = setTimeout(() => {
                 console.warn(`     -> UYARI (HX711 UART): Veri okuma ${port} portunda zaman aşımına uğradı. Arduino'dan geçerli formatta veri gelmiyor olabilir.`);
                 cleanupAndResolve(null);

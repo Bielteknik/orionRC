@@ -5,7 +5,7 @@ import { ReadlineParser } from '@serialport/parser-readline';
 /**
  * HX711 tabanlı bir ağırlık sensöründen seri port üzerinden veri okumak için sürücü.
  * Bu sürücü, Arduino gibi bir mikrodenetleyiciden gelen metin tabanlı veriyi işler.
- * Artık hem '= 15.234' formatını hem de sadece '15.234' formatını destekler.
+ * Artık çeşitli formatlardaki sayıları bulmak için daha sağlam bir ayrıştırma yöntemi kullanır.
  */
 export default class Hx711Driver implements ISensorDriver {
     /**
@@ -54,29 +54,33 @@ export default class Hx711Driver implements ISensorDriver {
             
             const onData = (line: string) => {
                 const trimmedLine = line.trim();
-                // Gelen satır boşsa dikkate alma
                 if (!trimmedLine) {
                     return;
                 }
                 
                 console.log(`     -> Ham Veri [HX711]: "${trimmedLine}"`);
 
-                let weight: number;
-
-                if (trimmedLine.startsWith('=')) {
-                    // Case 1: Handle lines with prefix, e.g., "= 15.234"
-                    const valueStr = trimmedLine.substring(1).trim();
-                    weight = parseFloat(valueStr);
-                } else {
-                    // Case 2: Handle lines that are just a number, with possible junk at the end
-                    weight = parseFloat(trimmedLine);
+                // Per user requirement, if the line contains a '-', it's an invalid/tare reading, so treat as 0.
+                if (trimmedLine.includes('-')) {
+                    console.log(`     -> Ayrıştırılan Veri [HX711]: 0.00 kg ("-" karakteri algılandı)`);
+                    cleanupAndResolve({ weight_kg: 0.0 });
+                    return;
                 }
 
-                // Sadece geçerli bir sayısal değer bulunduğunda işlemi bitir
-                if (!isNaN(weight) && isFinite(weight)) {
-                    console.log(`     -> Ayrıştırılan Veri [HX711]: ${weight} kg`);
-                    cleanupAndResolve({ weight_kg: weight });
+                // Use a regular expression to find the first floating point number in the string.
+                // This correctly handles various text formats.
+                const match = trimmedLine.match(/\d+(\.\d+)?/);
+
+                if (match && match[0]) {
+                    const weight = parseFloat(match[0]);
+                    if (!isNaN(weight) && isFinite(weight)) {
+                        console.log(`     -> Ayrıştırılan Veri [HX711]: ${weight} kg`);
+                        cleanupAndResolve({ weight_kg: weight });
+                        return; // Found a valid number, stop processing
+                    }
                 }
+                
+                // If no number is found, wait for the next line or timeout.
             };
 
             const onError = (err: Error | null) => {
