@@ -3,8 +3,8 @@ import { SerialPort } from 'serialport';
 import { ReadlineParser } from '@serialport/parser-readline';
 
 /**
- * Driver to read from a generic UART weight sensor that outputs lines of text with a specific prefix.
- * It looks for lines like "Agirlik: = 0.19B0" and parses the floating-point number.
+ * Driver to read from a generic UART weight sensor that outputs lines of text.
+ * It now supports both "Agirlik: = 0.19B0" and simple "0.19" formats.
  */
 export default class Hx711UartDriver implements ISensorDriver {
     /**
@@ -54,21 +54,24 @@ export default class Hx711UartDriver implements ISensorDriver {
                 const trimmedLine = line.trim();
                 console.log(`     -> Ham Veri [HX711 UART]: "${trimmedLine}"`);
 
+                let weight: number;
+
                 const prefix = "Agirlik: =";
                 const prefixIndex = trimmedLine.indexOf(prefix);
                 
                 if (prefixIndex !== -1) {
-                    // Find the value part after the prefix
+                    // Case 1: Handle lines with the prefix, e.g., "Agirlik: = 0.19B0"
                     const valueStr = trimmedLine.substring(prefixIndex + prefix.length).trim();
-                    
-                    // parseFloat will parse the number and stop at the first non-numeric character (like 'B' in '0.19B0')
-                    const weight = parseFloat(valueStr);
+                    weight = parseFloat(valueStr); // parseFloat handles trailing non-numeric characters
+                } else {
+                    // Case 2: Handle lines that are just a number, possibly with junk
+                    weight = parseFloat(trimmedLine);
+                }
 
-                    if (!isNaN(weight)) {
-                        console.log(`     -> Ayrıştırılan Veri [HX711 UART]: ${weight} kg`);
-                        cleanupAndResolve({ weight_kg: weight });
-                        return; // Success, stop listening
-                    }
+                if (!isNaN(weight)) {
+                    console.log(`     -> Ayrıştırılan Veri [HX711 UART]: ${weight} kg`);
+                    cleanupAndResolve({ weight_kg: weight });
+                    return; // Success, stop listening
                 }
             };
 
@@ -81,7 +84,7 @@ export default class Hx711UartDriver implements ISensorDriver {
 
             // Timeout after 7 seconds
             timeout = setTimeout(() => {
-                console.warn(`     -> UYARI (HX711 UART): Veri okuma ${port} portunda zaman aşımına uğradı. "Agirlik: = ..." formatında bir satır bulunamadı.`);
+                console.warn(`     -> UYARI (HX711 UART): Veri okuma ${port} portunda zaman aşımına uğradı. Geçerli bir sayısal değer alınamadı.`);
                 cleanupAndResolve(null);
             }, 7000);
 

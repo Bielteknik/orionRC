@@ -5,8 +5,7 @@ import { ReadlineParser } from '@serialport/parser-readline';
 /**
  * HX711 tabanlı bir ağırlık sensöründen seri port üzerinden veri okumak için sürücü.
  * Bu sürücü, Arduino gibi bir mikrodenetleyiciden gelen metin tabanlı veriyi işler.
- * Python'daki örneğe dayanarak, '=' ile başlayan ve ardından kg cinsinden ağırlığı
- * içeren bir satır beklenir (örn: '= 15.234').
+ * Artık hem '= 15.234' formatını hem de sadece '15.234' formatını destekler.
  */
 export default class Hx711Driver implements ISensorDriver {
     /**
@@ -55,25 +54,30 @@ export default class Hx711Driver implements ISensorDriver {
                 resolve(value);
             };
             
-            // Seri porttan gelen her satır için çalışacak fonksiyon
             const onData = (line: string) => {
                 readAttempts++;
                 const trimmedLine = line.trim();
                 console.log(`     -> Ham Veri [HX711]: "${trimmedLine}"`);
 
+                let weight: number;
+
                 if (trimmedLine.startsWith('=')) {
-                    // Regex: Eşittir işaretinden sonra boşlukları ve ardından ondalıklı bir sayıyı yakalar
-                    const match = trimmedLine.match(/=\s*(-?\d+\.\d+)/);
-                    if (match && match[1]) {
-                        const weight = parseFloat(match[1]);
-                        console.log(`     -> Ayrıştırılan Veri [HX711]: ${weight} kg`);
-                        cleanupAndResolve({ weight_kg: weight });
-                        return; // Başarılı, daha fazla dinleme
-                    }
+                    // Case 1: Handle lines with prefix, e.g., "= 15.234"
+                    const valueStr = trimmedLine.substring(1).trim();
+                    weight = parseFloat(valueStr);
+                } else {
+                    // Case 2: Handle lines that are just a number, with possible junk at the end
+                    weight = parseFloat(trimmedLine);
+                }
+
+                if (!isNaN(weight)) {
+                    console.log(`     -> Ayrıştırılan Veri [HX711]: ${weight} kg`);
+                    cleanupAndResolve({ weight_kg: weight });
+                    return; // Success, stop listening
                 }
 
                 if (readAttempts >= maxAttempts) {
-                    console.warn(`     -> UYARI (HX711): ${maxAttempts} denemede geçerli veri formatı ('= 12.34' gibi) bulunamadı.`);
+                    console.warn(`     -> UYARI (HX711): ${maxAttempts} denemede geçerli sayısal veri bulunamadı.`);
                     cleanupAndResolve(null);
                 }
             };
@@ -87,7 +91,7 @@ export default class Hx711Driver implements ISensorDriver {
 
             // 7 saniye sonra işlem zaman aşımına uğrayacak
             timeout = setTimeout(() => {
-                console.warn(`     -> UYARI (HX711): Veri okuma ${port} portunda zaman aşımına uğradı. Beklenen format: '= 12.34'`);
+                console.warn(`     -> UYARI (HX711): Veri okuma ${port} portunda zaman aşımına uğradı. Geçerli bir sayısal değer alınamadı.`);
                 cleanupAndResolve(null);
             }, 7000);
 
