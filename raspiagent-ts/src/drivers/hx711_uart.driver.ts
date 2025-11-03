@@ -52,6 +52,11 @@ export default class Hx711UartDriver implements ISensorDriver {
             
             const onData = (line: string) => {
                 const trimmedLine = line.trim();
+                // Gelen satır boşsa dikkate alma
+                if (!trimmedLine) {
+                    return;
+                }
+
                 console.log(`     -> Ham Veri [HX711 UART]: "${trimmedLine}"`);
 
                 let weight: number;
@@ -68,10 +73,9 @@ export default class Hx711UartDriver implements ISensorDriver {
                     weight = parseFloat(trimmedLine);
                 }
 
-                if (!isNaN(weight)) {
+                if (!isNaN(weight) && isFinite(weight)) {
                     console.log(`     -> Ayrıştırılan Veri [HX711 UART]: ${weight} kg`);
                     cleanupAndResolve({ weight_kg: weight });
-                    return; // Success, stop listening
                 }
             };
 
@@ -82,11 +86,11 @@ export default class Hx711UartDriver implements ISensorDriver {
                 cleanupAndResolve(null);
             };
 
-            // Timeout after 7 seconds
+            // Timeout'u 15 saniyeye çıkararak Arduino'nun reset sonrası başlaması için daha fazla zaman tanıyoruz.
             timeout = setTimeout(() => {
-                console.warn(`     -> UYARI (HX711 UART): Veri okuma ${port} portunda zaman aşımına uğradı. Geçerli bir sayısal değer alınamadı.`);
+                console.warn(`     -> UYARI (HX711 UART): Veri okuma ${port} portunda zaman aşımına uğradı. Arduino'dan geçerli formatta veri gelmiyor olabilir.`);
                 cleanupAndResolve(null);
-            }, 7000);
+            }, 15000);
 
             serialPort.on('error', onError);
             parser.on('data', onData);
@@ -95,7 +99,7 @@ export default class Hx711UartDriver implements ISensorDriver {
                 if (err) {
                     return onError(err);
                 }
-                console.log(`     -> Port açıldı: ${port}. Veri okunuyor...`);
+                console.log(`     -> Port açıldı: ${port}. Veri bekleniyor...`);
             });
         });
     }

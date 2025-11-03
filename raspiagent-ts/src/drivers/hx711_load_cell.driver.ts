@@ -27,13 +27,11 @@ export default class Hx711Driver implements ISensorDriver {
             const serialPort: any = new SerialPort({
                 path: port,
                 baudRate: baudrate,
-                autoOpen: false, // Hata yönetimi için manuel açılacak
+                autoOpen: false,
             });
 
             const parser = serialPort.pipe(new ReadlineParser({ delimiter: '\r\n' }));
 
-            let readAttempts = 0;
-            const maxAttempts = 10; // Geçerli veri için en fazla kaç satır deneneceği
             let timeout: ReturnType<typeof setTimeout> | null = null;
 
             // Portu ve dinleyicileri temizleyip Promise'i sonlandıran fonksiyon
@@ -55,8 +53,12 @@ export default class Hx711Driver implements ISensorDriver {
             };
             
             const onData = (line: string) => {
-                readAttempts++;
                 const trimmedLine = line.trim();
+                // Gelen satır boşsa dikkate alma
+                if (!trimmedLine) {
+                    return;
+                }
+                
                 console.log(`     -> Ham Veri [HX711]: "${trimmedLine}"`);
 
                 let weight: number;
@@ -70,15 +72,10 @@ export default class Hx711Driver implements ISensorDriver {
                     weight = parseFloat(trimmedLine);
                 }
 
-                if (!isNaN(weight)) {
+                // Sadece geçerli bir sayısal değer bulunduğunda işlemi bitir
+                if (!isNaN(weight) && isFinite(weight)) {
                     console.log(`     -> Ayrıştırılan Veri [HX711]: ${weight} kg`);
                     cleanupAndResolve({ weight_kg: weight });
-                    return; // Success, stop listening
-                }
-
-                if (readAttempts >= maxAttempts) {
-                    console.warn(`     -> UYARI (HX711): ${maxAttempts} denemede geçerli sayısal veri bulunamadı.`);
-                    cleanupAndResolve(null);
                 }
             };
 
@@ -89,11 +86,11 @@ export default class Hx711Driver implements ISensorDriver {
                 cleanupAndResolve(null);
             };
 
-            // 7 saniye sonra işlem zaman aşımına uğrayacak
+            // Timeout'u 15 saniyeye çıkararak Arduino'nun reset sonrası başlaması için daha fazla zaman tanıyoruz.
             timeout = setTimeout(() => {
-                console.warn(`     -> UYARI (HX711): Veri okuma ${port} portunda zaman aşımına uğradı. Geçerli bir sayısal değer alınamadı.`);
+                console.warn(`     -> UYARI (HX711): Veri okuma ${port} portunda zaman aşımına uğradı. Arduino'dan geçerli formatta veri gelmiyor olabilir.`);
                 cleanupAndResolve(null);
-            }, 7000);
+            }, 15000);
 
             // Olay dinleyicilerini ata
             serialPort.on('error', onError);
@@ -104,7 +101,7 @@ export default class Hx711Driver implements ISensorDriver {
                 if (err) {
                     return onError(err);
                 }
-                console.log(`     -> Port açıldı: ${port}. Stabilizasyon için bekleniyor ve veri okunuyor...`);
+                console.log(`     -> Port açıldı: ${port}. Veri bekleniyor...`);
             });
         });
     }
