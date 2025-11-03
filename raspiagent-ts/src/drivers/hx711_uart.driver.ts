@@ -14,7 +14,7 @@ export default class Hx711UartDriver implements ISensorDriver {
      */
     public read(config: { port: string; baudrate?: number }): Promise<Record<string, any> | null> {
         return new Promise((resolve) => {
-            const { port, baudrate = 9600 } = config;
+            const { port, baudrate = 115200 } = config;
 
             if (!port) {
                 console.error("     -> HATA (HX711 UART): Yapılandırmada 'port' belirtilmemiş.");
