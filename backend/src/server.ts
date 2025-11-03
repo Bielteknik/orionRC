@@ -150,12 +150,21 @@ apiRouter.get('/config/:deviceId', agentAuth, async (req: Request, res: Response
 apiRouter.post('/submit-reading', agentAuth, async (req: Request, res: Response) => {
     try {
         const { sensor: sensor_id, value: rawValue } = req.body;
+        const timestamp = new Date().toISOString();
 
         if (sensor_id === undefined || rawValue === undefined) {
             console.warn(`Bad request for /submit-reading: 'sensor' or 'value' field is missing.`, req.body);
             return res.status(400).json({ error: 'Bad Request: sensor and value fields are required.' });
         }
+        
+        // 1. Store the raw, unprocessed value
+        const rawValueStr = JSON.stringify(rawValue);
+        await db.run(
+            "INSERT INTO raw_readings (sensor_id, raw_value, timestamp) VALUES (?, ?, ?)",
+            sensor_id, rawValueStr, timestamp
+        );
 
+        // 2. Process the value (calibration, rounding)
         const sensor = await db.get("SELECT reference_value, reference_operation FROM sensors WHERE id = ?", sensor_id);
         if (!sensor) {
             console.warn(`Reading submitted for unknown sensor ID: ${sensor_id}`);
@@ -190,7 +199,7 @@ apiRouter.post('/submit-reading', agentAuth, async (req: Request, res: Response)
         
         processedValue = roundNumericValues(processedValue);
 
-        const timestamp = new Date().toISOString();
+        // 3. Store the processed value in `readings` and update `sensors` table
         const valueStr = JSON.stringify(processedValue);
 
         await db.run("INSERT INTO readings (sensor_id, value, timestamp) VALUES (?, ?, ?)", sensor_id, valueStr, timestamp);
@@ -704,6 +713,34 @@ apiRouter.get('/readings/history', async (req: Request, res: Response) => {
     } catch (error) {
         console.error("Error fetching reading history:", error);
         res.status(500).json({ error: 'Failed to fetch reading history.' });
+    }
+});
+
+apiRouter.get('/raw-readings/history', async (req: Request, res: Response) => {
+    const { sensorId } = req.query;
+
+    if (!sensorId || typeof sensorId !== 'string') {
+        return res.status(400).json({ error: 'sensorId query parameter is required.' });
+    }
+
+    try {
+        const readings = await db.all(`
+            SELECT 
+                r.id, 
+                r.raw_value,
+                r.timestamp,
+                s.id as sensorId
+            FROM raw_readings r
+            JOIN sensors s ON r.sensor_id = s.id
+            WHERE s.id = ?
+            ORDER BY r.timestamp DESC
+            LIMIT 100
+        `, sensorId);
+        // Important: `raw_value` is stored as a JSON string, so parse it.
+        res.json(readings.map(r => ({ ...r, raw_value: safeJSONParse(r.raw_value, null) })));
+    } catch (error) {
+        console.error("Error fetching raw reading history:", error);
+        res.status(500).json({ error: 'Failed to fetch raw reading history.' });
     }
 });
 

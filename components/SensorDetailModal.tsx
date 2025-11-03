@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Sensor } from '../types.ts';
 import { ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, SensorIcon as GenericSensorIcon, XIcon } from './icons/Icons.tsx';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useTheme } from './ThemeContext.tsx';
+import { getRawReadingsHistory } from '../services/apiService.ts';
 
 
 interface SensorReading {
@@ -12,6 +13,13 @@ interface SensorReading {
     timestamp: string;
     sensorType: string;
     interface?: string;
+}
+
+interface RawSensorReading {
+    id: number;
+    raw_value: any;
+    timestamp: string;
+    sensorId: string;
 }
 
 interface SensorDetailModalProps {
@@ -58,6 +66,21 @@ const formatDisplayValue = (reading: SensorReading): string => {
 const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, sensor, readings }) => {
     const { theme } = useTheme();
     const tickColor = theme === 'dark' ? '#9CA3AF' : '#6B7281';
+    const [rawReadings, setRawReadings] = useState<RawSensorReading[]>([]);
+    
+    useEffect(() => {
+        if (isOpen && sensor) {
+            getRawReadingsHistory(sensor.id)
+                .then(data => setRawReadings(data))
+                .catch(err => {
+                    console.error("Could not fetch raw readings history:", err);
+                    setRawReadings([]);
+                });
+        } else {
+            setRawReadings([]); // Clear data when modal closes
+        }
+    }, [isOpen, sensor]);
+
 
     if (!isOpen || !sensor) return null;
 
@@ -67,16 +90,32 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
     }, [readings]);
     
     const chartData = useMemo(() => {
-        return [...readings]
+        const dataMap = new Map<number, any>();
+        const roundToNearestSecond = (iso: string) => Math.round(new Date(iso).getTime() / 1000);
+    
+        readings.forEach(r => {
+            const key = roundToNearestSecond(r.timestamp);
+            const entry = dataMap.get(key) || { timestamp: r.timestamp };
+            entry['İşlenmiş Değer'] = getNumericValue(r.value);
+            dataMap.set(key, entry);
+        });
+    
+        rawReadings.forEach(r => {
+            const key = roundToNearestSecond(r.timestamp);
+            const entry = dataMap.get(key) || { timestamp: r.timestamp };
+            entry['Ham Değer'] = getNumericValue(r.raw_value);
+            dataMap.set(key, entry);
+        });
+        
+        return Array.from(dataMap.values())
+            .filter(item => item['İşlenmiş Değer'] !== undefined || item['Ham Değer'] !== undefined)
             .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-            .map(r => ({
-                name: new Date(r.timestamp).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
-                value: getNumericValue(r.value),
-            }))
-            .filter(item => item.value !== null)
-            .slice(0, 50) // Limit to last 50 points for performance
-            .reverse(); // reverse to show oldest to newest
-    }, [readings]);
+            .slice(-50)
+            .map(item => ({
+                ...item,
+                name: new Date(item.timestamp).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+            }));
+    }, [readings, rawReadings]);
 
     const latestValue = latestReadings.length > 0 ? formatDisplayValue(latestReadings[0]) : 'N/A';
 
@@ -103,13 +142,13 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
                 <main className="flex-1 overflow-hidden p-6 flex flex-col gap-6">
                     {/* Current Value */}
                     <div className="text-center flex-shrink-0">
-                        <p className="text-sm text-muted dark:text-gray-400">Son Değer</p>
+                        <p className="text-sm text-muted dark:text-gray-400">Son İşlenmiş Değer</p>
                         <p className="text-6xl font-bold text-gray-900 dark:text-gray-100">{latestValue}<span className="text-3xl text-muted dark:text-gray-400 ml-2">{sensor.unit}</span></p>
                     </div>
 
                     {/* Chart */}
                     <div className="space-y-2 flex-shrink-0">
-                        <h3 className="font-semibold text-gray-800 dark:text-gray-200">Geçmiş Veriler Grafiği</h3>
+                        <h3 className="font-semibold text-gray-800 dark:text-gray-200">Geçmiş Veriler Grafiği (Ham vs. İşlenmiş)</h3>
                         {chartData.length > 1 ? (
                             <div className="h-64 bg-primary dark:bg-dark-primary p-4 rounded-lg border border-gray-200 dark:border-gray-700">
                                 <ResponsiveContainer width="100%" height="100%">
@@ -125,7 +164,8 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
                                             labelStyle={{ color: theme === 'dark' ? '#F3F4F6' : '#111827' }}
                                         />
                                         <Legend />
-                                        <Line type="monotone" dataKey="value" name={sensor.type} stroke="#F97316" strokeWidth={2} dot={false} activeDot={{ r: 6 }} />
+                                        <Line type="monotone" dataKey="İşlenmiş Değer" name="İşlenmiş Değer" stroke="#F97316" strokeWidth={2} dot={false} activeDot={{ r: 6 }} />
+                                        <Line type="monotone" dataKey="Ham Değer" name="Ham Değer" stroke="#9CA3AF" strokeWidth={2} strokeDasharray="3 3" dot={false} activeDot={{ r: 6 }} />
                                     </LineChart>
                                 </ResponsiveContainer>
                             </div>
@@ -138,7 +178,7 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
 
                     {/* Readings Table */}
                      <div className="space-y-2 flex flex-col flex-1 min-h-0">
-                        <h3 className="font-semibold text-gray-800 dark:text-gray-200 flex-shrink-0">Son Okunan Değerler</h3>
+                        <h3 className="font-semibold text-gray-800 dark:text-gray-200 flex-shrink-0">Son Okunan İşlenmiş Değerler</h3>
                         <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-y-auto bg-primary dark:bg-dark-primary flex-1">
                             {latestReadings.length > 0 ? (
                                 <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">

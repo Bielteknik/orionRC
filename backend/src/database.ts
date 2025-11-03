@@ -76,7 +76,15 @@ export async function migrate() {
         CREATE TABLE IF NOT EXISTS readings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             sensor_id TEXT NOT NULL,
-            value TEXT NOT NULL, -- JSON string
+            value TEXT NOT NULL, -- JSON string for processed value
+            timestamp TEXT NOT NULL,
+            FOREIGN KEY(sensor_id) REFERENCES sensors(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS raw_readings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sensor_id TEXT NOT NULL,
+            raw_value TEXT NOT NULL, -- JSON string for raw value from agent
             timestamp TEXT NOT NULL,
             FOREIGN KEY(sensor_id) REFERENCES sensors(id) ON DELETE CASCADE
         );

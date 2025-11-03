@@ -71,6 +71,11 @@ export const getReadingsHistory = (params: { stationIds: string[], sensorTypes: 
         }
     }).then(res => res.data).catch(e => handleError(e, 'fetching readings history'));
 }
+export const getRawReadingsHistory = (sensorId: string): Promise<any[]> => {
+    return apiClient.get('/raw-readings/history', {
+        params: { sensorId }
+    }).then(res => res.data).catch(e => handleError(e, 'fetching raw readings history'));
+}
 
 // Definitions
 export const getDefinitions = (): Promise<{ stationTypes: any[], sensorTypes: any[], cameraTypes: any[] }> => apiClient.get('/definitions').then(res => res.data).catch(e => handleError(e, 'fetching definitions'));
