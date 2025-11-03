@@ -66,8 +66,8 @@ export default class Hx711UartDriver implements ISensorDriver {
                 }
 
                 // Use a regular expression to find the first floating point number in the string.
-                // This is more robust and can handle formats like "Weight: 12.34 kg", "+00.19kg", etc.
-                const match = trimmedLine.match(/\d+(\.\d+)?/);
+                // This is more robust and can handle formats like "Weight: 12.34 kg", "+00.19kg", ".5", "5.", etc.
+                const match = trimmedLine.match(/\d*\.?\d+/);
 
                 if (match && match[0]) {
                     const weight = parseFloat(match[0]);
