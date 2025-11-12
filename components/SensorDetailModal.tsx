@@ -67,18 +67,30 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
     const { theme } = useTheme();
     const tickColor = theme === 'dark' ? '#9CA3AF' : '#6B7281';
     const [rawReadings, setRawReadings] = useState<RawSensorReading[]>([]);
+    const [activeTab, setActiveTab] = useState<'processed' | 'raw'>('processed');
     
     useEffect(() => {
+        let isMounted = true;
         if (isOpen && sensor) {
+            setRawReadings([]);
+            setActiveTab('processed');
             getRawReadingsHistory(sensor.id)
-                .then(data => setRawReadings(data))
+                .then(data => {
+                    if (isMounted) {
+                        setRawReadings(data);
+                    }
+                })
                 .catch(err => {
-                    console.error("Could not fetch raw readings history:", err);
-                    setRawReadings([]);
+                    if (isMounted) {
+                        console.error("Could not fetch raw readings history:", err);
+                        setRawReadings([]);
+                    }
                 });
-        } else {
-            setRawReadings([]); // Clear data when modal closes
         }
+
+        return () => {
+            isMounted = false;
+        };
     }, [isOpen, sensor]);
 
 
@@ -176,37 +188,73 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
                         )}
                     </div>
 
-                    {/* Readings Table */}
-                     <div className="space-y-2 flex flex-col flex-1 min-h-0">
-                        <h3 className="font-semibold text-gray-800 dark:text-gray-200 flex-shrink-0">Son Okunan İşlenmiş Değerler</h3>
+                    {/* Readings Table with Tabs */}
+                    <div className="space-y-2 flex flex-col flex-1 min-h-0">
+                        <div className="border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+                            <nav className="-mb-px flex space-x-4" aria-label="Tabs">
+                                <button onClick={() => setActiveTab('processed')} className={`whitespace-nowrap py-2 px-1 border-b-2 font-semibold text-sm ${activeTab === 'processed' ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-gray-700 dark:hover:text-gray-300'}`}>
+                                    İşlenmiş Değerler
+                                </button>
+                                <button onClick={() => setActiveTab('raw')} className={`whitespace-nowrap py-2 px-1 border-b-2 font-semibold text-sm ${activeTab === 'raw' ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-gray-700 dark:hover:text-gray-300'}`}>
+                                    Ham Değerler
+                                </button>
+                            </nav>
+                        </div>
+
                         <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-y-auto bg-primary dark:bg-dark-primary flex-1">
-                            {latestReadings.length > 0 ? (
-                                <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
-                                    <thead className="text-xs text-gray-700 dark:text-gray-400 uppercase bg-gray-100 dark:bg-gray-700 sticky top-0">
-                                        <tr>
-                                            <th scope="col" className="px-6 py-3">Zaman Damgası</th>
-                                            <th scope="col" className="px-6 py-3 text-right">Değer</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {latestReadings.map(reading => { // Limit for display
-                                            const date = new Date(reading.timestamp);
-                                            const displayTimestamp = !isNaN(date.getTime())
-                                                ? date.toLocaleString('tr-TR')
-                                                : reading.timestamp;
-                                            return (
-                                                <tr key={reading.id} className="border-b border-gray-200 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                                                    <td className="px-6 py-3 font-mono text-gray-800 dark:text-gray-200">{displayTimestamp}</td>
-                                                    <td className="px-6 py-3 text-right font-semibold text-gray-900 dark:text-gray-100">{`${formatDisplayValue(reading)} ${reading.unit || ''}`}</td>
+                            {activeTab === 'processed' && (
+                                <>
+                                    {latestReadings.length > 0 ? (
+                                        <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
+                                            <thead className="text-xs text-gray-700 dark:text-gray-400 uppercase bg-gray-100 dark:bg-gray-700 sticky top-0">
+                                                <tr>
+                                                    <th scope="col" className="px-6 py-3">Zaman Damgası</th>
+                                                    <th scope="col" className="px-6 py-3 text-right">Değer</th>
                                                 </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            ) : (
-                                <div className="h-full flex items-center justify-center text-center text-muted dark:text-gray-400">
-                                    <p>Bu sensör için geçmiş veri bulunamadı.</p>
-                                </div>
+                                            </thead>
+                                            <tbody>
+                                                {latestReadings.map(reading => (
+                                                    <tr key={reading.id} className="border-b border-gray-200 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                                                        <td className="px-6 py-3 font-mono text-gray-800 dark:text-gray-200">{new Date(reading.timestamp).toLocaleString('tr-TR')}</td>
+                                                        <td className="px-6 py-3 text-right font-semibold text-gray-900 dark:text-gray-100">{`${formatDisplayValue(reading)} ${reading.unit || ''}`}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    ) : (
+                                        <div className="h-full flex items-center justify-center text-center text-muted dark:text-gray-400">
+                                            <p>Bu sensör için işlenmiş veri bulunamadı.</p>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                            {activeTab === 'raw' && (
+                                 <>
+                                    {rawReadings.length > 0 ? (
+                                        <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
+                                            <thead className="text-xs text-gray-700 dark:text-gray-400 uppercase bg-gray-100 dark:bg-gray-700 sticky top-0">
+                                                <tr>
+                                                    <th scope="col" className="px-6 py-3">Zaman Damgası</th>
+                                                    <th scope="col" className="px-6 py-3">Ham Değer</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {rawReadings.map(reading => (
+                                                    <tr key={reading.id} className="border-b border-gray-200 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                                                        <td className="px-6 py-3 font-mono text-gray-800 dark:text-gray-200">{new Date(reading.timestamp).toLocaleString('tr-TR')}</td>
+                                                        <td className="px-6 py-3 font-mono text-xs text-gray-800 dark:text-gray-200">
+                                                           <pre className="bg-gray-100 dark:bg-gray-700 p-1 rounded text-xs">{JSON.stringify(reading.raw_value, null, 2)}</pre>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    ) : (
+                                        <div className="h-full flex items-center justify-center text-center text-muted dark:text-gray-400">
+                                            <p>Bu sensör için ham veri bulunamadı.</p>
+                                        </div>
+                                    )}
+                                </>
                             )}
                         </div>
                     </div>

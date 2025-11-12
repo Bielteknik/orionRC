@@ -147,7 +147,6 @@ const SensorCard: React.FC<{ sensor: Sensor, historyData: SensorReading[], onCli
                                 dot={false}
                                 activeDot={{ r: 0 }}
                             />
-                            {/* FIX: The 'stroke' prop for Area expects a string color value, not a boolean. Changed to "none" to hide the stroke. */}
                             <Area type="monotone" dataKey="value" stroke="none" fillOpacity={1} fill={`url(#colorGradient-${sensor.id})`} />
                         </LineChart>
                     </ResponsiveContainer>
@@ -229,6 +228,11 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
   const handleOpenSensorModal = (sensor: Sensor) => {
     setSelectedSensor(sensor);
     setIsSensorModalOpen(true);
+  };
+
+  const handleCloseSensorModal = () => {
+    setIsSensorModalOpen(false);
+    setSelectedSensor(null);
   };
 
   const filteredSensorReadings = useMemo(() =>
@@ -542,10 +546,10 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
          </div>
       </Card>
 
-        {selectedSensor && (
+        {isSensorModalOpen && selectedSensor && (
             <SensorDetailModal
                 isOpen={isSensorModalOpen}
-                onClose={() => setIsSensorModalOpen(false)}
+                onClose={handleCloseSensorModal}
                 sensor={selectedSensor}
                 readings={readings.filter(r => r.sensorId === selectedSensor.id)}
             />

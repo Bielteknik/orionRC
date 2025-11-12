@@ -50,15 +50,15 @@ const FullMap: React.FC<FullMapProps> = ({ stations, onViewStationDetails, onSta
             });
             
             const baseMaps = {
-                "Sokak": streetLayer,
                 "Uydu": satelliteLayer,
+                "Sokak": streetLayer,
                 "Karanlık": darkLayer,
             };
 
             if (theme === 'dark') {
                 darkLayer.addTo(map);
             } else {
-                streetLayer.addTo(map);
+                satelliteLayer.addTo(map);
             }
 
             const layerControl = L.control.layers(baseMaps, undefined, { position: 'topright' }).addTo(map);
@@ -66,7 +66,7 @@ const FullMap: React.FC<FullMapProps> = ({ stations, onViewStationDetails, onSta
             const layerControlContainer = layerControl.getContainer();
             const toggle = layerControlContainer.querySelector('.leaflet-control-layers-toggle');
             if (toggle) {
-                toggle.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M2.25 12l8.954 8.955c.44.439 1.152.439 1.591 0L21.75 12" /></svg>`;
+                toggle.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M2.25 12l8.954 8.955c.44.439 1.152-.439 1.591 0L21.75 12" /></svg>`;
             }
 
 
