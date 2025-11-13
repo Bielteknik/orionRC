@@ -71,5 +71,6 @@ Agent'ı çalıştırmadan önce, Raspberry Pi'nizin donanım iletişimi için d
         pm2 startup # Otomatik başlangıç için
         pm2 save
         ```
+    -   **Not:** Web arayüzünden uzaktan yeniden başlatma özelliğinin çalışabilmesi için agent'ın `pm2` ile ve `orion-agent` adıyla çalıştırılması **gereklidir**.
 
 Agent artık sunucuya bağlanacak, yapılandırmasını alacak ve sensör verilerini okumaya başlayacaktır.

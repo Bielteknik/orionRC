@@ -25,6 +25,8 @@ export const getStations = (): Promise<Station[]> => apiClient.get('/stations').
 export const addStation = (data: any): Promise<Station> => apiClient.post('/stations', data).then(res => res.data).catch(e => handleError(e, 'adding station'));
 export const updateStation = (id: string, data: any): Promise<Station> => apiClient.put(`/stations/${id}`, data).then(res => res.data).catch(e => handleError(e, 'updating station'));
 export const deleteStation = (id: string): Promise<void> => apiClient.delete(`/stations/${id}`).then(res => res.data).catch(e => handleError(e, 'deleting station'));
+export const restartAgent = (id: string): Promise<void> => apiClient.post(`/stations/${id}/restart-agent`).then(res => res.data).catch(e => handleError(e, 'restarting agent'));
+export const stopAgent = (id: string): Promise<void> => apiClient.post(`/stations/${id}/stop-agent`).then(res => res.data).catch(e => handleError(e, 'stopping agent'));
 
 // Sensors
 export const getSensors = (): Promise<Sensor[]> => apiClient.get('/sensors').then(res => res.data).catch(e => handleError(e, 'fetching sensors'));

@@ -18,6 +18,8 @@ export interface SensorConfig {
         driver: string;
     };
     config: any; // Porta özel ayarlar (port, baudrate, address vb.)
+    reference_value?: number;
+    reference_operation?: 'add' | 'subtract' | 'none';
 }
 
 // Tek bir kameranın yapılandırması
@@ -30,7 +32,7 @@ export interface CameraConfig {
 // Sunucudan gelen komut
 export interface AgentCommand {
     id: number;
-    command_type: 'CAPTURE_IMAGE' | 'ANALYZE_SNOW_DEPTH' | 'FORCE_READ_SENSOR' | string;
+    command_type: 'CAPTURE_IMAGE' | 'ANALYZE_SNOW_DEPTH' | 'FORCE_READ_SENSOR' | 'RESTART_AGENT' | 'STOP_AGENT' | 'REFRESH_CONFIG' | string;
     payload: {
         camera_id?: string;
         virtual_sensor_id?: string;

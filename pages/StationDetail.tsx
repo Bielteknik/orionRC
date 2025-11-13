@@ -1,11 +1,11 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Station, Sensor, Camera, SensorStatus, CameraStatus } from '../types.ts';
-import { getStations, getSensors, getCameras, getReadings } from '../services/apiService.ts';
+import { getStations, getSensors, getCameras, getReadings, restartAgent, stopAgent } from '../services/apiService.ts';
 import Card from '../components/common/Card.tsx';
 import InteractiveMap from '../components/common/InteractiveMap.tsx';
 import Pagination from '../components/common/Pagination.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
-import { ArrowLeftIcon, SensorIcon, CameraIcon, SettingsIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, OnlineIcon, OfflineIcon, PlayIcon, PhotographIcon, SearchIcon, ExclamationIcon, DownloadIcon, CalendarIcon } from '../components/icons/Icons.tsx';
+import { ArrowLeftIcon, SensorIcon, CameraIcon, SettingsIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, OnlineIcon, OfflineIcon, PlayIcon, PhotographIcon, SearchIcon, ExclamationIcon, DownloadIcon, CalendarIcon, AgentIcon } from '../components/icons/Icons.tsx';
 import SensorDetailModal from '../components/SensorDetailModal.tsx'; // Import the new modal
 import { LineChart, Line, YAxis, ResponsiveContainer, Area } from 'recharts';
 
@@ -92,7 +92,7 @@ const SensorCard: React.FC<{ sensor: Sensor, historyData: SensorReading[], onCli
         const numericValue = getNumericValue(sensor.value);
         if (numericValue === null) {
             if (sensor.value && typeof sensor.value === 'object' && 'weight_kg' in sensor.value && sensor.value.weight_kg === 'N/A') {
-                return 'N/A';
+                 return 'N/A';
              }
              return 'N/A';
         }
@@ -234,6 +234,27 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
     setIsSensorModalOpen(false);
     setSelectedSensor(null);
   };
+  
+  const handleAgentCommand = async (command: 'restart' | 'stop') => {
+      if (!station) return;
+      const actionText = command === 'restart' ? 'yeniden başlatmak' : 'durdurmak';
+      const confirmed = window.confirm(`${station.name} istasyonuna bağlı agent'ı ${actionText} istediğinizden emin misiniz?`);
+      
+      if (confirmed) {
+          try {
+              if (command === 'restart') {
+                  await restartAgent(station.id);
+                  alert("Yeniden başlatma komutu başarıyla gönderildi.");
+              } else {
+                  await stopAgent(station.id);
+                  alert("Durdurma komutu başarıyla gönderildi.");
+              }
+          } catch (error) {
+              alert(`Agent'a ${actionText} komutu gönderilirken bir hata oluştu.`);
+              console.error(error);
+          }
+      }
+  };
 
   const filteredSensorReadings = useMemo(() =>
     readings.filter(reading =>
@@ -259,18 +280,13 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
     if (!selectedCamera?.photos) return [];
     if (!photoDateFilter) return selectedCamera.photos;
     
-    // YYYY-MM-DD formatını baz alarak filtreleme
-    const filterDate = new Date(photoDateFilter);
-    filterDate.setHours(0, 0, 0, 0);
-
     return selectedCamera.photos.filter(photoUrl => {
         const filename = photoUrl.split('/').pop() || '';
-        // Filename format: 2025-10-16T23-20-15_Ejder_Eshel.png
-        const datePart = filename.split('T')[0];
-        const photoDate = new Date(datePart);
-        photoDate.setHours(0, 0, 0, 0);
-
-        return photoDate.getTime() === filterDate.getTime();
+        const datePartMatch = filename.match(/^(\d{4}-\d{2}-\d{2})/);
+        if (datePartMatch) {
+            return datePartMatch[1] === photoDateFilter;
+        }
+        return false;
     });
   }, [selectedCamera, photoDateFilter]);
   
@@ -315,10 +331,16 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
         </div>
          <div className="flex items-center space-x-2 self-end sm:self-center">
              <button 
-                onClick={() => alert('Ayarlar özelliği yakında eklenecektir!')}
-                className="flex items-center justify-center gap-2 bg-primary border border-gray-300 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors">
-                <SettingsIcon className="w-5 h-5" />
-                <span>Ayarlar</span>
+                onClick={() => handleAgentCommand('restart')}
+                className="flex items-center justify-center gap-2 bg-primary border border-gray-300 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors text-sm font-semibold">
+                <AgentIcon className="w-5 h-5" />
+                <span>Agent'ı Yeniden Başlat</span>
+            </button>
+             <button 
+                onClick={() => handleAgentCommand('stop')}
+                className="flex items-center justify-center gap-2 bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg hover:bg-red-100 transition-colors text-sm font-semibold">
+                <AgentIcon className="w-5 h-5" />
+                <span>Agent'ı Durdur</span>
             </button>
         </div>
       </div>
