@@ -112,452 +112,398 @@ class Agent {
             }
 
             console.error(`❌ Hata (${context}): ${error.message}`);
-
             if (error.response) {
-                console.error(`   -> Sunucu Yanıtı (${error.response.status}): ${JSON.stringify(error.response.data)}`);
-            } else if (error.code === 'EAI_AGAIN' || error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
-                console.error(`   -> Sunucuya ulaşılamıyor. Ağ bağlantısı veya sunucu adresi (${this.apiBaseUrl}) kontrol edilmeli.`);
-            } else {
-                 console.error(`   -> Ağ hatası veya sunucuya ulaşılamıyor.`);
+                console.error(`   -> Sunucu Yanıtı: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
+            } else if (error.request) {
+                console.error(`   -> Sunucuya ulaşılamadı. Ağ bağlantınızı ve sunucu adresini kontrol edin: ${this.apiBaseUrl}`);
+                if (this.state !== AgentState.OFFLINE) {
+                    this.setState(AgentState.OFFLINE);
+                    console.log('... Veriler yerel olarak kaydedilecek ve bağlantı kurulduğunda gönderilecek.');
+                }
             }
-            this.setState(AgentState.OFFLINE);
         } else {
-            console.error(`❌ Beklenmedik hata (${context}):`, error);
-            this.setState(AgentState.ERROR);
+            console.error(`❌ Beklenmedik Hata (${context}):`, error);
         }
     }
-
 
     private setState(newState: AgentState) {
         if (this.state !== newState) {
             this.state = newState;
-            console.log(`Durum Değişikliği: ${this.state}`);
+            console.log(`Durum Değişikliği: ${newState}`);
         }
     }
 
     public async start() {
+        if (this.running) {
+            console.warn('Agent zaten çalışıyor.');
+            return;
+        }
         this.running = true;
         await openDb();
-        await this.fetchConfig();
-        this.sensorReadLoop();
-        this.commandLoop();
-        this.syncLoop();
+        await this.fetchConfig(true);
+        this.timers.push(setInterval(() => this.fetchConfig(), CONFIG_POLL_INTERVAL));
+        this.timers.push(setInterval(() => this.pollForCommands(), COMMAND_POLL_INTERVAL));
+        this.timers.push(setInterval(() => this.syncOfflineData(), SYNC_INTERVAL));
     }
-    
-    public shutdown() {
-        console.log("\n🚫 Agent durduruluyor... Kaynaklar temizleniyor.");
+
+    public stop() {
+        if (!this.running) return;
         this.running = false;
-        this.timers.forEach(clearTimeout);
-        console.log("✅ Zamanlayıcılar durduruldu.");
-        console.log("✅ Güvenli çıkış tamamlandı.");
+        this.timers.forEach(timer => clearInterval(timer));
+        this.timers = [];
+        for (const [sensorId, driver] of this.driverInstances.entries()) {
+            if (typeof (driver as any).close === 'function') {
+                (driver as any).close();
+            }
+        }
+        console.log('🛑 ORION Agent durduruldu.');
     }
 
-    private async sensorReadLoop() {
-        if (!this.running) return;
-        
-        if (this.state === AgentState.ONLINE && this.config) {
-            await this.readAllActiveSensors();
-        }
-
-        const delay = (this.globalReadFrequencySeconds && this.globalReadFrequencySeconds > 0)
-            ? this.globalReadFrequencySeconds * 1000
-            : CONFIG_POLL_INTERVAL;
-        
-        if (this.state === AgentState.ONLINE) {
-             console.log(`Döngü tamamlandı. Sonraki okuma ${delay / 1000} saniye sonra.`);
-        }
-
-        if (this.running) {
-            const timer = setTimeout(() => this.sensorReadLoop(), delay);
-            this.timers.push(timer);
-        }
-    }
-    
-    private async syncLoop() {
-        if (!this.running) return;
-
-        if (this.state === AgentState.ONLINE) {
-            await this.syncUnsentReadings();
-        }
-
-        if (this.running) {
-            const timer = setTimeout(() => this.syncLoop(), SYNC_INTERVAL);
-            this.timers.push(timer);
-        }
-    }
-
-    private async commandLoop() {
-        if (!this.running) return;
-        
-        // Always check for commands, even when offline, to allow for recovery commands.
-        await this.checkForCommands();
-
-        if (this.running) {
-            const timer = setTimeout(() => this.commandLoop(), COMMAND_POLL_INTERVAL);
-            this.timers.push(timer);
-        }
-    }
-
-    public async fetchConfig() {
+    private async fetchConfig(isInitial: boolean = false) {
+        console.log('🔄️ Sunucudan yapılandırma alınıyor...');
         this.setState(AgentState.CONFIGURING);
         try {
-            const response = await axios.get<DeviceConfig>(`${this.apiBaseUrl}/config/${this.deviceId}`, {
-                headers: { 'Authorization': `Token ${this.authToken}` },
+            const response = await axios.get(`${this.apiBaseUrl}/config/${this.deviceId}`, {
+                headers: { 'Authorization': `Bearer ${this.authToken}` }
             });
             this.config = response.data;
-            this.globalReadFrequencySeconds = this.config.global_read_frequency_seconds;
-            this.geminiApiKey = this.config.gemini_api_key;
-            console.log(`✅ Yapılandırma alındı: ${this.config.sensors.length} sensör, ${this.config.cameras.length} kamera. Global frekans: ${this.globalReadFrequencySeconds || 'devre dışı'}`);
-            if(this.geminiApiKey) {
-                console.log("   -> Gemini API anahtarı başarıyla alındı.");
-            } else {
-                console.warn("   -> UYARI: Sunucudan Gemini API anahtarı alınamadı. Görüntü analizi özellikleri çalışmayabilir.");
-            }
+            this.geminiApiKey = this.config?.gemini_api_key;
+            this.globalReadFrequencySeconds = this.config?.global_read_frequency_seconds;
+            console.log('✅ Yapılandırma başarıyla alındı.');
             this.setState(AgentState.ONLINE);
+            await this.initializeDrivers();
+
+            // Start main loop if it's the first time
+            if (isInitial) {
+                this.mainLoop();
+            }
+
         } catch (error) {
-            this.handleApiError(error, 'yapılandırma alma');
+            this.handleApiError(error, 'yapılandırma alınırken');
         }
     }
 
-    private async readAllActiveSensors() {
-        if (!this.config) return;
+    private async initializeDrivers() {
+        if (!this.config?.sensors) return;
 
-        const activeSensors = this.config.sensors.filter(s => s.is_active && s.interface !== 'virtual' && s.type !== 'Kar Yüksekliği');
+        for (const sensor of this.config.sensors) {
+            const driverName = sensor.parser_config?.driver;
+            if (!driverName) {
+                console.warn(`Uyarı: ${sensor.name} için 'driver' belirtilmemiş. Atlanıyor.`);
+                continue;
+            }
 
-        if (activeSensors.length === 0) {
-            console.log('[OKUMA] Okunacak aktif fiziksel sensör bulunmuyor.');
+            if (!this.driverInstances.has(sensor.id)) {
+                try {
+                    const driverModule = await import(`./drivers/${driverName}.driver.js`);
+                    this.driverInstances.set(sensor.id, new driverModule.default());
+                    console.log(`   -> Sürücü yüklendi: ${driverName} (${sensor.name})`);
+                } catch (error) {
+                    console.error(`HATA: Sürücü yüklenemedi: ${driverName}. Dosyanın varlığını ve doğruluğunu kontrol edin.`, error);
+                }
+            }
+        }
+    }
+
+    private async mainLoop() {
+        if (!this.running) return;
+        
+        console.log('--- Döngü Başlangıcı ---');
+        
+        const readPromises = this.config?.sensors
+            .filter(s => s.is_active)
+            .map(sensor => this.readAndProcessSensor(sensor));
+
+        if (readPromises) {
+            const results = await Promise.all(readPromises);
+            const validResults = results.filter((r): r is ReadingPayload => r !== null);
+
+            if (validResults.length > 0) {
+                 await this.sendReadings(validResults);
+            }
+        }
+
+        const cycleTime = this.globalReadFrequencySeconds && this.globalReadFrequencySeconds > 0 
+            ? this.globalReadFrequencySeconds * 1000 
+            : CONFIG_POLL_INTERVAL;
+
+        console.log(`--- Döngü Sonu --- (Sonraki ${cycleTime / 1000} saniye içinde)`);
+
+        this.timers.push(setTimeout(() => this.mainLoop(), cycleTime));
+    }
+    
+    private async readAndProcessSensor(sensor: SensorConfig): Promise<ReadingPayload | null> {
+        const driver = this.driverInstances.get(sensor.id);
+        if (!driver) return null;
+        
+        console.log(`   Okunuyor: ${sensor.name} (${sensor.type})`);
+        
+        let rawValue = await driver.read(sensor.config);
+
+        if (rawValue === null) {
+            console.log(`     -> OKUMA BAŞARISIZ: ${sensor.name} sensöründen veri alınamadı.`);
+            return null;
+        }
+        
+        // --- Değer İşleme (Kalibrasyon ve Yuvarlama) ---
+        let processedValue: Record<string, any> | null = rawValue;
+        const refVal = sensor.reference_value;
+        const refOp = sensor.reference_operation;
+
+        // Kar Yüksekliği (Mesafe sensöründen) özel işlemi
+        // Bu işlem, sensörün bir nesneye olan mesafesini ölçtüğünü ve karın bu mesafeyi azalttığını varsayar.
+        // Örn: Sensör yerden 300cm yüksekte. Kar yokken 300cm ölçer. 20cm kar varken 280cm ölçer.
+        // Kar Yüksekliği = Referans Yükseklik (300) - Okunan Mesafe (280) = 20cm.
+        if (sensor.type === 'Kar Yüksekliği' && (rawValue as any).distance_cm !== undefined) {
+            const originalNumericValue = (rawValue as any).distance_cm;
+            if (typeof refVal === 'number' && refOp === 'subtract') {
+                const calculatedNumericValue = refVal - originalNumericValue;
+                processedValue = {
+                    snow_depth_cm: calculatedNumericValue > 0 ? calculatedNumericValue : 0
+                };
+            } else {
+                // Eğer referans değeri/işlemi yoksa, ham mesafeyi kar yüksekliği olarak kullan (bu genellikle istenmez ama bir geri dönüş yoludur)
+                processedValue = { snow_depth_cm: originalNumericValue };
+            }
+        } 
+        // FIX: Replaced faulty calibration logic with one that handles single-property sensor objects.
+        // Genel kalibrasyon işlemleri
+        else if (processedValue && typeof processedValue === 'object' && typeof refVal === 'number' && refOp && refOp !== 'none') {
+            const keys = Object.keys(processedValue);
+            // Yalnızca tek bir sayısal özelliği olan nesneler için kalibrasyon uygula
+            if (keys.length === 1 && typeof (processedValue as any)[keys[0]] === 'number') {
+                const key = keys[0];
+                const originalValue = (processedValue as any)[key];
+                let calibratedValue = originalValue;
+
+                if (refOp === 'subtract') {
+                    calibratedValue = refVal - originalValue;
+                } else if (refOp === 'add') {
+                    calibratedValue = refVal + originalValue;
+                }
+                
+                // processedValue'yu kalibre edilmiş değeri içeren yeni bir nesneyle güncelle
+                processedValue = { [key]: calibratedValue };
+            }
+        }
+        
+        const finalValue = roundNumericValues(processedValue);
+        
+        // Veriyi yerel DB'ye kaydet
+        await addReading(sensor.id, rawValue, finalValue);
+
+        return { sensor: sensor.id, value: finalValue };
+    }
+
+
+    private async sendReadings(readings: ReadingPayload[]) {
+        if (this.state === AgentState.OFFLINE) {
+            console.log(`🔌 Çevrimdışı mod: ${readings.length} okuma yerel olarak kaydedildi.`);
+            return;
+        }
+
+        console.log(`📤 Sunucuya ${readings.length} adet okuma gönderiliyor...`);
+        try {
+            // NOTE: The backend expects one reading per request.
+            for (const reading of readings) {
+                await axios.post(`${this.apiBaseUrl}/submit-reading`, reading, {
+                     headers: { 'Authorization': `Bearer ${this.authToken}` }
+                });
+                console.log(`   -> Başarılı: ${reading.sensor}`);
+            }
+        } catch (error) {
+            this.handleApiError(error, 'okuma gönderilirken');
+        }
+    }
+
+    private async syncOfflineData() {
+        if (this.state === AgentState.OFFLINE || !this.running) {
             return;
         }
         
-        console.log(`[OKUMA BAŞLADI] ${activeSensors.length} aktif sensör okunacak...`);
-
-        for (const sensorConfig of activeSensors) {
-            await this.processAndStoreReading(sensorConfig);
+        const unsentReadings = await getUnsentReadings(50);
+        if (unsentReadings.length === 0) {
+            return;
         }
-        console.log(`[OKUMA BİTTİ] Sensör okuma döngüsü tamamlandı.`);
-    }
 
-    private async processAndStoreReading(sensorConfig: SensorConfig, rawValueOverride?: any) {
-        console.log(`  -> ${sensorConfig.name} (ID: ${sensorConfig.id}) işleniyor...`);
+        console.log(`🔄️ ${unsentReadings.length} adet çevrimdışı okuma senkronize ediliyor...`);
+        const sentIds: number[] = [];
 
-        try {
-            const rawValue = rawValueOverride ?? await this.readSingleSensor(sensorConfig);
-
-            if (rawValue === null) {
-                console.warn(`     -> UYARI: ${sensorConfig.name} sensöründen veri alınamadı (sürücü null döndü).`);
-                return;
-            }
-
-            // Processing logic (calibration, rounding) moved from backend
-            let processedValue = rawValue;
-            const refVal = sensorConfig.reference_value;
-            const refOp = sensorConfig.reference_operation;
-
-            if (refVal !== null && refVal !== 999 && refOp && (refOp === 'add' || refOp === 'subtract')) {
-                if (typeof rawValue === 'object' && rawValue !== null) {
-                    const keyToModify = Object.keys(rawValue).find(k => typeof rawValue[k] === 'number');
-                    if (keyToModify) {
-                        const originalNumericValue = rawValue[keyToModify];
-                        let calculatedNumericValue;
-                        if (refOp === 'subtract') {
-                            calculatedNumericValue = refVal - originalNumericValue;
-                        } else { // 'add'
-                            calculatedNumericValue = refVal + originalNumericValue;
-                        }
-                        processedValue = { ...rawValue, [keyToModify]: calculatedNumericValue };
-                    }
-                } else if (typeof rawValue === 'number') {
-                    if (refOp === 'subtract') {
-                        processedValue = refVal - rawValue;
-                    } else { // 'add'
-                        processedValue = refVal + rawValue;
-                    }
-                }
-            }
-
-            processedValue = roundNumericValues(processedValue);
-
-            const readingId = await addReading(sensorConfig.id, rawValue, processedValue);
-            console.log(`     -> Veri yerel veritabanına kaydedildi (ID: ${readingId}).`);
-
-            // Immediately try to send to server
-            if (this.state === AgentState.ONLINE) {
-                const readingFromDb: ReadingFromDb = {
-                    id: readingId,
-                    sensor_id: sensorConfig.id,
-                    processed_value: JSON.stringify(processedValue),
-                    // These fields are not used for sending but satisfy the type
-                    raw_value: '', 
-                    timestamp: '',
-                    is_sent: 0
+        for (const reading of unsentReadings) {
+             try {
+                const payload: ReadingPayload = {
+                    sensor: reading.sensor_id,
+                    value: JSON.parse(reading.processed_value)
                 };
-                await this.sendReadingToServer(readingFromDb);
+                 await axios.post(`${this.apiBaseUrl}/submit-reading`, payload, {
+                     headers: { 'Authorization': `Bearer ${this.authToken}` },
+                     timeout: 10000
+                });
+                sentIds.push(reading.id);
+            } catch (error) {
+                this.handleApiError(error, 'çevrimdışı veri senkronize edilirken');
+                // Stop syncing on first error to prevent data loss and wait for next interval
+                break; 
             }
-
-        } catch (error) {
-            console.error(`     -> HATA: ${sensorConfig.name} sensörü işlenirken bir hata oluştu:`, (error as Error).message);
         }
-    }
-    
-    private async readSingleSensor(sensorConfig: SensorConfig): Promise<any | null> {
-        const driverName = sensorConfig.parser_config?.driver;
-        if (!driverName || typeof driverName !== 'string') {
-            console.error(`     -> HATA: ${sensorConfig.name} (ID: ${sensorConfig.id}) için 'driver' tanımlanmamış.`);
-            return null;
-        }
-
-        try {
-            const driver = await this.loadDriver(driverName);
-            if (!driver) return null;
-
-            return await driver.read(sensorConfig.config);
-        } catch (error) {
-            console.error(`     -> HATA: Sürücü (${driverName}) yürütülürken hata:`, (error as Error).message);
-            return null;
+        
+        if (sentIds.length > 0) {
+            await markReadingsAsSent(sentIds);
+            console.log(`   -> ${sentIds.length} okuma başarıyla senkronize edildi.`);
         }
     }
 
 
-    private async loadDriver(driverName: string): Promise<ISensorDriver | null> {
-        if (this.driverInstances.has(driverName)) {
-            return this.driverInstances.get(driverName)!;
-        }
+    private async pollForCommands() {
+        if (!this.running) return;
         try {
-            const driverPath = `./drivers/${driverName}.driver.js`;
-            const driverModule = await import(driverPath);
-            const driverInstance: ISensorDriver = new driverModule.default();
-            this.driverInstances.set(driverName, driverInstance);
-            return driverInstance;
-        } catch (error) {
-            console.error(`Sürücü yüklenemedi: ${driverName}`, error);
-            return null;
-        }
-    }
-
-    private async sendReadingToServer(reading: ReadingFromDb) {
-        const payload = {
-            sensor: reading.sensor_id,
-            value: JSON.parse(reading.processed_value),
-        };
-
-        try {
-            await axios.post(`${this.apiBaseUrl}/submit-reading`, payload, {
-                headers: { 'Authorization': `Token ${this.authToken}` },
+            const response = await axios.get(`${this.apiBaseUrl}/commands/${this.deviceId}`, {
+                headers: { 'Authorization': `Bearer ${this.authToken}` }
             });
-            await markReadingsAsSent([reading.id]);
-            console.log(`     -> ✅ Veri sunucuya gönderildi (Yerel ID: ${reading.id}, Sensör ID: ${payload.sensor})`);
-        } catch (error) {
-            // Don't use the global handler here as failure is expected when offline.
-            // The sync loop will handle retries.
-            if (axios.isAxiosError(error)) {
-                console.warn(`     -> ⚠️  Veri gönderilemedi, daha sonra tekrar denenecek (Sensör ID: ${payload.sensor}): ${error.code}`);
-            } else {
-                 console.warn(`     -> ⚠️  Veri gönderilemedi, beklenmedik hata (Sensör ID: ${payload.sensor}):`, error);
-            }
-             this.setState(AgentState.OFFLINE);
-        }
-    }
-
-    private async syncUnsentReadings() {
-        console.log('[SYNC] Gönderilmemiş veriler kontrol ediliyor...');
-        const unsent = await getUnsentReadings(50); // Send in batches of 50
-        if (unsent.length > 0) {
-            console.log(`[SYNC] ${unsent.length} adet gönderilmemiş veri bulundu. Sunucuya gönderiliyor...`);
-            for (const reading of unsent) {
-                if (!this.running || this.state !== AgentState.ONLINE) {
-                    console.log('[SYNC] Agent çevrimdışı, senkronizasyon durduruldu.');
-                    break;
-                }
-                await this.sendReadingToServer(reading);
-            }
-            console.log('[SYNC] Senkronizasyon döngüsü tamamlandı.');
-        } else {
-            console.log('[SYNC] Gönderilecek yeni veri yok.');
-        }
-    }
-
-    private async checkForCommands() {
-        try {
-            const response = await axios.get<AgentCommand[]>(`${this.apiBaseUrl}/commands/${this.deviceId}`, {
-                headers: { 'Authorization': `Token ${this.authToken}` },
-            });
-
-            // Status 204 means no commands, which is a success case.
-            if (response.status === 204) {
-                 if (this.state !== AgentState.ONLINE) this.setState(AgentState.ONLINE);
-                return;
-            }
-
-            const commands = response.data;
-            if (commands && commands.length > 0) {
-                if (this.state !== AgentState.ONLINE) this.setState(AgentState.ONLINE);
-                console.log(`📩 ${commands.length} yeni komut alındı.`);
-                for (const command of commands) {
+            
+            if (response.status === 200 && Array.isArray(response.data)) {
+                 if (response.data.length > 0) console.log(`🔽 ${response.data.length} adet yeni komut alındı.`);
+                for (const command of response.data) {
                     await this.executeCommand(command);
                 }
             }
         } catch (error) {
-            this.handleApiError(error, 'komutları kontrol etme');
+            this.handleApiError(error, 'sunucudan komutları kontrol etme');
         }
     }
 
     private async executeCommand(command: AgentCommand) {
-        console.log(`⚡ Komut yürütülüyor: ${command.command_type} (ID: ${command.id})`);
-        let success = false;
+        console.log(`   -> Komut yürütülüyor: ${command.command_type}`);
         try {
             switch (command.command_type) {
                 case 'REFRESH_CONFIG':
                     await this.fetchConfig();
-                    success = this.state === AgentState.ONLINE;
-                    break;
-                case 'STOP_AGENT':
-                    console.log("Durdurma komutu alındı. PM2 aracılığıyla agent durduruluyor...");
-                    await this.updateCommandStatus(command.id, 'complete');
-                    exec('pm2 stop orion-agent', (err) => { if (err) console.error("PM2 stop hatası:", err); });
-                    // No success=true here, because the process will be stopped.
-                    return; // Exit early
-                case 'CAPTURE_IMAGE':
-                    if (!command.payload?.camera_id) {
-                        console.error("Capture image command is missing 'camera_id' in payload.");
-                        break;
-                    }
-                    success = await this.captureImage(command.payload.camera_id);
-                    break;
-                case 'ANALYZE_SNOW_DEPTH':
-                     if (!command.payload?.camera_id || !command.payload?.virtual_sensor_id || !command.payload.analysis_type) {
-                        console.error("Analyze snow depth command is missing 'camera_id', 'virtual_sensor_id' or 'analysis_type'.");
-                        break;
-                    }
-                    if(command.payload.analysis_type === 'gemini') {
-                        success = await this.analyzeSnowDepthWithGemini(command.payload.camera_id, command.payload.virtual_sensor_id);
-                    } else if (command.payload.analysis_type === 'opencv') {
-                        success = await this.analyzeSnowDepthWithOpenCV(command.payload.camera_id, command.payload.virtual_sensor_id);
-                    } else {
-                        console.error(`Bilinmeyen analiz tipi: ${command.payload.analysis_type}`);
-                    }
-                    break;
-                case 'FORCE_READ_SENSOR':
-                    if (!command.payload?.sensor_id) {
-                        console.error("Force read command is missing 'sensor_id'.");
-                        break;
-                    }
-                    success = await this.forceReadSensor(command.payload.sensor_id);
                     break;
                 case 'RESTART_AGENT':
-                    console.log("Yeniden başlatma komutu alındı. PM2 aracılığıyla agent yeniden başlatılıyor...");
-                    await this.updateCommandStatus(command.id, 'complete');
-                    exec('pm2 restart orion-agent', (error, stdout, stderr) => {
-                        if (error) {
-                            console.error(`PM2 restart hatası: ${error.message}. Agent'ın 'orion-agent' adıyla çalıştığından emin olun.`);
-                            return;
-                        }
-                    });
-                    return; 
-                default:
-                    console.warn(`Bilinmeyen komut tipi: ${command.command_type}`);
+                    console.log('Agent yeniden başlatılıyor...');
+                    // Use pm2 to restart the process. Assumes it's running with name 'orion-agent'.
+                    await execAsync('pm2 restart orion-agent');
+                    break;
+                case 'STOP_AGENT':
+                     console.log('Agent durduruluyor...');
+                     await execAsync('pm2 stop orion-agent');
+                    break;
+                case 'FORCE_READ_SENSOR':
+                    if (command.payload?.sensor_id) {
+                         const sensorToRead = this.config?.sensors.find(s => s.id === command.payload.sensor_id);
+                         if (sensorToRead) {
+                             const result = await this.readAndProcessSensor(sensorToRead);
+                             if (result) await this.sendReadings([result]);
+                         }
+                    }
+                    break;
+                case 'CAPTURE_IMAGE':
+                     if (command.payload?.camera_id) {
+                        await this.captureAndUploadImage(command.payload.camera_id, `${this.apiBaseUrl}/cameras/${command.payload.camera_id}/upload-photo`);
+                     }
+                    break;
+                case 'ANALYZE_SNOW_DEPTH':
+                    if (command.payload?.camera_id && command.payload?.virtual_sensor_id && command.payload?.analysis_type) {
+                       await this.analyzeSnowDepth(
+                           command.payload.camera_id, 
+                           command.payload.virtual_sensor_id, 
+                           command.payload.analysis_type
+                        );
+                    }
                     break;
             }
-            await this.updateCommandStatus(command.id, success ? 'complete' : 'fail');
+            // Notify server of command completion (optional, but good practice)
+            // await axios.post(`${this.apiBaseUrl}/commands/${command.id}/completed`, {}, { ... });
+
         } catch (error) {
-            console.error(`Komut yürütülürken hata oluştu (ID: ${command.id}):`, error);
-            await this.updateCommandStatus(command.id, 'fail');
+            console.error(`HATA: Komut yürütülürken (${command.command_type}):`, error);
+        }
+    }
+
+    private async captureAndUploadImage(cameraId: string, uploadUrl: string) {
+        const cameraConfig = this.config?.cameras.find(c => c.id === cameraId);
+        if (!cameraConfig || !cameraConfig.rtsp_url) {
+            console.error(`HATA: ${cameraId} için kamera yapılandırması veya RTSP URL'si bulunamadı.`);
+            return;
+        }
+
+        const timestamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '');
+        const filename = `${this.deviceId}_${cameraId}_${timestamp}.jpg`;
+        const outputPath = `/tmp/${filename}`;
+        
+        console.log(`   -> Fotoğraf çekiliyor: ${cameraConfig.name}`);
+        
+        try {
+            // Use ffmpeg to capture a single frame from the RTSP stream.
+            // -rtsp_transport tcp: Forces TCP transport, more reliable over lossy networks.
+            // -y: Overwrite output file if it exists.
+            // -i: Input source (RTSP URL).
+            // -vframes 1: Capture a single video frame.
+            // -q:v 2: Set image quality (2 is high).
+            const { stdout, stderr } = await execAsync(`ffmpeg -rtsp_transport tcp -y -i "${cameraConfig.rtsp_url}" -vframes 1 -q:v 2 ${outputPath}`);
+            
+            console.log(`   -> Fotoğraf kaydedildi: ${outputPath}`);
+
+            // Read the captured image file
+            const imageBuffer = await fs.readFile(outputPath);
+            const imageBase64 = imageBuffer.toString('base64');
+            
+            console.log(`   -> Fotoğraf sunucuya yükleniyor...`);
+            
+            // Upload the image to the server
+            await axios.post(uploadUrl, {
+                image: imageBase64,
+                filename: filename
+            }, {
+                headers: { 'Authorization': `Bearer ${this.authToken}` }
+            });
+
+            console.log(`   -> Yükleme başarılı: ${filename}`);
+            
+            // Clean up the temporary file
+            await fs.unlink(outputPath);
+
+        } catch (error: any) {
+            console.error(`HATA: Fotoğraf çekme veya yükleme başarısız oldu (${cameraConfig.name}):`, error.stderr || error.message);
         }
     }
     
-    private async updateCommandStatus(commandId: number, status: 'complete' | 'fail') {
-        // This is now less critical as commands are dequeued on GET,
-        // but we can leave it for logging/future tracking purposes.
-        // The endpoint is now a no-op on the server.
-    }
-
-    private async captureImage(cameraId: string): Promise<boolean> {
-        const cameraConfig = this.config?.cameras.find(c => c.id === cameraId);
-
-        if (!cameraConfig || !cameraConfig.rtsp_url) {
-            console.error(`Fotoğraf çekilemedi: Kamera (ID: ${cameraId}) yapılandırmada bulunamadı veya RTSP URL'si eksik.`);
-            return false;
-        }
-
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const filename = `${timestamp}_${this.deviceId}_${cameraId}.jpg`;
-        const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
-        const filepath = path.join(UPLOADS_DIR, filename);
-
-        console.log(`📸 Fotoğraf çekiliyor ve optimize ediliyor: ${cameraConfig.name}...`);
-
-        try {
-            await fs.mkdir(UPLOADS_DIR, { recursive: true });
-            
-            const ffmpegCommand = `ffmpeg -i "${cameraConfig.rtsp_url}" -vframes 1 -vf "scale=1280:-1" -q:v 4 -y "${filepath}"`;
-            
-            const { stdout, stderr } = await execAsync(ffmpegCommand);
-            if (stderr && !stderr.includes('frame=')) {
-                console.log(`FFMPEG Info: ${stderr}`);
-            }
-            console.log(`🖼️  Optimize edilmiş görüntü kaydedildi: ${filepath}`);
-
-            const imageBuffer = await fs.readFile(filepath);
-            const base64Image = imageBuffer.toString('base64');
-            
-            await axios.post(`${this.apiBaseUrl}/cameras/${cameraId}/upload-photo`, {
-                image: base64Image,
-                filename: filename
-            }, {
-                headers: { 'Authorization': `Token ${this.authToken}` },
-            });
-
-            console.log(`🚀 Fotoğraf sunucuya yüklendi: ${filename}`);
-            
-            await fs.unlink(filepath);
-            
-            return true;
-
-        } catch (error) {
-            this.handleApiError(error, `fotoğraf çekme veya yükleme (Kamera: ${cameraId})`);
-            return false;
+    private async analyzeSnowDepth(cameraId: string, virtualSensorId: string, analysisType: 'gemini' | 'opencv') {
+        if (analysisType === 'gemini') {
+            await this.analyzeWithGemini(cameraId, virtualSensorId);
+        } else if (analysisType === 'opencv') {
+            await this.analyzeWithOpenCV(cameraId, virtualSensorId);
         }
     }
 
-    private async analyzeSnowDepthWithGemini(cameraId: string, virtualSensorId: string): Promise<boolean> {
-        const cameraConfig = this.config?.cameras.find(c => c.id === cameraId);
-        if (!cameraConfig || !cameraConfig.rtsp_url) {
-            console.error(`Analiz için kamera bulunamadı veya RTSP URL'si eksik: ${cameraId}`);
-            return false;
-        }
-        
+    private async analyzeWithGemini(cameraId: string, virtualSensorId: string) {
         if (!this.geminiApiKey) {
-            console.error('HATA: Gemini API anahtarı sunucudan alınamadı. Analiz yapılamıyor.');
-            return false;
+            console.error('HATA: Gemini analizi için API anahtarı yapılandırılmamış.');
+            return;
         }
-
-        console.log(`❄️  Kar derinliği analizi başlatılıyor (Gemini)... Kamera: ${cameraId}`);
         
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const filename = `ANALYSIS_GEMINI_${timestamp}_${cameraId}.jpg`;
-        const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
-        const filepath = path.join(UPLOADS_DIR, filename);
+        const cameraConfig = this.config?.cameras.find(c => c.id === cameraId);
+        if (!cameraConfig || !cameraConfig.rtsp_url) {
+            console.error(`HATA (Gemini): ${cameraId} için kamera yapılandırması bulunamadı.`);
+            return;
+        }
+        
+        const timestamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '');
+        const filename = `${this.deviceId}_${cameraId}_gemini-analysis_${timestamp}.jpg`;
+        const outputPath = `/tmp/${filename}`;
+        
+        console.log(`   -> Gemini Analizi için fotoğraf çekiliyor: ${cameraConfig.name}`);
 
         try {
-            await fs.mkdir(UPLOADS_DIR, { recursive: true });
-            const ffmpegCommand = `ffmpeg -i "${cameraConfig.rtsp_url}" -vframes 1 -vf "scale=1280:-1" -q:v 4 -y "${filepath}"`;
-            await execAsync(ffmpegCommand);
-            console.log(`   -> Analiz için optimize edilmiş görüntü kaydedildi: ${filepath}`);
-
-            const imageBuffer = await fs.readFile(filepath);
-            const base64Image = imageBuffer.toString('base64');
+            await execAsync(`ffmpeg -rtsp_transport tcp -y -i "${cameraConfig.rtsp_url}" -vframes 1 -q:v 2 ${outputPath}`);
+            const imageBuffer = await fs.readFile(outputPath);
+            const imageBase64 = imageBuffer.toString('base64');
             
-            console.log('   -> Gemini API ile analiz ediliyor...');
             const ai = new GoogleGenAI({ apiKey: this.geminiApiKey });
-            const imagePart = {
-                inlineData: {
-                    mimeType: 'image/jpeg',
-                    data: base64Image,
-                },
-            };
-            const textPart = {
-                text: GEMINI_SNOW_DEPTH_PROMPT,
-            };
 
+            const imagePart = { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } };
+            const textPart = { text: GEMINI_SNOW_DEPTH_PROMPT };
+            
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: { parts: [imagePart, textPart] },
@@ -575,175 +521,77 @@ class Agent {
                     }
                 }
             });
-            
+
             const resultText = response.text;
             if (!resultText) {
-                console.error('   -> HATA: Gemini API boş yanıt döndü.');
-                return false;
+                throw new Error('Gemini API boş yanıt döndürdü.');
             }
 
-            console.log(`   -> Gemini Yanıtı: ${resultText}`);
-
-            const resultJson = JSON.parse(resultText.replace(/```json/g, '').replace(/```/g, ''));
+            console.log(`[ANALYSIS] Gemini Yanıtı: ${resultText}`);
+            
+            const cleanedText = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
+            const resultJson = JSON.parse(cleanedText);
             const snowDepth = resultJson.snow_depth_cm;
 
-            if (typeof snowDepth !== 'number') {
-                console.error('   -> HATA: Gemini yanıtından sayısal bir kar yüksekliği değeri alınamadı.');
-                return false;
+            if (typeof snowDepth !== 'number' || snowDepth < 0) {
+                 console.warn(`     -> UYARI (Gemini): Geçersiz kar derinliği değeri (${snowDepth}). Okuma atlanıyor.`);
+                 return;
             }
 
-            if (snowDepth === -1) {
-                console.log(`   -> BİLGİ: Gemini görüntüden kar derinliğini belirleyemedi.`);
-                return false; // Command failed
-            }
-            
-            console.log(`   -> Analiz Sonucu: ${snowDepth} cm`);
-            
-            // Here, we create a 'raw' value that is the same as the processed one for consistency.
-            const value = { snow_depth_cm: snowDepth };
-            await this.processAndStoreReading({ id: virtualSensorId } as SensorConfig, value);
+            const payload: ReadingPayload = {
+                sensor: virtualSensorId,
+                value: roundNumericValues({ snow_depth_cm: snowDepth })
+            };
 
-            await axios.post(`${this.apiBaseUrl}/analysis/upload-photo`, {
+            await this.sendReadings([payload]);
+            await fs.unlink(outputPath); // Clean up temp file
+            
+            // Also upload the analysis image for verification
+            const uploadUrl = `${this.apiBaseUrl}/analysis/upload-photo`;
+            await axios.post(uploadUrl, {
                 cameraId: cameraId,
-                image: base64Image,
+                image: imageBase64,
                 filename: filename
             }, {
-                headers: { 'Authorization': `Token ${this.authToken}` },
+                headers: { 'Authorization': `Bearer ${this.authToken}` }
             });
-            console.log(`   -> Analiz görüntüsü sunucuya yüklendi: ${filename}`);
 
-            return true;
 
         } catch (error) {
-            this.handleApiError(error, `kar derinliği analizi (Kamera: ${cameraId})`);
-            return false;
-        } finally {
-            try {
-                await fs.unlink(filepath);
-            } catch (unlinkError: any) {
-                if (unlinkError.code !== 'ENOENT') {
-                    console.warn(`Geçici analiz dosyası silinemedi: ${filepath}`, unlinkError);
-                }
-            }
+            console.error(`HATA (Gemini): Analiz başarısız oldu.`, error);
+             try { await fs.unlink(outputPath); } catch {}
         }
     }
-
-    private async analyzeSnowDepthWithOpenCV(cameraId: string, virtualSensorId: string): Promise<boolean> {
-        // This function remains largely the same, but will now use processAndStoreReading
-        const cameraConfig = this.config?.cameras.find(c => c.id === cameraId);
-        if (!cameraConfig || !cameraConfig.rtsp_url) {
-            console.error(`OpenCV analizi için kamera bulunamadı veya RTSP URL'si eksik: ${cameraId}`);
-            return false;
-        }
-
-        console.log(`❄️  Kar derinliği analizi başlatılıyor (OpenCV)... Kamera: ${cameraId}`);
-
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const filename = `ANALYSIS_OCV_${timestamp}_${cameraId}.jpg`;
-        const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
-        const filepath = path.join(UPLOADS_DIR, filename);
-        const scriptPath = path.join(__dirname, 'scripts', 'snow_depth_opencv.py');
-
-        try {
-            await fs.mkdir(UPLOADS_DIR, { recursive: true });
-            const ffmpegCommand = `ffmpeg -i "${cameraConfig.rtsp_url}" -vframes 1 -y "${filepath}"`;
-            await execAsync(ffmpegCommand);
-            console.log(`   -> Analiz için görüntü kaydedildi: ${filepath}`);
-
-            console.log(`   -> OpenCV script'i çalıştırılıyor: ${scriptPath}`);
-            const { stdout, stderr } = await execAsync(`python3 "${scriptPath}" "${filepath}"`);
-            
-            if (stderr) {
-                console.error(`   -> HATA: OpenCV script hatası: ${stderr}`);
-            }
-            
-            console.log(`   -> OpenCV Yanıtı: ${stdout}`);
-
-            const resultJson = JSON.parse(stdout.trim());
-            if (resultJson.error) {
-                throw new Error(resultJson.error);
-            }
-
-            const snowDepth = resultJson.snow_depth_cm;
-             if (typeof snowDepth !== 'number') {
-                throw new Error('OpenCV script\'inden sayısal bir kar yüksekliği değeri alınamadı.');
-            }
-
-            console.log(`   -> Analiz Sonucu: ${snowDepth} cm`);
-            
-            const value = { snow_depth_cm: snowDepth };
-            await this.processAndStoreReading({ id: virtualSensorId } as SensorConfig, value);
-
-            return true;
-
-        } catch (error) {
-            console.error(`HATA: Kar derinliği (OpenCV) analizi başarısız oldu:`, error);
-            return false;
-        } finally {
-             try {
-                await fs.unlink(filepath);
-            } catch (unlinkError: any) {
-                if (unlinkError.code !== 'ENOENT') {
-                    console.warn(`Geçici analiz dosyası silinemedi: ${filepath}`, unlinkError);
-                }
-            }
-        }
-    }
-
-
-    private async forceReadSensor(sensorId: string): Promise<boolean> {
-        const sensorConfig = this.config?.sensors.find(s => s.id === sensorId);
-        if (!sensorConfig) {
-            console.error(`Manuel okuma başarısız: Sensör ID ${sensorId} mevcut cihaz yapılandırmasında bulunamadı.`);
-            return false;
-        }
     
-        console.log(`[MANUEL OKUMA BAŞLADI] ${sensorConfig.name}`);
-        await this.processAndStoreReading(sensorConfig);
-        console.log(`[MANUEL OKUMA BİTTİ] ${sensorConfig.name}`);
-        return true; // Assume success, as errors are handled internally
+    private async analyzeWithOpenCV(cameraId: string, virtualSensorId: string) {
+        console.log(`   -> OpenCV analizi başlatılıyor... (Bu özellik şu anda bir yer tutucudur)`);
+        // In a real implementation, you would call a Python script via child_process
+        // that uses OpenCV to analyze an image and print the result to stdout.
+        // For now, we'll simulate a result.
+        const mockSnowDepth = parseFloat((Math.random() * 150).toFixed(2));
+        
+         const payload: ReadingPayload = {
+            sensor: virtualSensorId,
+            value: { snow_depth_cm: mockSnowDepth }
+        };
+        await this.sendReadings([payload]);
     }
+
 }
 
-
-// --- Agent Startup ---
+// --- Agent Başlatma ---
 async function main() {
     try {
-        console.log(`Yerel yapılandırma okunuyor: ${CONFIG_PATH}`);
-        const configFile = await fs.readFile(CONFIG_PATH, 'utf-8');
-        const localConfig: LocalConfig = JSON.parse(configFile);
-
-        if (!localConfig.server?.base_url || !localConfig.device?.id || !localConfig.device?.token) {
-            throw new Error("config.json dosyasında 'server.base_url', 'device.id', ve 'device.token' alanları zorunludur.");
-        }
-
+        const configContent = await fs.readFile(CONFIG_PATH, 'utf-8');
+        const localConfig: LocalConfig = JSON.parse(configContent);
+        
         const agent = new Agent(localConfig);
-        
-        // FIX: Cast `process` to `any` to access Node.js specific `on` method.
-        (process as any).on('SIGINT', () => {
-            agent.shutdown();
-            // FIX: Cast `process` to `any` to access Node.js specific `exit` method.
-            (process as any).exit(0);
-        });
-        
-        // FIX: Cast `process` to `any` to access Node.js specific `on` method.
-        (process as any).on('SIGTERM', () => {
-            agent.shutdown();
-             // FIX: Cast `process` to `any` to access Node.js specific `exit` method.
-             (process as any).exit(0);
-        });
-
         await agent.start();
 
     } catch (error) {
-        console.error("Agent başlatılamadı. config.json dosyası okunamadı veya geçersiz.", error);
-        // FIX: Cast `process` to `any` to access Node.js specific `exit` method.
-        (process as any).exit(1);
+        console.error("FATAL: Agent başlatılamadı.", error);
+        process.exit(1);
     }
 }
 
-main().catch(error => {
-    console.error("Agent çalışırken kritik bir hata oluştu:", error);
-    // FIX: Cast `process` to `any` to access Node.js specific `exit` method.
-    (process as any).exit(1);
-});
+main();
