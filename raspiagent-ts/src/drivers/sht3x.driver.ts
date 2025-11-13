@@ -47,10 +47,16 @@ export default class Sht3xDriver implements ISensorDriver {
                 // Open I2C bus asynchronously
                 i2cBus = await i2c.openPromisified(busNumber);
 
+                // FIX: Removed soft reset. It might put the sensor in an
+                // unresponsive state for a short period, causing the subsequent
+                // write command to time out. A reset on every read is often
+                // unnecessary.
+                /*
                 // 1. Send Soft Reset to ensure sensor is in a known state
                 const resetBuffer = Buffer.from(CMD_SOFT_RESET);
                 await i2cBus.i2cWrite(address, resetBuffer.length, resetBuffer);
                 await new Promise(resolve => setTimeout(resolve, RESET_DELAY));
+                */
 
                 // 2. Send measurement command
                 const writeBuffer = Buffer.from(CMD_MEASURE_HPM);

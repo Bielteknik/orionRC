@@ -24,6 +24,7 @@ const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const CONFIG_PATH = path.join(__dirname, '..', 'config.json');
+const CONFIG_CACHE_PATH = path.join(__dirname, '..', 'config.cache.json'); // Cache for offline startup
 
 // --- Timers ---
 const CONFIG_POLL_INTERVAL = 60000; // 1 minute (used as default cycle time)
@@ -92,7 +93,8 @@ class Agent {
     private geminiApiKey?: string;
     
     private running: boolean = false;
-    private timers: ReturnType<typeof setTimeout>[] = [];
+    private timers: (ReturnType<typeof setTimeout> | ReturnType<typeof setInterval>)[] = [];
+    private mainLoopInterval: ReturnType<typeof setInterval> | null = null;
 
     constructor(localConfig: LocalConfig) {
         this.apiBaseUrl = localConfig.server.base_url;
@@ -107,15 +109,21 @@ class Agent {
         if (axios.isAxiosError(error)) {
             // A 204 for commands is expected and means we are connected.
             if (context.includes('komutları kontrol etme') && error.response?.status === 204) {
-                 if (this.state !== AgentState.ONLINE) this.setState(AgentState.ONLINE);
+                 if (this.state !== AgentState.ONLINE) {
+                    console.log('✅ Sunucu ile bağlantı doğrulandı (komut yok).');
+                    this.setState(AgentState.ONLINE);
+                 }
                 return;
             }
 
-            console.error(`❌ Hata (${context}): ${error.message}`);
+            console.error(`❌ Hata (${context}): ${error.code || error.message}`);
             if (error.response) {
                 console.error(`   -> Sunucu Yanıtı: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
             } else if (error.request) {
                 console.error(`   -> Sunucuya ulaşılamadı. Ağ bağlantınızı ve sunucu adresini kontrol edin: ${this.apiBaseUrl}`);
+                if (error.code === 'EAI_AGAIN') {
+                    console.error('   -> DNS çözümleme hatası (EAI_AGAIN): Cihazın internete bağlı olduğundan ve DNS ayarlarının doğru olduğundan emin olun.');
+                }
                 if (this.state !== AgentState.OFFLINE) {
                     this.setState(AgentState.OFFLINE);
                     console.log('... Veriler yerel olarak kaydedilecek ve bağlantı kurulduğunda gönderilecek.');
@@ -128,8 +136,8 @@ class Agent {
 
     private setState(newState: AgentState) {
         if (this.state !== newState) {
+            console.log(`Durum Değişikliği: ${this.state} -> ${newState}`);
             this.state = newState;
-            console.log(`Durum Değişikliği: ${newState}`);
         }
     }
 
@@ -140,7 +148,9 @@ class Agent {
         }
         this.running = true;
         await openDb();
-        await this.fetchConfig(true);
+        await this.fetchConfig(true); // Initial fetch attempt
+        
+        // Start other periodic tasks
         this.timers.push(setInterval(() => this.fetchConfig(), CONFIG_POLL_INTERVAL));
         this.timers.push(setInterval(() => this.pollForCommands(), COMMAND_POLL_INTERVAL));
         this.timers.push(setInterval(() => this.syncOfflineData(), SYNC_INTERVAL));
@@ -150,20 +160,55 @@ class Agent {
         if (!this.running) return;
         this.running = false;
         console.log('🛑 ORION Agent durduruluyor...');
+        if (this.mainLoopInterval) clearInterval(this.mainLoopInterval);
         this.timers.forEach(timer => clearInterval(timer));
         this.timers = [];
         for (const [sensorId, driver] of this.driverInstances.entries()) {
             if (typeof (driver as any).close === 'function') {
-                (driver as any).close();
-                console.log(`   -> Sürücü kapatıldı: ${sensorId}`);
+                try {
+                    await (driver as any).close();
+                    console.log(`   -> Sürücü kapatıldı: ${sensorId}`);
+                } catch (e) {
+                    console.error(`   -> Sürücü kapatılırken hata: ${sensorId}`, e);
+                }
             }
         }
         await closeDb();
+        console.log("👋 Agent başarıyla durduruldu.");
+    }
+
+    private async saveConfigToFile(config: DeviceConfig) {
+        try {
+            await fs.writeFile(CONFIG_CACHE_PATH, JSON.stringify(config, null, 2));
+            console.log('📝 Yapılandırma yerel önbelleğe kaydedildi.');
+        } catch (error) {
+            console.error('❌ HATA: Yapılandırma önbelleğe kaydedilemedi.', error);
+        }
+    }
+
+    private async loadConfigFromFile(): Promise<DeviceConfig | null> {
+        try {
+            const configContent = await fs.readFile(CONFIG_CACHE_PATH, 'utf-8');
+            console.log('✅ Yerel önbellekten yapılandırma yüklendi.');
+            return JSON.parse(configContent);
+        } catch (error: any) {
+            if (error.code === 'ENOENT') {
+                console.log('... Yerel yapılandırma önbelleği bulunamadı.');
+            } else {
+                console.error('❌ HATA: Önbellek yapılandırması okunamadı.', error);
+            }
+            return null;
+        }
     }
 
     private async fetchConfig(isInitial: boolean = false) {
-        console.log('🔄️ Sunucudan yapılandırma alınıyor...');
-        this.setState(AgentState.CONFIGURING);
+        if (isInitial) {
+            console.log('🔄️ Sunucudan yapılandırma alınıyor...');
+            this.setState(AgentState.CONFIGURING);
+        } else {
+            console.log('🔄️ Sunucudan yapılandırma güncellemeleri kontrol ediliyor...');
+        }
+
         try {
             const response = await axios.get(`${this.apiBaseUrl}/config/${this.deviceId}`, {
                 headers: { 'Authorization': `Bearer ${this.authToken}` }
@@ -171,20 +216,38 @@ class Agent {
             this.config = response.data;
             this.geminiApiKey = this.config?.gemini_api_key;
             this.globalReadFrequencySeconds = this.config?.global_read_frequency_seconds;
-            console.log('✅ Yapılandırma başarıyla alındı.');
-            this.setState(AgentState.ONLINE);
-            await this.initializeDrivers();
-
-            // Start main loop if it's the first time
-            if (isInitial) {
-                this.mainLoop();
+            
+            console.log('✅ Sunucudan yapılandırma başarıyla alındı.');
+            await this.saveConfigToFile(this.config!);
+            
+            if (this.state !== AgentState.ONLINE) {
+                this.setState(AgentState.ONLINE);
             }
+            
+            await this.initializeDrivers();
+            this.startMainLoop();
 
         } catch (error) {
-            this.handleApiError(error, 'yapılandırma alınırken');
+            this.handleApiError(error, isInitial ? 'yapılandırma alınırken' : 'yapılandırma güncellenirken');
+            
+            if (isInitial && !this.config) { // Only try cache if we don't have a config yet
+                console.log('... Sunucuya ulaşılamadı, yerel önbellek deneniyor.');
+                const cachedConfig = await this.loadConfigFromFile();
+                if (cachedConfig) {
+                    this.config = cachedConfig;
+                    this.geminiApiKey = this.config?.gemini_api_key;
+                    this.globalReadFrequencySeconds = this.config?.global_read_frequency_seconds;
+                    this.setState(AgentState.OFFLINE);
+                    await this.initializeDrivers();
+                    this.startMainLoop();
+                } else {
+                    console.error('❌ KRİTİK HATA: Sunucuya ulaşılamıyor ve yerel yapılandırma önbelleği yok. Agent sensörleri okuyamıyor. Bağlantı kurulduğunda tekrar denenecek.');
+                    this.setState(AgentState.ERROR);
+                }
+            }
         }
     }
-
+    
     private async initializeDrivers() {
         if (!this.config?.sensors) return;
 
@@ -207,31 +270,45 @@ class Agent {
         }
     }
 
-    private async mainLoop() {
-        if (!this.running) return;
-        
-        console.log('--- Döngü Başlangıcı ---');
-        
-        const readPromises = this.config?.sensors
-            .filter(s => s.is_active)
-            .map(sensor => this.readAndProcessSensor(sensor));
-
-        if (readPromises) {
-            const results = await Promise.all(readPromises);
-            const validResults = results.filter((r): r is ReadingPayload => r !== null);
-
-            if (validResults.length > 0) {
-                 await this.sendReadings(validResults);
-            }
+    private startMainLoop() {
+        // If a loop is already running, clear it before starting a new one
+        // This ensures the read frequency is updated if the config changes
+        if (this.mainLoopInterval) {
+            clearInterval(this.mainLoopInterval);
         }
 
         const cycleTime = this.globalReadFrequencySeconds && this.globalReadFrequencySeconds > 0 
             ? this.globalReadFrequencySeconds * 1000 
             : CONFIG_POLL_INTERVAL;
+        
+        // Run once immediately, then start the interval
+        this.mainLoop(); 
+        this.mainLoopInterval = setInterval(() => this.mainLoop(), cycleTime);
+        console.log(`✅ Ana döngü ${cycleTime / 1000} saniyede bir çalışacak şekilde ayarlandı.`);
+    }
 
-        console.log(`--- Döngü Sonu --- (Sonraki ${cycleTime / 1000} saniye içinde)`);
+    private async mainLoop() {
+        if (!this.running) return;
 
-        this.timers.push(setTimeout(() => this.mainLoop(), cycleTime));
+        if (!this.config) {
+             console.warn(`Yapılandırma yüklenemediği için okuma döngüsü atlanıyor. Yapılandırma periyodik olarak kontrol edilecek.`);
+             return;
+        }
+        
+        console.log('--- Döngü Başlangıcı ---');
+        
+        const readPromises = this.config.sensors
+            .filter(s => s.is_active)
+            .map(sensor => this.readAndProcessSensor(sensor));
+
+        const results = await Promise.all(readPromises);
+        const validResults = results.filter((r): r is ReadingPayload => r !== null);
+
+        if (validResults.length > 0) {
+             await this.sendReadings(validResults);
+        }
+
+        console.log(`--- Döngü Sonu ---`);
     }
     
     private async readAndProcessSensor(sensor: SensorConfig): Promise<ReadingPayload | null> {
@@ -354,7 +431,7 @@ class Agent {
 
 
     private async pollForCommands() {
-        if (!this.running) return;
+        if (!this.running || this.state === AgentState.OFFLINE) return;
         try {
             const response = await axios.get(`${this.apiBaseUrl}/commands/${this.deviceId}`, {
                 headers: { 'Authorization': `Bearer ${this.authToken}` }
@@ -587,12 +664,15 @@ async function main() {
         const agent = new Agent(localConfig);
         await agent.start();
 
-        // PM2'den veya Ctrl+C'den gelen sinyalleri yakalayarak düzgün kapanmayı sağla
-        process.on('SIGINT', async () => {
-            console.log('SIGINT sinyali alındı. Agent temiz bir şekilde kapatılıyor...');
+        // Handle graceful shutdown for pm2 and Ctrl+C
+        const shutdown = async (signal: string) => {
+            console.log(`${signal} sinyali alındı. Agent temiz bir şekilde kapatılıyor...`);
             await agent.stop();
             process.exit(0);
-        });
+        };
+
+        process.on('SIGINT', () => shutdown('SIGINT'));
+        process.on('SIGTERM', () => shutdown('SIGTERM'));
 
     } catch (error) {
         console.error("FATAL: Agent başlatılamadı.", error);

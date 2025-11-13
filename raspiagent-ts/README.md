@@ -74,3 +74,13 @@ Agent'ı çalıştırmadan önce, Raspberry Pi'nizin donanım iletişimi için d
             pm2 save
             ```
     -   **Not:** Web arayüzünden uzaktan yeniden başlatma ve durdurma özelliklerinin çalışabilmesi için agent'ın `ecosystem.config.cjs` dosyası kullanılarak `pm2` ile başlatılması **gereklidir**. Bu, işlem adının (`orion-agent`) doğru şekilde ayarlanmasını sağlar.
+
+## Agent Loglarını (Günlüklerini) İzleme
+
+Agent `pm2` ile çalıştırıldığında, çıktısı doğrudan terminalde görünmez. Canlı logları görmek veya geçmiş logları incelemek için aşağıdaki komutu kullanın:
+
+```bash
+pm2 logs orion-agent
+```
+
+Bu komut, sensör okumaları, hatalar ve durum değişiklikleri dahil olmak üzere agent'ın tüm konsol çıktılarını gösterecektir. `Ctrl+C` ile log izlemeden çıkabilirsiniz.
