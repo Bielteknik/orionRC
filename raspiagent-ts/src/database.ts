@@ -72,3 +72,14 @@ export async function markReadingsAsSent(ids: number[]): Promise<void> {
     const placeholders = ids.map(() => '?').join(',');
     await db.run(`UPDATE readings SET is_sent = 1 WHERE id IN (${placeholders})`, ...ids);
 }
+
+export async function closeDb() {
+    if (db) {
+        try {
+            await db.close();
+            console.log('📦 Yerel veritabanı bağlantısı kapatıldı.');
+        } catch (error) {
+            console.error('❌ Veritabanı kapatılırken hata oluştu:', error);
+        }
+    }
+}

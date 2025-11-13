@@ -14,7 +14,7 @@ import {
     AgentState,
 } from './types.js';
 import dotenv from 'dotenv';
-import { openDb, addReading, getUnsentReadings, markReadingsAsSent, ReadingFromDb } from './database.js';
+import { openDb, addReading, getUnsentReadings, markReadingsAsSent, ReadingFromDb, closeDb } from './database.js';
 
 dotenv.config();
 
@@ -146,17 +146,19 @@ class Agent {
         this.timers.push(setInterval(() => this.syncOfflineData(), SYNC_INTERVAL));
     }
 
-    public stop() {
+    public async stop() {
         if (!this.running) return;
         this.running = false;
+        console.log('🛑 ORION Agent durduruluyor...');
         this.timers.forEach(timer => clearInterval(timer));
         this.timers = [];
         for (const [sensorId, driver] of this.driverInstances.entries()) {
             if (typeof (driver as any).close === 'function') {
                 (driver as any).close();
+                console.log(`   -> Sürücü kapatıldı: ${sensorId}`);
             }
         }
-        console.log('🛑 ORION Agent durduruldu.');
+        await closeDb();
     }
 
     private async fetchConfig(isInitial: boolean = false) {
@@ -246,7 +248,7 @@ class Agent {
         }
         
         // --- Değer İşleme (Kalibrasyon ve Yuvarlama) ---
-        let processedValue: Record<string, any> | null = rawValue;
+        let processedValue: Record<string, any> | number | null = rawValue;
         const refVal = sensor.reference_value;
         const refOp = sensor.reference_operation;
 
@@ -257,7 +259,7 @@ class Agent {
         if (sensor.type === 'Kar Yüksekliği' && (rawValue as any).distance_cm !== undefined) {
             const originalNumericValue = (rawValue as any).distance_cm;
             if (typeof refVal === 'number' && refOp === 'subtract') {
-                const calculatedNumericValue = refVal - originalNumericValue;
+                let calculatedNumericValue = refVal - originalNumericValue;
                 processedValue = {
                     snow_depth_cm: calculatedNumericValue > 0 ? calculatedNumericValue : 0
                 };
@@ -266,11 +268,9 @@ class Agent {
                 processedValue = { snow_depth_cm: originalNumericValue };
             }
         } 
-        // FIX: Replaced faulty calibration logic with one that handles single-property sensor objects.
         // Genel kalibrasyon işlemleri
-        else if (processedValue && typeof processedValue === 'object' && typeof refVal === 'number' && refOp && refOp !== 'none') {
+        else if (typeof processedValue === 'object' && processedValue !== null && typeof refVal === 'number' && refOp && refOp !== 'none') {
             const keys = Object.keys(processedValue);
-            // Yalnızca tek bir sayısal özelliği olan nesneler için kalibrasyon uygula
             if (keys.length === 1 && typeof (processedValue as any)[keys[0]] === 'number') {
                 const key = keys[0];
                 const originalValue = (processedValue as any)[key];
@@ -282,7 +282,6 @@ class Agent {
                     calibratedValue = refVal + originalValue;
                 }
                 
-                // processedValue'yu kalibre edilmiş değeri içeren yeni bir nesneyle güncelle
                 processedValue = { [key]: calibratedValue };
             }
         }
@@ -587,6 +586,13 @@ async function main() {
         
         const agent = new Agent(localConfig);
         await agent.start();
+
+        // PM2'den veya Ctrl+C'den gelen sinyalleri yakalayarak düzgün kapanmayı sağla
+        process.on('SIGINT', async () => {
+            console.log('SIGINT sinyali alındı. Agent temiz bir şekilde kapatılıyor...');
+            await agent.stop();
+            process.exit(0);
+        });
 
     } catch (error) {
         console.error("FATAL: Agent başlatılamadı.", error);

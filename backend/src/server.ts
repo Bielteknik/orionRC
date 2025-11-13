@@ -3,6 +3,7 @@
 // Fix: Import Request, Response, and NextFunction to resolve type conflicts with global DOM types.
 // Fix: Aliased express types to avoid conflicts with global DOM types.
 // FIX: Using express namespace to resolve type conflicts with global DOM types.
+// FIX: Import Request, Response, and NextFunction explicitly from express to resolve type conflicts with global DOM types.
 import express from 'express';
 import cors from 'cors';
 import { openDb, db, migrate } from './database.js';

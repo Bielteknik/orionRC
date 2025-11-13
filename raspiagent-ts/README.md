@@ -61,16 +61,16 @@ Agent'ı çalıştırmadan önce, Raspberry Pi'nizin donanım iletişimi için d
         npm run build
         ```
     -   Ardından, derlenmiş agent'ı çalıştırın:
-        ```bash
-        npm start
-        ```
-    -   Agent'ı arkaplanda sürekli çalıştırmak için `pm2` gibi bir araç kullanmanız önerilir:
-        ```bash
-        sudo npm install pm2 -g
-        pm2 start dist/agent.js --name orion-agent
-        pm2 startup # Otomatik başlangıç için
-        pm2 save
-        ```
-    -   **Not:** Web arayüzünden uzaktan yeniden başlatma özelliğinin çalışabilmesi için agent'ın `pm2` ile ve `orion-agent` adıyla çalıştırılması **gereklidir**.
-
-Agent artık sunucuya bağlanacak, yapılandırmasını alacak ve sensör verilerini okumaya başlayacaktır.
+        -   **Geliştirme/Test için:**
+            ```bash
+            npm start
+            ```
+        -   **Sürekli Çalıştırma için (PM2 ile):**
+            Agent'ı arkaplanda sürekli çalıştırmak için `pm2` gibi bir araç kullanmanız önerilir. Proje, `ecosystem.config.cjs` adlı bir `pm2` yapılandırma dosyası içerir.
+            ```bash
+            sudo npm install pm2 -g
+            pm2 start ecosystem.config.cjs
+            pm2 startup # Cihaz açıldığında agent'ın otomatik başlaması için
+            pm2 save
+            ```
+    -   **Not:** Web arayüzünden uzaktan yeniden başlatma ve durdurma özelliklerinin çalışabilmesi için agent'ın `ecosystem.config.cjs` dosyası kullanılarak `pm2` ile başlatılması **gereklidir**. Bu, işlem adının (`orion-agent`) doğru şekilde ayarlanmasını sağlar.
