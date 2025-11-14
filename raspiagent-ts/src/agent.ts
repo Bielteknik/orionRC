@@ -15,6 +15,8 @@ import {
 } from './types.js';
 import dotenv from 'dotenv';
 import { openDb, addReading, getUnsentReadings, markReadingsAsSent, ReadingFromDb, closeDb } from './database.js';
+// FIX: Import process to resolve type errors for process.on and process.exit
+import process from 'process';
 
 dotenv.config();
 

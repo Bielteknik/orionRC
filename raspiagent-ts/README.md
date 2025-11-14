@@ -51,7 +51,7 @@ Agent'ı çalıştırmadan önce, Raspberry Pi'nizin donanım iletişimi için d
 
 4.  **Agent'ı Yapılandırma:**
     Bu dizindeki `config.json` dosyasını düzenleyin.
-    -   `server.base_url`: ORION backend sunucunuzun tam URL'si (örn: `https://sistem.alanadiniz.com`).
+    -   `server.base_url`: ORION backend sunucunuzun tam API URL'si (örn: `https://sistem.alanadiniz.com/api`).
     -   `device.id`: Bu Raspberry Pi için benzersiz kimlik. Bu, ORION web arayüzünde istasyonu oluştururken belirlediğiniz "Cihaz ID" ile **aynı olmalıdır**.
     -   `device.token`: Kimlik doğrulama token'ı. Bu, backend'in `.env` dosyasındaki `DEVICE_AUTH_TOKEN` ile **aynı olmalıdır**.
 
@@ -66,14 +66,59 @@ Agent'ı çalıştırmadan önce, Raspberry Pi'nizin donanım iletişimi için d
             npm start
             ```
         -   **Sürekli Çalıştırma için (PM2 ile):**
-            Agent'ı arkaplanda sürekli çalıştırmak için `pm2` gibi bir araç kullanmanız önerilir. Proje, `ecosystem.config.cjs` adlı bir `pm2` yapılandırma dosyası içerir.
+            Agent'ı arkaplanda sürekli çalıştırmak ve cihaz yeniden başladığında otomatik olarak başlamasını sağlamak için `pm2` kullanılması şiddetle tavsiye edilir. Proje, `ecosystem.config.cjs` adlı bir `pm2` yapılandırma dosyası içerir.
+
+            **1. PM2 Kurulumu:**
             ```bash
             sudo npm install pm2 -g
+            ```
+
+            **2. Agent'ı PM2 ile Başlatma:**
+            Bu dizindeyken aşağıdaki komutu çalıştırın:
+            ```bash
             pm2 start ecosystem.config.cjs
-            pm2 startup # Cihaz açıldığında agent'ın otomatik başlaması için
+            ```
+            Bu komut, `ecosystem.config.cjs` dosyasındaki yapılandırmayı kullanarak agent'ı `orion-agent` adıyla başlatır. Agent'ın durumunu `pm2 list` komutuyla kontrol edebilirsiniz.
+
+            **3. Açılışta Otomatik Başlatmayı Yapılandırma (ÇOK ÖNEMLİ):**
+            Agent'ın Raspberry Pi her yeniden başladığında otomatik olarak çalışması için `pm2`'nin başlangıç betiğini oluşturması gerekir.
+
+            **a. Başlangıç Betiğini Oluşturun:**
+            ```bash
+            pm2 startup
+            ```
+            Bu komut, size `sudo` ile başlayan başka bir komut çıktısı verecektir. **Bu ikinci komutu kopyalayıp terminalde çalıştırın.** Bu komut, `pm2`'nin sistem başlangıcında çalışması için bir `systemd` servisi oluşturur.
+
+            Örnek çıktı şöyle görünebilir (kullanıcı adınıza ve sisteminize göre değişir):
+            `sudo env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u pi --hp /home/pi`
+
+            **b. Mevcut İşlem Listesini Kaydedin:**
+            Başlangıç servisini kurduktan sonra, `pm2`'ye şu anki çalışan uygulamaları (yani `orion-agent`) hatırlamasını söyleyin:
+            ```bash
             pm2 save
             ```
-    -   **Not:** Web arayüzünden uzaktan yeniden başlatma ve durdurma özelliklerinin çalışabilmesi için agent'ın `ecosystem.config.cjs` dosyası kullanılarak `pm2` ile başlatılması **gereklidir**. Bu, işlem adının (`orion-agent`) doğru şekilde ayarlanmasını sağlar.
+            Bu komut, mevcut işlem listesini bir dosyaya kaydeder. Cihaz yeniden başladığında, `pm2` bu dosyayı okuyarak `orion-agent`'ı otomatik olarak yeniden başlatır.
+
+            **Sorun Giderme: Otomatik Başlatma Çalışmıyorsa**
+
+            Bazı sistemlerde `pm2 startup` komutunun oluşturduğu servis düzgün çalışmayabilir. Eğer yeniden başlattıktan sonra `pm2 list` komutu boş bir liste gösteriyorsa, aşağıdaki adımları deneyin:
+
+            1.  **Mevcut başlangıç yapılandırmasını kaldırın:**
+                ```bash
+                pm2 unstartup
+                ```
+            2.  **Yeniden oluşturun, ancak bu sefer belirli bir kullanıcı ile:** `<username>` yerine kendi kullanıcı adınızı yazın (genellikle `pi`).
+                ```bash
+                pm2 startup systemd -u <username> --hp /home/<username>
+                ```
+            3.  Yine, bu komutun çıktısı olan `sudo env...` ile başlayan komutu kopyalayıp çalıştırın.
+            4.  İşlem listesini tekrar kaydedin:
+                ```bash
+                pm2 save
+                ```
+            5.  Emin olmak için `sudo systemctl status pm2-<username>` komutuyla servisin durumunu kontrol edebilirsiniz. `enabled` olarak görünmelidir.
+
+-   **Not:** Web arayüzünden uzaktan yeniden başlatma ve durdurma özelliklerinin çalışabilmesi için agent'ın `ecosystem.config.cjs` dosyası kullanılarak `pm2` ile başlatılması **gereklidir**. Bu, işlem adının (`orion-agent`) doğru şekilde ayarlanmasını sağlar.
 
 ## Agent Loglarını (Günlüklerini) İzleme
 

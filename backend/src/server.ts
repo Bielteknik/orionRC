@@ -1,6 +1,9 @@
 /// <reference types="node" />
 
-// FIX: Aliased imports for Request, Response, and NextFunction from express to resolve type conflicts with global DOM types.
+// FIX: Resolve Node.js type errors by importing 'Buffer' and 'process' and use aliased Express types for ES modules.
+import { Buffer } from 'buffer';
+import process from 'process';
+// Use aliased imports for Express types to avoid conflicts with global DOM types.
 import express, { Request as ExpressRequest, Response as ExpressResponse, NextFunction as ExpressNextFunction } from 'express';
 import cors from 'cors';
 import { openDb, db, migrate } from './database.js';
