@@ -1,4 +1,4 @@
-/// <reference types="node" />
+
 
 // FIX: Resolve Node.js type errors by importing 'Buffer' and 'process' and use aliased Express types for ES modules.
 import { Buffer } from 'buffer';
@@ -123,7 +123,8 @@ apiRouter.get('/config/:deviceId', agentAuth, async (req: ExpressRequest, res: E
             sensors: processedSensors,
             cameras: cameras,
             global_read_frequency_seconds: (parseInt(globalFreq?.value, 10) || 0) * 60,
-            gemini_api_key: process.env.GEMINI_API_KEY,
+            // FIX: Use process.env.API_KEY as per the coding guidelines.
+            gemini_api_key: process.env.API_KEY,
         };
         res.json(config);
     } catch (error) {
@@ -990,15 +991,16 @@ apiRouter.post('/analysis/snow-depth-from-image', async (req: ExpressRequest, re
         return res.status(400).json({ error: 'Only "gemini" analysis type is supported for this endpoint.' });
     }
     
-    if (!process.env.GEMINI_API_KEY) {
-        console.error('HATA: Gemini API anahtarı (GEMINI_API_KEY) .env dosyasında ayarlanmamış.');
+    // FIX: Use process.env.API_KEY as per the coding guidelines.
+    if (!process.env.API_KEY) {
+        console.error('HATA: Gemini API anahtarı (API_KEY) .env dosyasında ayarlanmamış.');
         return res.status(500).json({ error: 'Gemini API key is not configured on the server.' });
     }
 
     try {
         console.log(`[ANALYSIS] Starting ${analysisType} analysis for sensor ${virtualSensorId} from provided image.`);
         
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         
         const imagePart = {
             inlineData: {

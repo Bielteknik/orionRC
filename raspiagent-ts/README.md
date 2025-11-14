@@ -99,26 +99,46 @@ Agent'ı çalıştırmadan önce, Raspberry Pi'nizin donanım iletişimi için d
             ```
             Bu komut, mevcut işlem listesini bir dosyaya kaydeder. Cihaz yeniden başladığında, `pm2` bu dosyayı okuyarak `orion-agent`'ı otomatik olarak yeniden başlatır.
 
-            **Sorun Giderme: Otomatik Başlatma Çalışmıyorsa**
+## Sorun Giderme (Troubleshooting)
 
-            Bazı sistemlerde `pm2 startup` komutunun oluşturduğu servis düzgün çalışmayabilir. Eğer yeniden başlattıktan sonra `pm2 list` komutu boş bir liste gösteriyorsa, aşağıdaki adımları deneyin:
+#### Agent Bağlantı Kuramıyor (`EAI_AGAIN` hatası)
 
-            1.  **Mevcut başlangıç yapılandırmasını kaldırın:**
-                ```bash
-                pm2 unstartup
-                ```
-            2.  **Yeniden oluşturun, ancak bu sefer belirli bir kullanıcı ile:** `<username>` yerine kendi kullanıcı adınızı yazın (genellikle `pi`).
-                ```bash
-                pm2 startup systemd -u <username> --hp /home/<username>
-                ```
-            3.  Yine, bu komutun çıktısı olan `sudo env...` ile başlayan komutu kopyalayıp çalıştırın.
-            4.  İşlem listesini tekrar kaydedin:
-                ```bash
-                pm2 save
-                ```
-            5.  Emin olmak için `sudo systemctl status pm2-<username>` komutuyla servisin durumunu kontrol edebilirsiniz. `enabled` olarak görünmelidir.
+Loglarda `getaddrinfo EAI_AGAIN` gibi hatalar görüyorsanız, bu durum agent'ın sunucu adlarını (örn: `api.openweathermap.org` veya kendi backend sunucunuz) IP adreslerine çözümleyemediği anlamına gelir. Bu genellikle Raspberry Pi'nin ağ veya DNS ayarlarında bir sorun olduğunu gösterir.
 
--   **Not:** Web arayüzünden uzaktan yeniden başlatma ve durdurma özelliklerinin çalışabilmesi için agent'ın `ecosystem.config.cjs` dosyası kullanılarak `pm2` ile başlatılması **gereklidir**. Bu, işlem adının (`orion-agent`) doğru şekilde ayarlanmasını sağlar.
+1.  **İnternet Bağlantısını Kontrol Edin:**
+    ```bash
+    ping 8.8.8.8
+    ```
+    Eğer "Destination Host Unreachable" veya paket kaybı gibi bir sonuç alıyorsanız, Pi'nin internete erişimi yoktur. Wi-Fi veya Ethernet bağlantınızı kontrol edin.
+
+2.  **DNS Çözümlemesini Kontrol Edin:**
+    ```bash
+    ping google.com
+    ```
+    Eğer `ping 8.8.8.8` çalışıyor ancak bu komut "Name or service not known" hatası veriyorsa, DNS sunucunuzda bir sorun var demektir.
+
+3.  **DNS Ayarlarını Kontrol Edin:**
+    `cat /etc/resolv.conf` komutuyla DNS sunucularınızı görüntüleyin. Genellikle `nameserver 8.8.8.8` (Google DNS) gibi bir satır bulunmalıdır. Eğer bu dosya boşsa veya yanlış bir IP adresi içeriyorsa, DNS ayarlarınızı düzeltmeniz gerekir. Cihazınızı yeniden başlatmak veya ağ bağlantısını yenilemek genellikle bu dosyayı düzeltir. Kalıcı bir çözüm için ağ yapılandırmanızı (genellikle `/etc/dhcpcd.conf` üzerinden) düzenleyebilirsiniz.
+
+#### PM2 Yeniden Başlatmada Otomatik Başlamıyor
+
+Bu sorunun en yaygın nedeni, `pm2 startup` komutunun oluşturduğu `systemd` servisinin doğru yapılandırılmamış olmasıdır. Lütfen yukarıdaki "Açılışta Otomatik Başlatmayı Yapılandırma" bölümündeki adımları, özellikle de **adım 3a ve 3b**'yi dikkatlice takip ettiğinizden emin olun. `pm2 save` komutunu çalıştırmayı unutmayın.
+
+Eğer sorun devam ederse, `pm2` servisini manuel olarak yeniden kurmayı deneyin:
+1.  **Mevcut başlangıç yapılandırmasını kaldırın:**
+    ```bash
+    pm2 unstartup
+    ```
+2.  **Yeniden oluşturun, ancak bu sefer belirli bir kullanıcı ile:** `<username>` yerine kendi kullanıcı adınızı yazın (genellikle `pi`).
+    ```bash
+    pm2 startup systemd -u <username> --hp /home/<username>
+    ```
+3.  Yine, bu komutun çıktısı olan `sudo env...` ile başlayan komutu kopyalayıp çalıştırın.
+4.  İşlem listesini tekrar kaydedin:
+    ```bash
+    pm2 save
+    ```
+5.  Emin olmak için `sudo systemctl status pm2-<username>` komutuyla servisin durumunu kontrol edebilirsiniz. `enabled` olarak görünmelidir.
 
 ## Agent Loglarını (Günlüklerini) İzleme
 
@@ -129,3 +149,5 @@ pm2 logs orion-agent
 ```
 
 Bu komut, sensör okumaları, hatalar ve durum değişiklikleri dahil olmak üzere agent'ın tüm konsol çıktılarını gösterecektir. `Ctrl+C` ile log izlemeden çıkabilirsiniz.
+
+**Not:** Web arayüzünden uzaktan yeniden başlatma ve durdurma özelliklerinin çalışabilmesi için agent'ın `ecosystem.config.cjs` dosyası kullanılarak `pm2` ile başlatılması **gereklidir**. Bu, işlem adının (`orion-agent`) doğru şekilde ayarlanmasını sağlar.
