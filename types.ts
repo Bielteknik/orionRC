@@ -144,5 +144,4 @@ export interface WidgetConfig {
     id: string;
     type: WidgetType;
     config: any; 
-    gridArea: string;
 }

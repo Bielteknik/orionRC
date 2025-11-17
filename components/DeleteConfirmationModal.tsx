@@ -6,6 +6,9 @@ interface DeleteConfirmationModalProps {
   onConfirm: () => void;
   title: string;
   message: React.ReactNode;
+  confirmText?: string;
+  confirmButtonClassName?: string;
+  titleClassName?: string;
 }
 
 const CORRECT_PASSWORD = "Ejder.2578";
@@ -16,6 +19,9 @@ const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = ({
   onConfirm,
   title,
   message,
+  confirmText = 'Sil',
+  confirmButtonClassName = 'bg-danger text-white hover:bg-red-700',
+  titleClassName = 'text-danger',
 }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -57,7 +63,7 @@ const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h2 className="text-xl font-bold text-danger">{title}</h2>
+          <h2 className={`text-xl font-bold ${titleClassName}`}>{title}</h2>
           <button onClick={onClose} className="p-2 text-muted hover:bg-gray-100 rounded-full">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -67,11 +73,11 @@ const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = ({
         <main className="p-6 space-y-4">
           <p className="text-gray-600">{message}</p>
           <div>
-            <label htmlFor="delete-password" className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label htmlFor="confirmation-password" className="block text-sm font-medium text-gray-700 mb-1.5">
               Onay Şifresi
             </label>
             <input
-              id="delete-password"
+              id="confirmation-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -95,9 +101,9 @@ const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = ({
           <button
             type="button"
             onClick={handleConfirm}
-            className="px-4 py-2 bg-danger text-white rounded-lg hover:bg-red-700 font-semibold"
+            className={`px-4 py-2 rounded-lg font-semibold ${confirmButtonClassName}`}
           >
-            Sil
+            {confirmText}
           </button>
         </footer>
       </div>

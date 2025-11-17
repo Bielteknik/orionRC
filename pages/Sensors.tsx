@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Sensor, Station, SensorStatus, Camera } from '../types.ts';
 import Card from '../components/common/Card.tsx';
@@ -6,41 +7,7 @@ import AddSensorDrawer from '../components/AddSensorDrawer.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
 import { getSensors, getStations, addSensor, updateSensor, deleteSensor, getDefinitions, forceReadSensor, getCameras } from '../services/apiService.ts';
 import DeleteConfirmationModal from '../components/DeleteConfirmationModal.tsx';
-
-const formatTimeAgo = (isoString: string | undefined): string => {
-    if (!isoString) return 'Veri Yok';
-    const date = new Date(isoString);
-    if (isNaN(date.getTime())) { // Check for invalid date
-        return 'Veri Yok';
-    }
-
-    const now = new Date();
-    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-    if (seconds < 10) return "az önce";
-    if (seconds < 60) return `${seconds} sn önce`;
-    
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes} dk önce`;
-
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} sa önce`;
-
-    const days = Math.floor(hours / 24);
-    return `${days} gün önce`;
-};
-
-const getNumericValue = (value: any): number | null => {
-    if (value === null || value === undefined) return null;
-    if (typeof value === 'number') return value;
-    if (typeof value === 'object') {
-        const numeric = Object.values(value).find(v => typeof v === 'number');
-        return typeof numeric === 'number' ? numeric : null;
-    }
-    const parsed = parseFloat(String(value));
-    return isNaN(parsed) || !isFinite(parsed) ? null : parsed;
-};
-
+import { getNumericValue, formatTimeAgo } from '../utils/helpers.ts';
 
 const SensorCard: React.FC<{
     sensor: Sensor;
@@ -71,7 +38,7 @@ const SensorCard: React.FC<{
     };
 
     const displayValue = useMemo(() => {
-        const numericValue = getNumericValue(sensor.value);
+        const numericValue = getNumericValue(sensor.value, sensor.type, sensor.interface);
         if (numericValue === null) {
             if (sensor.value && typeof sensor.value === 'object' && 'weight_kg' in sensor.value && sensor.value.weight_kg === 'N/A') {
                  return 'N/A';
@@ -79,7 +46,7 @@ const SensorCard: React.FC<{
              return 'N/A';
         }
         return numericValue.toFixed(2);
-    }, [sensor.value]);
+    }, [sensor.value, sensor.type, sensor.interface]);
 
     return (
         <Card className="p-3 flex flex-col h-full">
@@ -141,6 +108,12 @@ const Sensors: React.FC = () => {
     const [sensorToDelete, setSensorToDelete] = useState<Sensor | null>(null);
     const [isReading, setIsReading] = useState<string | null>(null);
 
+    // State for edit confirmation
+    const [isEditConfirmModalOpen, setIsEditConfirmModalOpen] = useState(false);
+    const [sensorDataToUpdate, setSensorDataToUpdate] = useState<(Partial<Sensor> & { id?: string; isActive?: boolean }) | null>(null);
+    const [sensorNameToConfirm, setSensorNameToConfirm] = useState('');
+
+
     const fetchData = useCallback(async () => {
         try {
             // Don't set loading to true on refetch, only on initial load
@@ -183,14 +156,31 @@ const Sensors: React.FC = () => {
     const handleSaveSensor = async (sensorData: Partial<Sensor> & { id?: string; isActive?: boolean }) => {
         try {
             if (sensorToEdit) {
-                await updateSensor(sensorToEdit.id, sensorData);
+                // This is an EDIT operation, show confirmation modal
+                setSensorDataToUpdate(sensorData);
+                setSensorNameToConfirm(sensorToEdit.name);
+                setIsEditConfirmModalOpen(true);
             } else {
+                // This is an ADD operation, save directly
                 await addSensor(sensorData);
+                fetchData();
             }
-            fetchData();
         } catch (error) {
             console.error("Failed to save sensor", error);
             alert("Sensör kaydedilirken bir hata oluştu.");
+        }
+    };
+
+    const executeEdit = async () => {
+        if (!sensorDataToUpdate || !sensorDataToUpdate.id) return;
+        try {
+            await updateSensor(sensorDataToUpdate.id, sensorDataToUpdate);
+            fetchData();
+        } catch (error) {
+            console.error("Failed to update sensor:", error);
+            alert("Sensör güncellenirken bir hata oluştu.");
+        } finally {
+            setSensorDataToUpdate(null);
         }
     };
 
@@ -335,6 +325,21 @@ const Sensors: React.FC = () => {
                     <strong>{sensorToDelete?.name}</strong> adlı sensörü silmek üzeresiniz. Bu işlem geri alınamaz. Onaylamak için şifreyi girin.
                 </>
                 }
+            />
+            <DeleteConfirmationModal
+                isOpen={isEditConfirmModalOpen}
+                onClose={() => setIsEditConfirmModalOpen(false)}
+                onConfirm={executeEdit}
+                title="Sensör Bilgilerini Güncelle"
+                message={
+                    <>
+                        <strong>{sensorNameToConfirm}</strong> adlı sensörün bilgilerini değiştirmek üzeresiniz.
+                        Devam etmek için lütfen onay şifresini girin.
+                    </>
+                }
+                confirmText="Güncelle"
+                confirmButtonClassName="bg-accent text-white hover:bg-orange-600"
+                titleClassName="text-gray-900"
             />
         </div>
     );

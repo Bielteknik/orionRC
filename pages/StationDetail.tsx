@@ -1,3 +1,6 @@
+
+
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { Station, Sensor, Camera, SensorStatus, CameraStatus } from '../types.ts';
 import { getStations, getSensors, getCameras, getReadings, restartAgent, stopAgent } from '../services/apiService.ts';
@@ -8,6 +11,7 @@ import Skeleton from '../components/common/Skeleton.tsx';
 import { ArrowLeftIcon, SensorIcon, CameraIcon, SettingsIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, OnlineIcon, OfflineIcon, PlayIcon, PhotographIcon, SearchIcon, ExclamationIcon, DownloadIcon, CalendarIcon, AgentIcon } from '../components/icons/Icons.tsx';
 import SensorDetailModal from '../components/SensorDetailModal.tsx'; // Import the new modal
 import { LineChart, Line, YAxis, ResponsiveContainer, Area } from 'recharts';
+import { getNumericValue, formatTimeAgo } from '../utils/helpers.ts';
 
 
 interface StationDetailProps {
@@ -32,42 +36,16 @@ interface SensorReading {
 const ITEMS_PER_PAGE_DATA = 10;
 const ITEMS_PER_PAGE_SENSORS = 6;
 
-const formatTimeAgo = (isoString: string | undefined): string => {
-    if (!isoString) return 'bilinmiyor';
-    const date = new Date(isoString);
-    if (isNaN(date.getTime())) return 'geçersiz tarih';
-    const now = new Date();
-    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-    if (seconds < 10) return "az önce";
-    if (seconds < 60) return `${seconds} saniye önce`;
-    
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes} dakika önce`;
-
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} saat önce`;
-
-    const days = Math.floor(hours / 24);
-    return `${days} gün önce`;
-};
-
-const getNumericValue = (value: any): number | null => {
-    if (value === null || value === undefined) return null;
-    if (typeof value === 'number') return value;
-    if (typeof value === 'object') {
-        const numeric = Object.values(value).find(v => typeof v === 'number');
-        return typeof numeric === 'number' ? numeric : null;
-    }
-    const parsed = parseFloat(String(value));
-    return isNaN(parsed) || !isFinite(parsed) ? null : parsed;
-};
-
-
 const statusInfo: Record<string, { text: string, className: string }> = {
     active: { text: 'Aktif', className: 'bg-gray-800 text-white' },
     inactive: { text: 'Pasif', className: 'bg-gray-200 text-gray-700' },
     maintenance: { text: 'Bakımda', className: 'bg-amber-500/20 text-amber-600' },
+};
+
+const toDateTimeLocal = (date: Date) => {
+  const tzoffset = date.getTimezoneOffset() * 60000;
+  const localISOTime = new Date(date.getTime() - tzoffset).toISOString().slice(0, 16);
+  return localISOTime;
 };
 
 const SensorCard: React.FC<{ sensor: Sensor, historyData: SensorReading[], onClick: () => void }> = ({ sensor, historyData, onClick }) => {
@@ -75,7 +53,7 @@ const SensorCard: React.FC<{ sensor: Sensor, historyData: SensorReading[], onCli
         switch (type) {
             case 'Sıcaklık': return <ThermometerIcon className="w-6 h-6 text-muted dark:text-gray-400" />;
             case 'Nem': return <DropletIcon className="w-6 h-6 text-muted dark:text-gray-400" />;
-            case 'Rüzgar Hızı': case 'Rüzgar': return <WindSockIcon className="w-6 h-6 text-muted dark:text-gray-400" />;
+            case 'Rüzgar Hızı': case 'Rüzgar Yönü': return <WindSockIcon className="w-6 h-6 text-muted dark:text-gray-400" />;
             case 'Basınç': return <GaugeIcon className="w-6 h-6 text-muted dark:text-gray-400" />;
             default: return <SensorIcon className="w-5 h-5 text-muted dark:text-gray-400" />;
         }
@@ -89,7 +67,7 @@ const SensorCard: React.FC<{ sensor: Sensor, historyData: SensorReading[], onCli
     };
 
     const displayValue = useMemo(() => {
-        const numericValue = getNumericValue(sensor.value);
+        const numericValue = getNumericValue(sensor.value, sensor.type, sensor.interface);
         if (numericValue === null) {
             if (sensor.value && typeof sensor.value === 'object' && 'weight_kg' in sensor.value && sensor.value.weight_kg === 'N/A') {
                  return 'N/A';
@@ -98,13 +76,13 @@ const SensorCard: React.FC<{ sensor: Sensor, historyData: SensorReading[], onCli
         }
         // Always format to 2 decimal places.
         return numericValue.toFixed(2);
-    }, [sensor.value]);
+    }, [sensor.value, sensor.type, sensor.interface]);
 
     const chartData = useMemo(() => {
         if (!historyData || historyData.length < 2) return [];
         const sortedHistory = [...historyData].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
         return sortedHistory.map(reading => ({
-            value: getNumericValue(reading.value)
+            value: getNumericValue(reading.value, reading.sensorType, reading.interface)
         })).filter(item => item.value !== null);
     }, [historyData]);
 
@@ -163,7 +141,7 @@ const SensorCard: React.FC<{ sensor: Sensor, historyData: SensorReading[], onCli
 
 // Helper function to correctly format a sensor reading value for display
 const formatReadingValue = (reading: SensorReading): string => {
-    const numericValue = getNumericValue(reading.value);
+    const numericValue = getNumericValue(reading.value, reading.sensorType, reading.interface);
     if (numericValue === null) return 'N/A';
     return numericValue.toFixed(2);
 };
@@ -184,6 +162,7 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
   
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
   const [photoDateFilter, setPhotoDateFilter] = useState(new Date().toISOString().split('T')[0]);
+  const [dateFilter, setDateFilter] = useState<{ start: string, end: string }>({ start: '', end: '' });
 
   // State for Sensor Detail Modal
   const [isSensorModalOpen, setIsSensorModalOpen] = useState(false);
@@ -217,6 +196,15 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
         }
     };
     fetchData();
+    
+    const now = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(now.getDate() - 1);
+    setDateFilter({
+        start: toDateTimeLocal(yesterday),
+        end: toDateTimeLocal(now)
+    });
+
   }, [stationId]);
   
   useEffect(() => {
@@ -256,11 +244,23 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
       }
   };
 
-  const filteredSensorReadings = useMemo(() =>
-    readings.filter(reading =>
-      reading.sensorName.toLowerCase().includes(dataSearchTerm.toLowerCase()) ||
-      reading.sensorType.toLowerCase().includes(dataSearchTerm.toLowerCase())
-    ), [readings, dataSearchTerm]);
+  const filteredSensorReadings = useMemo(() => {
+    const startDate = dateFilter.start ? new Date(dateFilter.start).getTime() : null;
+    const endDate = dateFilter.end ? new Date(dateFilter.end).getTime() : null;
+
+    return readings
+        .filter(reading => {
+            const readingDate = new Date(reading.timestamp).getTime();
+            if (startDate && readingDate < startDate) return false;
+            if (endDate && readingDate > endDate) return false;
+            return true;
+        })
+        .filter(reading =>
+            reading.sensorName.toLowerCase().includes(dataSearchTerm.toLowerCase()) ||
+            reading.sensorType.toLowerCase().includes(dataSearchTerm.toLowerCase())
+        );
+    }, [readings, dataSearchTerm, dateFilter]);
+
 
   const paginatedSensorReadings = useMemo(() => {
     const startIndex = (dataPage - 1) * ITEMS_PER_PAGE_DATA;
@@ -368,18 +368,36 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
          <div className="p-4 sm:p-6">
             {activeTab === 'Veriler' && (
                 <>
-                    <div className="relative w-full md:w-1/3 mb-4">
-                        <SearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted" />
-                        <input 
-                            type="text" 
-                            placeholder="Sensör adı veya tipine göre filtrele..." 
-                            className="w-full bg-secondary border border-gray-300 rounded-lg pl-11 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-accent"
-                            value={dataSearchTerm}
-                            onChange={e => {
-                                setDataSearchTerm(e.target.value);
-                                setDataPage(1); // Reset page on search
-                            }}
-                        />
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
+                        <div className="relative w-full md:max-w-sm">
+                            <SearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted" />
+                            <input 
+                                type="text" 
+                                placeholder="Sensör adı veya tipine göre filtrele..." 
+                                className="w-full bg-secondary border border-gray-300 rounded-lg pl-11 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-accent"
+                                value={dataSearchTerm}
+                                onChange={e => {
+                                    setDataSearchTerm(e.target.value);
+                                    setDataPage(1); // Reset page on search
+                                }}
+                            />
+                        </div>
+                         <div className="flex flex-col sm:flex-row items-center gap-2 w-full md:w-auto">
+                            <label className="text-sm font-medium text-gray-700 flex-shrink-0">Tarih Aralığı:</label>
+                             <input 
+                                type="datetime-local" 
+                                value={dateFilter.start}
+                                onChange={e => setDateFilter(prev => ({ ...prev, start: e.target.value }))}
+                                className="bg-secondary border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent w-full"
+                            />
+                            <span className="text-muted hidden sm:block">-</span>
+                             <input 
+                                type="datetime-local" 
+                                value={dateFilter.end}
+                                onChange={e => setDateFilter(prev => ({ ...prev, end: e.target.value }))}
+                                className="bg-secondary border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent w-full"
+                            />
+                        </div>
                     </div>
                     <div className="overflow-x-auto border border-gray-200 rounded-lg">
                       <table className="w-full text-sm text-left text-gray-600">
@@ -573,7 +591,6 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
                 isOpen={isSensorModalOpen}
                 onClose={handleCloseSensorModal}
                 sensor={selectedSensor}
-                readings={readings.filter(r => r.sensorId === selectedSensor.id)}
             />
         )}
     </div>

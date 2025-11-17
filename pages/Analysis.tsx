@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Station, Sensor, Camera } from '../types.ts';
 import { getReadingsHistory, analyzeSnowDepth, analyzeSnowDepthFromImage, submitManualReading } from '../services/apiService.ts';
@@ -9,34 +10,8 @@ import { SnowRulerDayIcon, SnowRulerNightIcon } from '../components/icons/RulerI
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useTheme } from '../components/ThemeContext.tsx';
 import MultiSelectDropdown from '../components/common/MultiSelectDropdown.tsx';
-
-// Use global XLSX from window
-declare const XLSX: any;
-
-const formatTimeAgo = (isoString: string | undefined): string => {
-    if (!isoString) return 'Veri Yok';
-    const date = new Date(isoString);
-    if (isNaN(date.getTime())) return 'Veri Yok';
-    const now = new Date();
-    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-    if (seconds < 10) return "az önce";
-    if (seconds < 60) return `${seconds} sn önce`;
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes} dk önce`;
-    const hours = Math.floor(minutes / 60);
-    return `${hours} sa önce`;
-};
-
-const getNumericValue = (value: any): number | null => {
-    if (value === null || value === undefined) return null;
-    if (typeof value === 'number') return value;
-    if (typeof value === 'object') {
-        const numeric = Object.values(value).find(v => typeof v === 'number');
-        return typeof numeric === 'number' ? numeric : null;
-    }
-    const parsed = parseFloat(String(value));
-    return isNaN(parsed) || !isFinite(parsed) ? null : parsed;
-}
+import * as XLSX from 'xlsx';
+import { getNumericValue, formatTimeAgo } from '../utils/helpers.ts';
 
 const blobToBase64 = (blob: Blob): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -51,6 +26,10 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
         reader.readAsDataURL(blob);
     });
 };
+
+const LoadingSpinner: React.FC<{className?: string}> = ({className}) => (
+    <RefreshIcon className={`animate-spin h-5 w-5 ${className || ''}`} />
+);
 
 const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sensor[], cameras: Camera[], onRefresh: () => void }> = ({ stations, sensors, cameras, onRefresh }) => {
     const { theme } = useTheme();
@@ -171,8 +150,8 @@ const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sen
         }
     };
     
-    const ultrasonicValue = getNumericValue(ultrasonicSensor?.value);
-    const virtualSensorValue = getNumericValue(virtualSensor?.value);
+    const ultrasonicValue = getNumericValue(ultrasonicSensor?.value, ultrasonicSensor?.type, ultrasonicSensor?.interface);
+    const virtualSensorValue = getNumericValue(virtualSensor?.value, virtualSensor?.type, virtualSensor?.interface);
 
     const handleInterpret = async () => {
         setIsLoadingInterpretation(true);
@@ -204,7 +183,7 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
     const handleStartEditing = (sensor: Sensor | null) => {
         if (!sensor) return;
         setEditingSensorId(sensor.id);
-        const numericVal = getNumericValue(sensor.value);
+        const numericVal = getNumericValue(sensor.value, sensor.type, sensor.interface);
         setCorrectionValue(numericVal !== null ? String(numericVal.toFixed(2)) : '');
     };
     
@@ -245,10 +224,6 @@ Bu iki ölçüm arasındaki tutarlılığı ve farkların olası nedenlerini (ö
         if (diff > 5) return 'text-warning';
         return 'text-success';
     }
-
-    const LoadingSpinner: React.FC<{className?: string}> = ({className}) => (
-        <RefreshIcon className={`animate-spin h-5 w-5 ${className || ''}`} />
-    );
 
     return (
         <div className="space-y-6">
@@ -488,7 +463,7 @@ const CorrelationGraph: React.FC<{ stations: Station[], sensors: Sensor[] }> = (
             }
             const entry = timeMap.get(timestamp);
             
-            const numericValue = getNumericValue(reading.value);
+            const numericValue = getNumericValue(reading.value, reading.sensorType, reading.interface);
             if (numericValue !== null) {
                 entry[reading.sensorType] = Number(numericValue.toFixed(2));
             } else {
@@ -561,7 +536,7 @@ const DataExplorer: React.FC<{ stations: Station[], sensors: Sensor[] }> = ({ st
     }, [selectedStations, selectedSensorTypes]);
 
     const formatReadingValue = (reading: any): string => {
-        const numValue = getNumericValue(reading.value);
+        const numValue = getNumericValue(reading.value, reading.sensorType, reading.interface);
         if (numValue !== null) {
             return numValue.toFixed(2);
         }

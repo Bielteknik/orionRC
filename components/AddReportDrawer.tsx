@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Station } from '../types.ts';
 import { CalendarIcon, SensorIcon, StationIcon } from './icons/Icons.tsx';
+import { toDateTimeLocal } from '../utils/helpers.ts';
 
 interface AddReportDrawerProps {
   isOpen: boolean;
@@ -10,14 +11,16 @@ interface AddReportDrawerProps {
   sensorTypes: string[];
 }
 
-const today = new Date().toISOString().split('T')[0];
+const now = new Date();
+const yesterday = new Date();
+yesterday.setDate(now.getDate() - 1);
 
 const AddReportDrawer: React.FC<AddReportDrawerProps> = ({ isOpen, onClose, onSave, stations, sensorTypes }) => {
     const [reportName, setReportName] = useState('');
     const [reportType, setReportType] = useState('Günlük');
     const [fileFormat, setFileFormat] = useState('XLSX');
     const [dateRangePreset, setDateRangePreset] = useState('last24h');
-    const [customDateRange, setCustomDateRange] = useState({ start: today, end: today });
+    const [customDateRange, setCustomDateRange] = useState({ start: toDateTimeLocal(yesterday), end: toDateTimeLocal(now) });
     const [selectedStations, setSelectedStations] = useState<string[]>([]);
     const [selectedSensorTypes, setSelectedSensorTypes] = useState<string[]>([]);
     const [dataRules, setDataRules] = useState({
@@ -46,7 +49,7 @@ const AddReportDrawer: React.FC<AddReportDrawerProps> = ({ isOpen, onClose, onSa
         setReportType('Günlük');
         setFileFormat('XLSX');
         setDateRangePreset('last24h');
-        setCustomDateRange({ start: today, end: today });
+        setCustomDateRange({ start: toDateTimeLocal(yesterday), end: toDateTimeLocal(now) });
         setSelectedStations([]);
         setSelectedSensorTypes([]);
         setDataRules({ includeMinMaxAvg: true, includeAlerts: true, includeUptime: false, groupByStation: false, groupBySensorType: false });
@@ -126,11 +129,11 @@ const AddReportDrawer: React.FC<AddReportDrawerProps> = ({ isOpen, onClose, onSa
                             <div className="grid grid-cols-2 gap-4 p-3 bg-secondary rounded-md border border-gray-200">
                                 <div>
                                     <label htmlFor="start-date" className="text-xs font-medium text-gray-600 mb-1 block">Başlangıç</label>
-                                    <input type="date" id="start-date" value={customDateRange.start} onChange={e => setCustomDateRange(p => ({...p, start: e.target.value}))} className="w-full bg-white border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent text-sm" />
+                                    <input type="datetime-local" id="start-date" value={customDateRange.start} onChange={e => setCustomDateRange(p => ({...p, start: e.target.value}))} className="w-full bg-white border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent text-sm" />
                                 </div>
                                 <div>
                                     <label htmlFor="end-date" className="text-xs font-medium text-gray-600 mb-1 block">Bitiş</label>
-                                    <input type="date" id="end-date" value={customDateRange.end} onChange={e => setCustomDateRange(p => ({...p, end: e.target.value}))} className="w-full bg-white border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent text-sm" />
+                                    <input type="datetime-local" id="end-date" value={customDateRange.end} onChange={e => setCustomDateRange(p => ({...p, end: e.target.value}))} className="w-full bg-white border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent text-sm" />
                                 </div>
                             </div>
                         )}

@@ -1,9 +1,12 @@
+
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { Sensor } from '../types.ts';
 import { ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, SensorIcon as GenericSensorIcon, XIcon } from './icons/Icons.tsx';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useTheme } from './ThemeContext.tsx';
-import { getRawReadingsHistory } from '../services/apiService.ts';
+import { getRawReadingsHistory, getReadingsHistory } from '../services/apiService.ts';
+import { getNumericValue, toDateTimeLocal } from '../utils/helpers.ts';
 
 
 interface SensorReading {
@@ -26,7 +29,6 @@ interface SensorDetailModalProps {
     isOpen: boolean;
     onClose: () => void;
     sensor: Sensor | null;
-    readings: SensorReading[];
 }
 
 const getSensorIcon = (type: string) => {
@@ -39,19 +41,8 @@ const getSensorIcon = (type: string) => {
     }
 };
 
-const getNumericValue = (value: any): number | null => {
-    if (value === null || value === undefined) return null;
-    if (typeof value === 'number') return value;
-    if (typeof value === 'object') {
-        const numeric = Object.values(value).find(v => typeof v === 'number');
-        return typeof numeric === 'number' ? numeric : null;
-    }
-    const parsed = parseFloat(String(value));
-    return isNaN(parsed) || !isFinite(parsed) ? null : parsed;
-};
-
 const formatDisplayValue = (reading: SensorReading): string => {
-    const numericValue = getNumericValue(reading.value);
+    const numericValue = getNumericValue(reading.value, reading.sensorType, reading.interface);
     if (numericValue !== null) {
         return numericValue.toFixed(2);
     }
@@ -63,59 +54,122 @@ const formatDisplayValue = (reading: SensorReading): string => {
 };
 
 
-const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, sensor, readings }) => {
+const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, sensor }) => {
     const { theme } = useTheme();
     const tickColor = theme === 'dark' ? '#9CA3AF' : '#6B7281';
     const [rawReadings, setRawReadings] = useState<RawSensorReading[]>([]);
+    const [processedReadings, setProcessedReadings] = useState<SensorReading[]>([]);
     const [activeTab, setActiveTab] = useState<'processed' | 'raw'>('processed');
+    const [dateFilter, setDateFilter] = useState<{ start: string, end: string }>({ start: '', end: '' });
     
     useEffect(() => {
         let isMounted = true;
         if (isOpen && sensor) {
             setRawReadings([]);
+            setProcessedReadings([]);
             setActiveTab('processed');
-            getRawReadingsHistory(sensor.id)
-                .then(data => {
+            
+            const now = new Date();
+            const yesterday = new Date();
+            yesterday.setDate(now.getDate() - 1);
+            const initialEndDate = toDateTimeLocal(now);
+            const initialStartDate = toDateTimeLocal(yesterday);
+
+            if (isMounted) {
+                setDateFilter({ start: initialStartDate, end: initialEndDate });
+            }
+
+            const fetchAllData = async () => {
+                try {
+                    const [rawHistory, processedHistory] = await Promise.all([
+                        getRawReadingsHistory(sensor.id),
+                        getReadingsHistory({ 
+                            stationIds: [sensor.stationId], 
+                            sensorTypes: [sensor.type],
+                            start: initialStartDate,
+                            end: initialEndDate
+                        })
+                    ]);
                     if (isMounted) {
-                        setRawReadings(data);
+                        setRawReadings(rawHistory);
+                        setProcessedReadings(processedHistory.filter(r => r.sensorId === sensor.id));
                     }
-                })
-                .catch(err => {
-                    if (isMounted) {
-                        console.error("Could not fetch raw readings history:", err);
-                        setRawReadings([]);
-                    }
-                });
+                } catch(err) {
+                     if (isMounted) {
+                        console.error("Could not fetch sensor history:", err);
+                     }
+                }
+            };
+            
+            fetchAllData();
         }
 
         return () => {
             isMounted = false;
         };
     }, [isOpen, sensor]);
+    
+    // Refetch processed data when date filter changes
+    useEffect(() => {
+        let isMounted = true;
+        if (isOpen && sensor && dateFilter.start && dateFilter.end) {
+             const fetchProcessed = async () => {
+                 try {
+                     const history = await getReadingsHistory({
+                         stationIds: [sensor.stationId],
+                         sensorTypes: [sensor.type],
+                         start: dateFilter.start,
+                         end: dateFilter.end
+                     });
+                     if (isMounted) {
+                         setProcessedReadings(history.filter(r => r.sensorId === sensor.id));
+                     }
+                 } catch (err) {
+                      if (isMounted) {
+                         console.error("Could not fetch processed readings on date change:", err);
+                      }
+                 }
+             };
+             fetchProcessed();
+        }
+         return () => { isMounted = false; };
+    }, [dateFilter, isOpen, sensor]);
 
 
     if (!isOpen || !sensor) return null;
 
+    const filteredRawReadings = useMemo(() => {
+        if (!rawReadings) return [];
+        const startDate = dateFilter.start ? new Date(dateFilter.start).getTime() : null;
+        const endDate = dateFilter.end ? new Date(dateFilter.end).getTime() : null;
+        return rawReadings.filter(r => {
+            const readingTime = new Date(r.timestamp).getTime();
+            if (startDate && readingTime < startDate) return false;
+            if (endDate && readingTime > endDate) return false;
+            return true;
+        });
+    }, [rawReadings, dateFilter]);
+
     const latestReadings = useMemo(() => {
-        return [...readings]
+        return [...processedReadings]
             .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    }, [readings]);
+    }, [processedReadings]);
     
     const chartData = useMemo(() => {
         const dataMap = new Map<number, any>();
         const roundToNearestSecond = (iso: string) => Math.round(new Date(iso).getTime() / 1000);
     
-        readings.forEach(r => {
+        processedReadings.forEach(r => {
             const key = roundToNearestSecond(r.timestamp);
             const entry = dataMap.get(key) || { timestamp: r.timestamp };
-            entry['İşlenmiş Değer'] = getNumericValue(r.value);
+            entry['İşlenmiş Değer'] = getNumericValue(r.value, r.sensorType, r.interface);
             dataMap.set(key, entry);
         });
     
-        rawReadings.forEach(r => {
+        filteredRawReadings.forEach(r => {
             const key = roundToNearestSecond(r.timestamp);
             const entry = dataMap.get(key) || { timestamp: r.timestamp };
-            entry['Ham Değer'] = getNumericValue(r.raw_value);
+            entry['Ham Değer'] = getNumericValue(r.raw_value, sensor.type, sensor.interface);
             dataMap.set(key, entry);
         });
         
@@ -127,7 +181,7 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
                 ...item,
                 name: new Date(item.timestamp).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
             }));
-    }, [readings, rawReadings]);
+    }, [processedReadings, filteredRawReadings, sensor.type, sensor.interface]);
 
     const latestValue = latestReadings.length > 0 ? formatDisplayValue(latestReadings[0]) : 'N/A';
 
@@ -160,7 +214,23 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
 
                     {/* Chart */}
                     <div className="space-y-2 flex-shrink-0">
-                        <h3 className="font-semibold text-gray-800 dark:text-gray-200">Geçmiş Veriler Grafiği (Ham vs. İşlenmiş)</h3>
+                        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                             <h3 className="font-semibold text-gray-800 dark:text-gray-200">Geçmiş Veriler Grafiği</h3>
+                             <div className="flex items-center gap-2">
+                                <input
+                                    type="datetime-local"
+                                    value={dateFilter.start}
+                                    onChange={e => setDateFilter(p => ({ ...p, start: e.target.value }))}
+                                    className="bg-primary dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-accent"
+                                />
+                                <input
+                                    type="datetime-local"
+                                    value={dateFilter.end}
+                                    onChange={e => setDateFilter(p => ({ ...p, end: e.target.value }))}
+                                    className="bg-primary dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-accent"
+                                />
+                             </div>
+                        </div>
                         {chartData.length > 1 ? (
                             <div className="h-64 bg-primary dark:bg-dark-primary p-4 rounded-lg border border-gray-200 dark:border-gray-700">
                                 <ResponsiveContainer width="100%" height="100%">
@@ -223,14 +293,14 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
                                         </table>
                                     ) : (
                                         <div className="h-full flex items-center justify-center text-center text-muted dark:text-gray-400">
-                                            <p>Bu sensör için işlenmiş veri bulunamadı.</p>
+                                            <p>Bu sensör için seçili aralıkta işlenmiş veri bulunamadı.</p>
                                         </div>
                                     )}
                                 </>
                             )}
                             {activeTab === 'raw' && (
                                  <>
-                                    {rawReadings.length > 0 ? (
+                                    {filteredRawReadings.length > 0 ? (
                                         <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
                                             <thead className="text-xs text-gray-700 dark:text-gray-400 uppercase bg-gray-100 dark:bg-gray-700 sticky top-0">
                                                 <tr>
@@ -239,7 +309,7 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {rawReadings.map(reading => (
+                                                {filteredRawReadings.map(reading => (
                                                     <tr key={reading.id} className="border-b border-gray-200 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-900/50">
                                                         <td className="px-6 py-3 font-mono text-gray-800 dark:text-gray-200">{new Date(reading.timestamp).toLocaleString('tr-TR')}</td>
                                                         <td className="px-6 py-3 font-mono text-xs text-gray-800 dark:text-gray-200">
@@ -251,7 +321,7 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
                                         </table>
                                     ) : (
                                         <div className="h-full flex items-center justify-center text-center text-muted dark:text-gray-400">
-                                            <p>Bu sensör için ham veri bulunamadı.</p>
+                                            <p>Bu sensör için seçili aralıkta ham veri bulunamadı.</p>
                                         </div>
                                     )}
                                 </>

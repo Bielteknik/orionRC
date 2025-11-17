@@ -42,6 +42,7 @@ const ChartSettingsModal: React.FC<ChartSettingsModalProps> = ({ isOpen, onClose
     
     const handleSave = () => {
         onSave(styles);
+        onClose();
     };
 
     return (
@@ -50,24 +51,24 @@ const ChartSettingsModal: React.FC<ChartSettingsModalProps> = ({ isOpen, onClose
             aria-labelledby="modal-title"
             role="dialog"
             aria-modal="true"
+            onClick={onClose}
         >
-            <div className="absolute inset-0 bg-black/60" onClick={onClose}></div>
             <div className="fixed inset-0 flex items-center justify-center p-4">
-                 <div className="relative bg-primary w-full max-w-lg rounded-xl shadow-xl transform transition-all flex flex-col">
-                    <header className="flex items-center justify-between p-4 border-b border-gray-200">
+                 <div className="relative bg-primary dark:bg-dark-primary w-full max-w-lg rounded-xl shadow-xl transform transition-all flex flex-col" onClick={e => e.stopPropagation()}>
+                    <header className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
                         <div className="flex items-center gap-3">
                             <PaletteIcon className="w-6 h-6 text-accent"/>
-                            <h2 id="modal-title" className="text-xl font-bold text-gray-900">Grafik Görünüm Ayarları</h2>
+                            <h2 id="modal-title" className="text-xl font-bold text-gray-900 dark:text-gray-100">Grafik Görünüm Ayarları</h2>
                         </div>
-                        <button onClick={onClose} className="p-2 text-muted hover:bg-gray-100 rounded-full">
+                        <button onClick={onClose} className="p-2 text-muted dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                     </header>
 
                     <main className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
                         {sensorTypes.length > 0 ? sensorTypes.map(type => (
-                            <div key={type} className="flex items-center justify-between p-3 bg-secondary rounded-lg border border-gray-200">
-                                <span className="font-semibold text-gray-800">{type}</span>
+                            <div key={type} className="flex items-center justify-between p-3 bg-secondary dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-700">
+                                <span className="font-semibold text-gray-800 dark:text-gray-200">{type}</span>
                                 <div className="flex items-center gap-4">
                                     <div className="relative">
                                         <input
@@ -79,14 +80,14 @@ const ChartSettingsModal: React.FC<ChartSettingsModalProps> = ({ isOpen, onClose
                                             title="Renk Seç"
                                         />
                                         <div 
-                                            className="absolute inset-0 rounded-md border border-gray-300 pointer-events-none"
+                                            className="absolute inset-0 rounded-md border border-gray-300 dark:border-gray-600 pointer-events-none"
                                             style={{backgroundColor: styles[type]?.stroke || '#000000'}}
                                         ></div>
                                     </div>
                                     <select
                                         value={styles[type]?.type || 'monotone'}
                                         onChange={(e) => handleTypeChange(type, e.target.value as LineType)}
-                                        className="bg-primary border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent text-sm"
+                                        className="bg-primary dark:bg-dark-primary border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent text-sm"
                                     >
                                         {lineTypes.map(lineType => (
                                             <option key={lineType} value={lineType} className="capitalize">{lineType}</option>
@@ -95,15 +96,15 @@ const ChartSettingsModal: React.FC<ChartSettingsModalProps> = ({ isOpen, onClose
                                 </div>
                             </div>
                         )) : (
-                            <p className="text-muted text-center py-4">Ayarları değiştirmek için en az bir sensör tipi seçin.</p>
+                            <p className="text-muted dark:text-gray-400 text-center py-4">Ayarları değiştirmek için en az bir sensör tipi seçin.</p>
                         )}
                     </main>
 
-                    <footer className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3">
+                    <footer className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-4 py-2 bg-primary border border-gray-300 text-gray-800 rounded-lg hover:bg-gray-100 font-semibold"
+                            className="px-4 py-2 bg-primary dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 font-semibold"
                         >
                             İptal
                         </button>

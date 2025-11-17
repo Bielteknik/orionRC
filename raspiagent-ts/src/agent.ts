@@ -29,7 +29,8 @@ const CONFIG_PATH = path.join(__dirname, '..', 'config.json');
 const CONFIG_CACHE_PATH = path.join(__dirname, '..', 'config.cache.json'); // Cache for offline startup
 
 // --- Timers ---
-const CONFIG_POLL_INTERVAL = 60000; // 1 minute (used as default cycle time)
+const CONFIG_FETCH_INTERVAL = 60000; // 1 minute (for checking config updates)
+const MAIN_LOOP_DEFAULT_INTERVAL = 600000; // 10 minutes (default sensor read cycle)
 const COMMAND_POLL_INTERVAL = 5000; // 5 seconds
 const SYNC_INTERVAL = 30000; // 30 seconds for syncing offline data
 
@@ -153,7 +154,7 @@ class Agent {
         await this.fetchConfig(true); // Initial fetch attempt
         
         // Start other periodic tasks
-        this.timers.push(setInterval(() => this.fetchConfig(), CONFIG_POLL_INTERVAL));
+        this.timers.push(setInterval(() => this.fetchConfig(), CONFIG_FETCH_INTERVAL));
         this.timers.push(setInterval(() => this.pollForCommands(), COMMAND_POLL_INTERVAL));
         this.timers.push(setInterval(() => this.syncOfflineData(), SYNC_INTERVAL));
     }
@@ -217,8 +218,13 @@ class Agent {
             });
             this.config = response.data;
             this.geminiApiKey = this.config?.gemini_api_key;
-            this.globalReadFrequencySeconds = this.config?.global_read_frequency_seconds;
             
+            // Explicitly parse the frequency value to handle potential type mismatches from JSON.
+            const freqFromConfig = this.config?.global_read_frequency_seconds;
+            this.globalReadFrequencySeconds = freqFromConfig !== undefined && freqFromConfig !== null 
+                ? parseInt(String(freqFromConfig), 10) 
+                : undefined;
+
             console.log('✅ Sunucudan yapılandırma başarıyla alındı.');
             await this.saveConfigToFile(this.config!);
             
@@ -238,7 +244,12 @@ class Agent {
                 if (cachedConfig) {
                     this.config = cachedConfig;
                     this.geminiApiKey = this.config?.gemini_api_key;
-                    this.globalReadFrequencySeconds = this.config?.global_read_frequency_seconds;
+                    
+                    const freqFromConfig = this.config?.global_read_frequency_seconds;
+                    this.globalReadFrequencySeconds = freqFromConfig !== undefined && freqFromConfig !== null 
+                        ? parseInt(String(freqFromConfig), 10) 
+                        : undefined;
+
                     this.setState(AgentState.OFFLINE);
                     await this.initializeDrivers();
                     this.startMainLoop();
@@ -281,7 +292,7 @@ class Agent {
 
         const cycleTime = this.globalReadFrequencySeconds && this.globalReadFrequencySeconds > 0 
             ? this.globalReadFrequencySeconds * 1000 
-            : CONFIG_POLL_INTERVAL;
+            : MAIN_LOOP_DEFAULT_INTERVAL;
         
         // Run once immediately, then start the interval
         this.mainLoop(); 

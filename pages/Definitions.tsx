@@ -112,7 +112,10 @@ const AddAlertRuleDrawer: React.FC<AddAlertRuleDrawerProps> = ({ isOpen, onClose
                         <label className="flex items-center"><input type="checkbox" checked={isEnabled} onChange={e => setIsEnabled(e.target.checked)} className="mr-2"/>Kural Aktif</label>
                     </div>
                 </main>
-                <footer className="p-4 bg-primary border-t flex justify-end gap-2"><button onClick={onClose}>İptal</button><button onClick={handleSave} className="bg-accent text-white px-4 py-2 rounded-md">Kaydet</button></footer>
+                <footer className="p-4 bg-primary border-t flex justify-end gap-2">
+                    <button onClick={onClose} className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 font-semibold text-sm">İptal</button>
+                    <button onClick={handleSave} className="bg-accent text-white px-4 py-2 rounded-md font-semibold text-sm">Kaydet</button>
+                </footer>
                  <style>{`.input { background-color: #F9FAFB; border: 1px solid #D1D5DB; border-radius: 0.375rem; padding: 0.5rem 0.75rem; }`}</style>
             </div>
         </div>

@@ -6,8 +6,7 @@ import ScheduleReportDrawer from '../components/ScheduleReportDrawer.tsx';
 import { AddIcon, SearchIcon, DownloadIcon, EditIcon, DeleteIcon, CalendarIcon } from '../components/icons/Icons.tsx';
 import { getStations, getSensors, getReports, getReportSchedules, getReadings, deleteReport, deleteReportSchedule, addReportSchedule, updateReportSchedule } from '../services/apiService.ts';
 import DeleteConfirmationModal from '../components/DeleteConfirmationModal.tsx';
-
-declare const XLSX: any;
+import * as XLSX from 'xlsx';
 
 interface SensorReading {
     id: string;

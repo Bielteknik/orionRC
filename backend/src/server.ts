@@ -1,5 +1,8 @@
 
 
+
+
+
 // FIX: Resolve Node.js type errors by importing 'Buffer' and 'process' and use aliased Express types for ES modules.
 import { Buffer } from 'buffer';
 import process from 'process';
@@ -19,6 +22,28 @@ import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from "@google/genai";
 
 dotenv.config();
+
+// FIX: Define types for DB query results to avoid 'unknown' type errors.
+interface ReadingForReport {
+    timestamp: string;
+    stationName: string;
+    sensorName: string;
+    sensorType: string;
+    value: string; // JSON string from DB
+    unit: string | null;
+    interface: string;
+}
+
+interface SensorForProcessing {
+    id: string;
+    type: string;
+    name: string;
+    station_id: string;
+    interface: string;
+    unit: string | null;
+    reference_value: number | null;
+    reference_operation: string | null;
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -44,6 +69,52 @@ const safeJSONParse = (str: string | null | undefined, fallback: any) => {
     }
 };
 
+// Helper to process a raw reading based on sensor calibration rules
+const processRawValue = (rawValue: any, sensor: { type: string, reference_value?: number | null, reference_operation?: string | null }): any => {
+    if (rawValue === null || rawValue === undefined) return null;
+
+    let processedValue = { ...rawValue }; // Work on a copy
+
+    const refVal = sensor.reference_value;
+    const refOp = sensor.reference_operation;
+
+    if (sensor.type === 'Kar Yüksekliği' && typeof rawValue.distance_cm === 'number') {
+        if (typeof refVal === 'number' && refOp === 'subtract') {
+            let calculated = refVal - rawValue.distance_cm;
+            processedValue = { snow_depth_cm: calculated > 0 ? calculated : 0 };
+        } else {
+            processedValue = { snow_depth_cm: rawValue.distance_cm };
+        }
+    } else if (typeof rawValue === 'object' && typeof refVal === 'number' && refOp && refOp !== 'none') {
+        const keys = Object.keys(rawValue);
+        if (keys.length === 1 && typeof rawValue[keys[0]] === 'number') {
+            const key = keys[0];
+            const originalValue = rawValue[key];
+            let calibratedValue = originalValue;
+            if (refOp === 'subtract') calibratedValue = refVal - originalValue;
+            else if (refOp === 'add') calibratedValue = refVal + originalValue;
+            processedValue = { [key]: calibratedValue };
+        }
+    }
+
+    const roundNumericValues = (value: any): any => {
+        if (typeof value === 'number') return parseFloat(value.toFixed(2));
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+            const newObj: { [key: string]: any } = {};
+            for (const key in value) {
+                if (Object.prototype.hasOwnProperty.call(value, key)) {
+                    newObj[key] = roundNumericValues(value[key]);
+                }
+            }
+            return newObj;
+        }
+        return value;
+    };
+
+    return roundNumericValues(processedValue);
+};
+
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' })); // Increase limit for base64 image uploads
 
@@ -68,6 +139,7 @@ const queueCommand = (deviceId: string, command_type: string, payload: any = {})
 
 
 // --- AUTH MIDDLEWARE (simple token check) ---
+// FIX: Add explicit types for req, res, and next parameters.
 const agentAuth = (req: ExpressRequest, res: ExpressResponse, next: ExpressNextFunction) => {
     const token = req.headers.authorization?.split(' ')[1];
     // This token MUST match the one in the agent's config.json
@@ -86,6 +158,7 @@ const apiRouter = express.Router();
 
 // --- AGENT-FACING ENDPOINTS ---
 
+// FIX: Add explicit types for req and res parameters.
 apiRouter.get('/config/:deviceId', agentAuth, async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { deviceId } = req.params;
@@ -133,6 +206,7 @@ apiRouter.get('/config/:deviceId', agentAuth, async (req: ExpressRequest, res: E
     }
 });
 
+// FIX: Add explicit types for req and res parameters.
 apiRouter.post('/submit-reading', agentAuth, async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { sensor: sensor_id, value } = req.body;
@@ -164,6 +238,7 @@ apiRouter.post('/submit-reading', agentAuth, async (req: ExpressRequest, res: Ex
 });
 
 
+// FIX: Add explicit types for req and res parameters.
 apiRouter.get('/commands/:deviceId', agentAuth, (req: ExpressRequest, res: ExpressResponse) => {
     const { deviceId } = req.params;
     const pendingCommands = commandQueue[deviceId]?.filter(cmd => cmd.status === 'pending') || [];
@@ -178,6 +253,7 @@ apiRouter.get('/commands/:deviceId', agentAuth, (req: ExpressRequest, res: Expre
 });
 
 
+// FIX: Add explicit types for req and res parameters.
 apiRouter.post('/commands/:id/:status', agentAuth, async (req: ExpressRequest, res: ExpressResponse) => {
     // This endpoint might be deprecated if command queue is cleared on GET, but can be kept for explicit updates.
     const { id, status } = req.params;
@@ -186,6 +262,7 @@ apiRouter.post('/commands/:id/:status', agentAuth, async (req: ExpressRequest, r
 });
 
 
+// FIX: Add explicit types for req and res parameters.
 apiRouter.post('/cameras/:cameraId/upload-photo', agentAuth, async (req: ExpressRequest, res: ExpressResponse) => {
     const { cameraId } = req.params;
     const { image, filename } = req.body; // base64 image and filename
@@ -214,6 +291,7 @@ apiRouter.post('/cameras/:cameraId/upload-photo', agentAuth, async (req: Express
 });
 
 // Endpoint for analysis photos
+// FIX: Add explicit types for req and res parameters.
 apiRouter.post('/analysis/upload-photo', agentAuth, async (req: ExpressRequest, res: ExpressResponse) => {
     const { cameraId, image, filename } = req.body;
     try {
@@ -232,6 +310,7 @@ apiRouter.post('/analysis/upload-photo', agentAuth, async (req: ExpressRequest, 
 
 
 // --- FRONTEND-FACING ENDPOINTS ---
+// FIX: Add explicit types for req and res parameters.
 apiRouter.get('/agent-status', (req: ExpressRequest, res: ExpressResponse) => {
     // Check if lastUpdate is recent (e.g., within 90 seconds, allowing for polling intervals)
     if (agentStatus.lastUpdate && (new Date().getTime() - new Date(agentStatus.lastUpdate).getTime()) > 90000) {
@@ -241,6 +320,7 @@ apiRouter.get('/agent-status', (req: ExpressRequest, res: ExpressResponse) => {
 });
 
 // STATIONS
+// FIX: Add explicit types for req and res parameters.
 apiRouter.get('/stations', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const stationsFromDb = await db.all(`
@@ -265,6 +345,7 @@ apiRouter.get('/stations', async (req: ExpressRequest, res: ExpressResponse) => 
         res.status(500).json({ error: "Failed to fetch stations." });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.post('/stations', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { id, name, location, locationCoords, selectedSensorIds = [], selectedCameraIds = [] } = req.body;
@@ -285,6 +366,7 @@ apiRouter.post('/stations', async (req: ExpressRequest, res: ExpressResponse) =>
         res.status(500).json({ error: "Failed to create station." });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.put('/stations/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     const { id } = req.params;
     try {
@@ -315,6 +397,7 @@ apiRouter.put('/stations/:id', async (req: ExpressRequest, res: ExpressResponse)
         res.status(500).json({ error: "Failed to update station." });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.delete('/stations/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         await db.run("DELETE FROM stations WHERE id = ?", req.params.id);
@@ -325,6 +408,7 @@ apiRouter.delete('/stations/:id', async (req: ExpressRequest, res: ExpressRespon
     }
 });
 
+// FIX: Add explicit types for req and res parameters.
 apiRouter.post('/stations/:id/restart-agent', async (req: ExpressRequest, res: ExpressResponse) => {
     const { id: deviceId } = req.params;
     try {
@@ -340,6 +424,7 @@ apiRouter.post('/stations/:id/restart-agent', async (req: ExpressRequest, res: E
     }
 });
 
+// FIX: Add explicit types for req and res parameters.
 apiRouter.post('/stations/:id/stop-agent', async (req: ExpressRequest, res: ExpressResponse) => {
     const { id: deviceId } = req.params;
     try {
@@ -357,6 +442,7 @@ apiRouter.post('/stations/:id/stop-agent', async (req: ExpressRequest, res: Expr
 
 
 // SENSORS
+// FIX: Add explicit types for req and res parameters.
 apiRouter.get('/sensors', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const unassigned = req.query.unassigned === 'true';
@@ -386,6 +472,7 @@ apiRouter.get('/sensors', async (req: ExpressRequest, res: ExpressResponse) => {
         res.status(500).json({ error: "Failed to fetch sensors." });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.post('/sensors', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
@@ -405,6 +492,7 @@ apiRouter.post('/sensors', async (req: ExpressRequest, res: ExpressResponse) => 
         res.status(500).json({ error: "Failed to create sensor." });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.put('/sensors/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     const { id } = req.params;
     try {
@@ -462,6 +550,7 @@ apiRouter.put('/sensors/:id', async (req: ExpressRequest, res: ExpressResponse) 
     }
 });
 
+// FIX: Add explicit types for req and res parameters.
 apiRouter.delete('/sensors/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const sensor = await db.get("SELECT station_id FROM sensors WHERE id = ?", req.params.id);
@@ -473,6 +562,7 @@ apiRouter.delete('/sensors/:id', async (req: ExpressRequest, res: ExpressRespons
         res.status(500).json({ error: "Failed to delete sensor." });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.post('/sensors/:id/read', async (req: ExpressRequest, res: ExpressResponse) => {
     const { id } = req.params;
     try {
@@ -488,6 +578,7 @@ apiRouter.post('/sensors/:id/read', async (req: ExpressRequest, res: ExpressResp
     }
 });
 
+// FIX: Add explicit types for req and res parameters.
 apiRouter.post('/sensors/:id/manual-reading', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { id: sensor_id } = req.params;
@@ -536,6 +627,7 @@ apiRouter.post('/sensors/:id/manual-reading', async (req: ExpressRequest, res: E
 });
 
 // CAMERAS
+// FIX: Add explicit types for req and res parameters.
 apiRouter.get('/cameras', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const unassigned = req.query.unassigned === 'true';
@@ -561,6 +653,7 @@ apiRouter.get('/cameras', async (req: ExpressRequest, res: ExpressResponse) => {
         res.status(500).json({ error: "Failed to fetch cameras." });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.post('/cameras', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { name, stationId, status, viewDirection, rtspUrl, cameraType } = req.body;
@@ -576,6 +669,7 @@ apiRouter.post('/cameras', async (req: ExpressRequest, res: ExpressResponse) => 
         res.status(500).json({ error: "Failed to create camera." });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.put('/cameras/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     const { id } = req.params;
     try {
@@ -610,6 +704,7 @@ apiRouter.put('/cameras/:id', async (req: ExpressRequest, res: ExpressResponse) 
         res.status(500).json({ error: "Failed to update camera." });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.delete('/cameras/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const camera = await db.get("SELECT station_id FROM cameras WHERE id = ?", req.params.id);
@@ -621,6 +716,7 @@ apiRouter.delete('/cameras/:id', async (req: ExpressRequest, res: ExpressRespons
         res.status(500).json({ error: "Failed to delete camera." });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.post('/cameras/:id/capture', async (req: ExpressRequest, res: ExpressResponse) => {
     const { id } = req.params;
     try {
@@ -637,6 +733,7 @@ apiRouter.post('/cameras/:id/capture', async (req: ExpressRequest, res: ExpressR
 });
 
 // READINGS
+// FIX: Add explicit types for req and res parameters.
 apiRouter.get('/readings', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const readings = await db.all(`
@@ -653,42 +750,133 @@ apiRouter.get('/readings', async (req: ExpressRequest, res: ExpressResponse) => 
         res.status(500).json({ error: "Failed to fetch readings." });
     }
 });
-apiRouter.get('/readings/history', async (req: ExpressRequest, res: ExpressResponse) => {
-    const { stationIds: stationIdsQuery, sensorTypes: sensorTypesQuery } = req.query;
 
-    if (typeof stationIdsQuery !== 'string' || typeof sensorTypesQuery !== 'string' || stationIdsQuery.length === 0 || sensorTypesQuery.length === 0) {
+// FIX: Add explicit types for req and res parameters.
+apiRouter.get('/readings/history', async (req: ExpressRequest, res: ExpressResponse) => {
+    const { stationIds: stationIdsQuery, sensorTypes: sensorTypesQuery, start: startDate, end: endDate } = req.query;
+
+    if (typeof stationIdsQuery !== 'string' || typeof sensorTypesQuery !== 'string' || !stationIdsQuery || !sensorTypesQuery) {
         return res.json([]);
     }
 
     try {
-        const stationIdList = stationIdsQuery.split(',').map(id => `'${id.trim()}'`).join(',');
-        const sensorTypeList = sensorTypesQuery.split(',').map(t => `'${t.trim()}'`).join(',');
+        const stationIdList = stationIdsQuery.split(',');
+        const sensorTypeList = sensorTypesQuery.split(',');
+        const placeholders = (arr: string[]) => arr.map(() => '?').join(',');
 
-        const readings = await db.all(`
-            SELECT 
-                r.id, 
-                r.timestamp, 
-                s.id as sensorId,
-                s.name as sensorName,
-                s.station_id as stationId, 
-                s.type as sensorType, 
-                s.interface, 
-                s.unit, 
-                r.value 
+        // 1. Get all relevant sensors
+        const sensors = await db.all<SensorForProcessing[]>(`
+            SELECT id, type, name, station_id, interface, unit, reference_value, reference_operation 
+            FROM sensors 
+            WHERE station_id IN (${placeholders(stationIdList)}) AND type IN (${placeholders(sensorTypeList)})
+        `, [...stationIdList, ...sensorTypeList]);
+        
+        if (sensors.length === 0) return res.json([]);
+
+        const sensorMap = new Map<string, SensorForProcessing>(sensors.map(s => [s.id, s]));
+        const sensorIdList = sensors.map(s => s.id);
+
+        // 2. Build date filter
+        let dateFilterClause = '';
+        const dateParams: string[] = [];
+        if (startDate && typeof startDate === 'string') {
+            dateFilterClause += ' AND r.timestamp >= ?';
+            dateParams.push(startDate);
+        }
+        if (endDate && typeof endDate === 'string') {
+            dateFilterClause += ' AND r.timestamp <= ?';
+            dateParams.push(endDate);
+        }
+
+        // 3. Fetch existing processed readings
+        const processedReadings = await db.all(`
+            SELECT r.id, r.timestamp, r.sensor_id, r.value 
             FROM readings r
-            JOIN sensors s ON r.sensor_id = s.id
-            WHERE s.station_id IN (${stationIdList})
-            AND s.type IN (${sensorTypeList})
-            ORDER BY r.timestamp DESC
-            LIMIT 1000
-        `);
-        res.json(readings.map(r => ({ ...r, value: safeJSONParse(r.value, null) })));
+            WHERE r.sensor_id IN (${placeholders(sensorIdList)}) ${dateFilterClause.replace('r.timestamp', 'r.timestamp')}
+        `, [...sensorIdList, ...dateParams]);
+
+        // 4. Fetch raw readings for the same filters
+        const rawReadings = await db.all(`
+            SELECT r.id, r.timestamp, r.sensor_id, r.raw_value 
+            FROM raw_readings r
+            WHERE r.sensor_id IN (${placeholders(sensorIdList)}) ${dateFilterClause.replace('r.timestamp', 'r.timestamp')}
+        `, [...sensorIdList, ...dateParams]);
+
+        const readingsMap = new Map<string, any>();
+        
+        // Use a set for quick lookup of existing processed timestamps
+        const processedTimestamps = new Set(processedReadings.map(r => `${r.sensor_id}:${new Date(r.timestamp).toISOString()}`));
+        
+        processedReadings.forEach(r => {
+            const sensor = sensorMap.get(r.sensor_id);
+            if (sensor) {
+                const key = `${r.sensor_id}:${new Date(r.timestamp).toISOString()}`;
+                readingsMap.set(key, { 
+                    id: r.id,
+                    timestamp: r.timestamp,
+                    sensorId: r.sensor_id,
+                    value: safeJSONParse(r.value, null),
+                    sensorName: sensor.name,
+                    stationId: sensor.station_id,
+                    sensorType: sensor.type,
+                    interface: sensor.interface,
+                    unit: sensor.unit,
+                 });
+            }
+        });
+
+        // 5. Process and insert missing readings
+        const newReadingsToInsert: any[] = [];
+        for (const raw of rawReadings) {
+            const key = `${raw.sensor_id}:${new Date(raw.timestamp).toISOString()}`;
+            if (!processedTimestamps.has(key) && !readingsMap.has(key)) {
+                const sensor = sensorMap.get(raw.sensor_id);
+                if (sensor) {
+                    const rawValueObject = safeJSONParse(raw.raw_value, null);
+                    const processedValue = processRawValue(rawValueObject, sensor);
+                    if (processedValue !== null) {
+                        newReadingsToInsert.push({ sensorId: raw.sensor_id, value: JSON.stringify(processedValue), timestamp: raw.timestamp });
+                        readingsMap.set(key, {
+                            id: `processed-raw-${raw.id}`,
+                            timestamp: raw.timestamp,
+                            sensorId: raw.sensor_id,
+                            value: processedValue,
+                            sensorName: sensor.name,
+                            stationId: sensor.station_id,
+                            sensorType: sensor.type,
+                            interface: sensor.interface,
+                            unit: sensor.unit,
+                        });
+                    }
+                }
+            }
+        }
+        
+        // Asynchronously insert new readings into the database without waiting
+        if (newReadingsToInsert.length > 0) {
+            console.log(`[On-the-fly Processing] ${newReadingsToInsert.length} yeni işlenmiş veri veritabanına ekleniyor...`);
+            (async () => {
+                const stmt = await db.prepare("INSERT INTO readings (sensor_id, value, timestamp) VALUES (?, ?, ?)");
+                for (const newReading of newReadingsToInsert) {
+                    await stmt.run(newReading.sensorId, newReading.value, newReading.timestamp);
+                }
+                await stmt.finalize();
+                console.log(`[On-the-fly Processing] ${newReadingsToInsert.length} kayıt eklendi.`);
+            })().catch(e => console.error("[On-the-fly Processing] Veritabanı ekleme hatası:", e));
+        }
+
+        const combinedReadings = Array.from(readingsMap.values()).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+        res.json(combinedReadings.slice(0, 1000)); // Limit response size
+
     } catch (error) {
-        console.error("Error fetching reading history:", error);
+        console.error("Error fetching and processing reading history:", error);
         res.status(500).json({ error: 'Failed to fetch reading history.' });
     }
 });
 
+
+// FIX: Add explicit types for req and res parameters.
 apiRouter.get('/raw-readings/history', async (req: ExpressRequest, res: ExpressResponse) => {
     const { sensorId } = req.query;
 
@@ -724,6 +912,7 @@ const isValidDefinitionType = (type: string): boolean => {
     return ['station_types', 'sensor_types', 'camera_types'].includes(type);
 };
 
+// FIX: Add explicit types for req and res parameters.
 apiRouter.get('/definitions', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const [stationTypes, sensorTypes, cameraTypes] = await Promise.all([
@@ -737,6 +926,7 @@ apiRouter.get('/definitions', async (req: ExpressRequest, res: ExpressResponse) 
         res.status(500).json({ error: "Failed to fetch definitions." });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.post('/definitions/:type', async (req: ExpressRequest, res: ExpressResponse) => {
     const { type } = req.params;
     if (!isValidDefinitionType(type)) {
@@ -754,6 +944,7 @@ apiRouter.post('/definitions/:type', async (req: ExpressRequest, res: ExpressRes
         res.status(500).json({ error: `Failed to create definition for ${type}.` });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.put('/definitions/:type/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     const { type, id } = req.params;
     if (!isValidDefinitionType(type)) {
@@ -771,6 +962,7 @@ apiRouter.put('/definitions/:type/:id', async (req: ExpressRequest, res: Express
         res.status(500).json({ error: `Failed to update definition.` });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.delete('/definitions/:type/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     const { type, id } = req.params;
     if (!isValidDefinitionType(type)) {
@@ -785,6 +977,7 @@ apiRouter.delete('/definitions/:type/:id', async (req: ExpressRequest, res: Expr
     }
 });
 
+// FIX: Add explicit types for req and res parameters.
 apiRouter.get('/alert-rules', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         res.json(await db.all("SELECT * FROM alert_rules"));
@@ -794,6 +987,7 @@ apiRouter.get('/alert-rules', async (req: ExpressRequest, res: ExpressResponse) 
     }
 });
 
+// FIX: Add explicit types for req and res parameters.
 apiRouter.get('/settings/global_read_frequency', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const setting = await db.get("SELECT value FROM global_settings WHERE key = 'global_read_frequency_minutes'");
@@ -803,6 +997,7 @@ apiRouter.get('/settings/global_read_frequency', async (req: ExpressRequest, res
         res.status(500).json({ error: "Failed to get global read frequency." });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.put('/settings/global_read_frequency', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { value } = req.body;
@@ -820,6 +1015,7 @@ apiRouter.put('/settings/global_read_frequency', async (req: ExpressRequest, res
 });
 
 // REPORTS
+// FIX: Add explicit types for req and res parameters.
 apiRouter.get('/reports', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         res.json(await db.all("SELECT * FROM reports"));
@@ -828,6 +1024,7 @@ apiRouter.get('/reports', async (req: ExpressRequest, res: ExpressResponse) => {
         res.status(500).json({ error: "Failed to fetch reports." });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.delete('/reports/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         await db.run("DELETE FROM reports WHERE id = ?", req.params.id);
@@ -837,6 +1034,7 @@ apiRouter.delete('/reports/:id', async (req: ExpressRequest, res: ExpressRespons
         res.status(500).json({ error: "Failed to delete report." });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.get('/report-schedules', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const schedules = await db.all("SELECT * FROM report_schedules");
@@ -849,6 +1047,7 @@ apiRouter.get('/report-schedules', async (req: ExpressRequest, res: ExpressRespo
         res.status(500).json({ error: "Failed to fetch report schedules." });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.post('/report-schedules', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { name, frequency, time, recipient, reportConfig, isEnabled } = req.body;
@@ -863,6 +1062,7 @@ apiRouter.post('/report-schedules', async (req: ExpressRequest, res: ExpressResp
         res.status(500).json({ error: "Failed to create report schedule." });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.put('/report-schedules/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     const { id } = req.params;
     try {
@@ -894,6 +1094,7 @@ apiRouter.put('/report-schedules/:id', async (req: ExpressRequest, res: ExpressR
         res.status(500).json({ error: "Failed to update report schedule." });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.delete('/report-schedules/:id', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         await db.run("DELETE FROM report_schedules WHERE id = ?", req.params.id);
@@ -905,6 +1106,7 @@ apiRouter.delete('/report-schedules/:id', async (req: ExpressRequest, res: Expre
 });
 
 // NOTIFICATIONS
+// FIX: Add explicit types for req and res parameters.
 apiRouter.get('/notifications', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         res.json(await db.all("SELECT * FROM notifications ORDER BY timestamp DESC"));
@@ -913,6 +1115,7 @@ apiRouter.get('/notifications', async (req: ExpressRequest, res: ExpressResponse
         res.status(500).json({ error: "Failed to fetch notifications." });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.post('/notifications/mark-all-read', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         await db.run("UPDATE notifications SET is_read = ? WHERE is_read = ?", [true, false]);
@@ -922,6 +1125,7 @@ apiRouter.post('/notifications/mark-all-read', async (req: ExpressRequest, res: 
         res.status(500).json({ error: "Failed to mark all notifications as read." });
     }
 });
+// FIX: Add explicit types for req and res parameters.
 apiRouter.delete('/notifications/clear-all', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         await db.run("DELETE FROM notifications");
@@ -958,6 +1162,7 @@ Nihai cevabını SADECE aşağıdaki JSON formatında ver, başka hiçbir metin 
 *   **Örnek 3:** Eğer kar seviyesi tam olarak "80" işaretinin üzerindeyse, cevabın şöyle olmalı:
     {"snow_depth_cm": 80}`;
 
+// FIX: Add explicit types for req and res parameters.
 apiRouter.post('/analysis/snow-depth', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { cameraId, virtualSensorId, analysisType } = req.body;
@@ -980,6 +1185,7 @@ apiRouter.post('/analysis/snow-depth', async (req: ExpressRequest, res: ExpressR
     }
 });
 
+// FIX: Add explicit types for req and res parameters.
 apiRouter.post('/analysis/snow-depth-from-image', async (req: ExpressRequest, res: ExpressResponse) => {
     const { imageBase64, virtualSensorId, analysisType } = req.body;
 
@@ -1124,24 +1330,33 @@ async function sendEmail(recipient: string, subject: string, body: string, attac
     }
 }
 
-const formatReadingValueForReport = (reading: any): string => {
+// FIX: Add explicit type for reading parameter and fix property access.
+const formatReadingValueForReport = (reading: ReadingForReport): string => {
     const value = safeJSONParse(reading.value, null);
-    const { type: sensorType, interface: sensorInterface } = reading;
+    // FIX: Use `sensorType` and `interface` from the `reading` object directly.
+    const { sensorType, interface: sensorInterface } = reading;
 
     if (value === null || value === undefined) return 'N/A';
     if (typeof value !== 'object') return String(value);
 
     if (sensorInterface === 'openweather') {
-        if (sensorType === 'Sıcaklık' && value.temperature !== undefined) {
-            return String(value.temperature);
+        if (sensorType === 'Sıcaklık' && typeof (value as any).temperature === 'number') {
+            return String((value as any).temperature.toFixed(2));
         }
-        if (sensorType === 'Nem' && value.humidity !== undefined) {
-            return String(value.humidity);
+        if (sensorType === 'Nem' && typeof (value as any).humidity === 'number') {
+            return String((value as any).humidity.toFixed(2));
         }
+        // Fallback for other openweather types
+        return 'N/A';
     }
     
+    // Fallback for other object types
     const numericValue = Object.values(value).find(v => typeof v === 'number');
-    return numericValue !== undefined ? String(numericValue) : JSON.stringify(value);
+    if (typeof numericValue === 'number') {
+        return String(numericValue.toFixed(2));
+    }
+
+    return JSON.stringify(value); // Last resort
 };
 
 async function checkAndSendScheduledReports() {
@@ -1165,7 +1380,8 @@ async function checkAndSendScheduledReports() {
                 continue; 
             }
 
-            let readings = await db.all(`
+            // FIX: Add explicit type for db.all result
+            let readings = await db.all<ReadingForReport[]>(`
                 SELECT r.timestamp, st.name as stationName, s.name as sensorName, s.type as sensorType, r.value, s.unit, s.interface FROM readings r
                 JOIN sensors s ON r.sensor_id = s.id
                 JOIN stations st ON s.station_id = st.id
@@ -1175,7 +1391,8 @@ async function checkAndSendScheduledReports() {
             `);
             
             if (scheduleConfig.dataRules.groupByStation || scheduleConfig.dataRules.groupBySensorType) {
-                readings.sort((a: any, b: any) => {
+                // FIX: Type a and b as ReadingForReport
+                readings.sort((a: ReadingForReport, b: ReadingForReport) => {
                     if (scheduleConfig.dataRules.groupByStation) {
                         const stationCompare = a.stationName.localeCompare(b.stationName, 'tr');
                         if (stationCompare !== 0) return stationCompare;
@@ -1188,7 +1405,8 @@ async function checkAndSendScheduledReports() {
                 });
             }
 
-            const formattedData = readings.map((d: any) => {
+            // FIX: Type d as ReadingForReport
+            const formattedData = readings.map((d: ReadingForReport) => {
                 const date = new Date(d.timestamp);
                 return {
                     'Tarih': date.toLocaleDateString('tr-TR'),
@@ -1240,6 +1458,7 @@ fs.access(path.join(publicPath, 'index.html')).catch(() => {
 app.use(express.static(publicPath));
 
 // Catch-all to serve index.html for any other request (for client-side routing)
+// FIX: Add explicit types for req and res parameters.
 app.get('*', (req: ExpressRequest, res: ExpressResponse) => {
     // Exclude API routes from being caught by this
     if (req.path.startsWith('/api/')) {

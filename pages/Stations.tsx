@@ -7,12 +7,6 @@ import { getUnassignedSensors, getUnassignedCameras, addStation, deleteStation, 
 import LocationPickerMap from '../components/common/LocationPickerMap.tsx';
 import DeleteConfirmationModal from '../components/DeleteConfirmationModal.tsx';
 
-interface StationsProps {
-  stations: Station[];
-  onViewDetails: (stationId: string) => void;
-  onDataChange: () => void;
-}
-
 const EditStationDrawer: React.FC<{
     isOpen: boolean;
     onClose: () => void;
@@ -68,7 +62,17 @@ const EditStationDrawer: React.FC<{
           </div>
         </main>
         <footer className="px-6 py-4 bg-primary border-t flex justify-end gap-3"><button onClick={onClose} className="btn-secondary">İptal</button><button onClick={handleSave} className="btn-primary">Kaydet</button></footer>
-        </div>
+        <style>{`
+            .input-base { background-color: white; border: 1px solid #D1D5DB; border-radius: 0.375rem; padding: 0.5rem 0.75rem; width: 100%; }
+            .dark .input-base { background-color: #374151; border-color: #4B5563; color: #F3F4F6; }
+            .btn-primary { background-color: #F97316; color: white; padding: 0.625rem 1rem; border-radius: 0.375rem; font-weight: 600; transition: background-color 0.2s; }
+            .btn-primary:hover { background-color: #EA580C; }
+            .btn-secondary { background-color: #E5E7EB; color: #1F2937; padding: 0.625rem 1rem; border-radius: 0.375rem; font-weight: 600; transition: background-color 0.2s; }
+            .btn-secondary:hover { background-color: #D1D5DB; }
+            .dark .btn-secondary { background-color: #4B5563; color: white; }
+            .dark .btn-secondary:hover { background-color: #6B7281; }
+        `}</style>
+      </div>
     </div>
     );
 };
@@ -170,6 +174,12 @@ const StationCard: React.FC<{ station: Station, onViewDetails: (id: string) => v
         </div>
     );
 };
+
+interface StationsProps {
+  stations: Station[];
+  onViewDetails: (stationId: string) => void;
+  onDataChange: () => void;
+}
 
 const Stations: React.FC<StationsProps> = ({ stations, onViewDetails, onDataChange }) => {
   const [searchTerm, setSearchTerm] = useState('');
