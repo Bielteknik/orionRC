@@ -1,9 +1,8 @@
 
 
-
 import React, { useMemo, useState, useEffect } from 'react';
 import { Station, Sensor, Camera, SensorStatus, CameraStatus } from '../types.ts';
-import { getStations, getSensors, getCameras, getReadings, restartAgent, stopAgent } from '../services/apiService.ts';
+import { getStations, getSensors, getCameras, getReadingsHistory, restartAgent, stopAgent } from '../services/apiService.ts';
 import Card from '../components/common/Card.tsx';
 import InteractiveMap from '../components/common/InteractiveMap.tsx';
 import Pagination from '../components/common/Pagination.tsx';
@@ -169,43 +168,79 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
   const [selectedSensor, setSelectedSensor] = useState<Sensor | null>(null);
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchStationData = async () => {
         try {
             setIsLoading(true);
             setError(null);
-            const [stationsData, sensorsData, camerasData, readingsData] = await Promise.all([
-                getStations(), getSensors(), getCameras(), getReadings()
+            const [stationsData, allSensors, allCameras] = await Promise.all([
+                getStations(), getSensors(), getCameras()
             ]);
             
             const currentStation = stationsData.find(s => s.id === stationId);
             if (currentStation) {
                 setStation(currentStation);
-                const stationSensors = sensorsData.filter(s => s.stationId === stationId);
+                const stationSensors = allSensors.filter(s => s.stationId === stationId);
                 setSensors(stationSensors);
-                setCameras(camerasData.filter(c => c.stationId === stationId));
-                setReadings(readingsData.filter(r => r.stationId === stationId));
+                setCameras(allCameras.filter(c => c.stationId === stationId));
             } else {
                 throw new Error("İstasyon bulunamadı");
             }
 
-        } catch (err) {
-            setError('İstasyon detayları yüklenirken bir hata oluştu.');
+        } catch (err: any) {
+            setError('İstasyon detayları yüklenirken bir hata oluştu: ' + err.message);
             console.error(err);
         } finally {
             setIsLoading(false);
         }
     };
-    fetchData();
     
+    fetchStationData();
+
+    // Set initial date range for the filter inputs
     const now = new Date();
-    const yesterday = new Date();
-    yesterday.setDate(now.getDate() - 1);
+    const twoDaysAgo = new Date();
+    twoDaysAgo.setDate(now.getDate() - 2);
     setDateFilter({
-        start: toDateTimeLocal(yesterday),
+        start: toDateTimeLocal(twoDaysAgo),
         end: toDateTimeLocal(now)
     });
-
   }, [stationId]);
+
+  // Effect to fetch readings when station, sensors, or date filter changes
+  useEffect(() => {
+      const fetchReadings = async () => {
+          if (!stationId || sensors.length === 0 || !dateFilter.start || !dateFilter.end) {
+              setReadings([]);
+              return;
+          }
+
+          // FIX: Add explicit type annotation to fix type inference issue
+          const sensorTypesForStation: string[] = [...new Set(sensors.map(s => s.type))];
+          if (sensorTypesForStation.length === 0) {
+              setReadings([]);
+              return;
+          }
+          
+          try {
+              const readingsData = await getReadingsHistory({
+                  stationIds: [stationId],
+                  sensorTypes: sensorTypesForStation,
+                  start: dateFilter.start,
+                  end: dateFilter.end,
+              });
+              setReadings(readingsData);
+          } catch (err) {
+              // Don't set a global error for this, just show empty table. Log it.
+              console.error('İstasyon verileri yüklenirken bir hata oluştu:', err);
+              setReadings([]); // Clear readings on error
+          }
+      };
+
+      // Only fetch if the tab is active to avoid unnecessary calls
+      if (activeTab === 'Veriler' || activeTab === 'Sensörler') {
+        fetchReadings();
+      }
+  }, [stationId, sensors, dateFilter, activeTab]);
   
   useEffect(() => {
       if (activeTab === 'Kameralar' && cameras.length > 0 && !selectedCameraId) {
@@ -245,21 +280,14 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
   };
 
   const filteredSensorReadings = useMemo(() => {
-    const startDate = dateFilter.start ? new Date(dateFilter.start).getTime() : null;
-    const endDate = dateFilter.end ? new Date(dateFilter.end).getTime() : null;
-
-    return readings
-        .filter(reading => {
-            const readingDate = new Date(reading.timestamp).getTime();
-            if (startDate && readingDate < startDate) return false;
-            if (endDate && readingDate > endDate) return false;
-            return true;
-        })
-        .filter(reading =>
-            reading.sensorName.toLowerCase().includes(dataSearchTerm.toLowerCase()) ||
-            reading.sensorType.toLowerCase().includes(dataSearchTerm.toLowerCase())
-        );
-    }, [readings, dataSearchTerm, dateFilter]);
+    if (!dataSearchTerm) {
+        return readings;
+    }
+    return readings.filter(reading =>
+        reading.sensorName.toLowerCase().includes(dataSearchTerm.toLowerCase()) ||
+        reading.sensorType.toLowerCase().includes(dataSearchTerm.toLowerCase())
+    );
+  }, [readings, dataSearchTerm]);
 
 
   const paginatedSensorReadings = useMemo(() => {
