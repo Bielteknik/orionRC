@@ -214,8 +214,8 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
               return;
           }
 
-          // FIX: Add explicit type annotation to fix type inference issue
-          const sensorTypesForStation: string[] = [...new Set(sensors.map(s => s.type))];
+          // FIX: Use Array.from to correctly create a string array from the Set.
+          const sensorTypesForStation: string[] = Array.from(new Set(sensors.map(s => s.type)));
           if (sensorTypesForStation.length === 0) {
               setReadings([]);
               return;
