@@ -430,15 +430,18 @@ apiRouter.get('/sensors', async (req: ExpressRequest, res: ExpressResponse) => {
 // FIX: Add explicit types for req and res parameters.
 apiRouter.post('/sensors', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
-        const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation, readOrder } = req.body;
+        const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
         const id = `S${Date.now()}`;
         const parserConfigStr = typeof parserConfig === 'string' ? parserConfig : JSON.stringify(parserConfig || {});
         const interfaceConfigStr = typeof interfaceConfig === 'string' ? interfaceConfig : JSON.stringify(interfaceConfig || {});
 
+        const maxOrderResult = await db.get("SELECT MAX(read_order) as maxOrder FROM sensors");
+        const nextReadOrder = (maxOrderResult?.maxOrder || 0) + 1;
+
         await db.run(
             `INSERT INTO sensors (id, name, station_id, type, unit, status, interface, parser_config, config, read_frequency, is_active, last_update, reference_value, reference_operation, read_order) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            id, name, stationId, type, unit, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfigStr, interfaceConfigStr, readFrequency, isActive, new Date().toISOString(), referenceValue, referenceOperation, readOrder
+            id, name, stationId, type, unit, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfigStr, interfaceConfigStr, readFrequency, isActive, new Date().toISOString(), referenceValue, referenceOperation, nextReadOrder
         );
         if (stationId) queueCommand(stationId, 'REFRESH_CONFIG');
         res.status(201).json({ id });
@@ -464,7 +467,6 @@ apiRouter.put('/sensors/:id', async (req: ExpressRequest, res: ExpressResponse) 
         if (fields.readFrequency !== undefined) { updates.push('read_frequency = ?'); params.push(fields.readFrequency); }
         if (fields.referenceValue !== undefined) { updates.push('reference_value = ?'); params.push(fields.referenceValue); }
         if (fields.referenceOperation !== undefined) { updates.push('reference_operation = ?'); params.push(fields.referenceOperation); }
-        if (fields.readOrder !== undefined) { updates.push('read_order = ?'); params.push(fields.readOrder); }
         
         if (fields.parserConfig !== undefined) { 
             updates.push('parser_config = ?'); 

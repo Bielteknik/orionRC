@@ -350,30 +350,42 @@ class Agent {
         if (!this.running) return;
         if (!this.config) {
             console.warn('Yapılandırma yok, sıralı döngü atlanıyor.');
-            this.scheduleNextSequentialLoop(); // Retry after interval
+            this.scheduleNextSequentialLoop();
             return;
         }
-
+    
         console.log('--- Sıralı Okuma Döngüsü Başladı ---');
         this.setState(AgentState.READING);
-        
+    
         const sortedSensors = this.config.sensors
             .filter(s => s.is_active && (s.read_order ?? 0) > 0)
             .sort((a, b) => (a.read_order ?? 0) - (b.read_order ?? 0));
-
+    
         if (sortedSensors.length === 0) {
             console.log('... Sıralı okuma için yapılandırılmış aktif sensör bulunamadı.');
         } else {
             for (const sensor of sortedSensors) {
-                const avgReadingPayload = await this.readAndAverageSensor(sensor, AVERAGING_DURATION_MS);
-                if (avgReadingPayload) {
-                    await addReading(sensor.id, avgReadingPayload.rawValue, avgReadingPayload.value);
+                if (!this.running) break; // Exit loop if agent is stopping
+    
+                const physicalInterfaces = ['i2c', 'serial', 'uart'];
+    
+                if (physicalInterfaces.includes(sensor.interface)) {
+                    // Physical sensor: Read for a duration and average the results
+                    const avgReadingPayload = await this.readAndAverageSensor(sensor, AVERAGING_DURATION_MS);
+                    if (avgReadingPayload) {
+                        await addReading(sensor.id, avgReadingPayload.rawValue, avgReadingPayload.value);
+                    }
+                } else {
+                    // Virtual/API sensor: Read only once
+                    console.log(`   Tek okuma yapılıyor: ${sensor.name}`);
+                    const reading = await this.performSingleReading(sensor);
+                    if (reading) {
+                        await addReading(sensor.id, reading.rawValue, reading.processedValue);
+                    }
                 }
-                 // If agent is stopped during a long loop, exit early.
-                if (!this.running) break;
             }
         }
-
+    
         console.log('--- Sıralı Okuma Döngüsü Tamamlandı ---');
         this.setState(AgentState.IDLE);
         this.scheduleNextSequentialLoop();
@@ -460,35 +472,66 @@ class Agent {
     private processRawValue(rawValue: any, sensor: SensorConfig): any {
         if (rawValue === null || rawValue === undefined) return null;
 
-        let processedValue = { ...rawValue }; // Work on a copy
-
         const refVal = sensor.reference_value;
         const refOp = sensor.reference_operation;
-
-        if (sensor.type === 'Kar Yüksekliği' && typeof rawValue.distance_cm === 'number') {
-            if (typeof refVal === 'number' && refOp === 'subtract') {
-                let calculated = refVal - rawValue.distance_cm;
-                processedValue = { snow_depth_cm: calculated > 0 ? calculated : 0 };
-            } else {
-                processedValue = { snow_depth_cm: rawValue.distance_cm };
+        
+        // Per UI convention, a reference value of 999 means "do not calibrate".
+        if (typeof refVal !== 'number' || refVal === 999 || !refOp || refOp === 'none') {
+            // No calibration is applied, but we might still need to rename the key for snow depth
+            if (sensor.type === 'Kar Yüksekliği' && typeof rawValue.distance_cm === 'number') {
+                // Here, we just convert distance to snow_depth without calibration
+                return { snow_depth_cm: rawValue.distance_cm };
             }
-        } else if (typeof rawValue === 'object' && typeof refVal === 'number' && refOp && refOp !== 'none') {
+            return rawValue; // Return raw value as is
+        }
+
+        // --- Apply Calibration ---
+        
+        // Special case for Distance sensor being converted to Snow Depth
+        if (sensor.type === 'Kar Yüksekliği' && typeof rawValue.distance_cm === 'number') {
+            let depth = rawValue.distance_cm;
+            if (refOp === 'subtract') {
+                depth = refVal - rawValue.distance_cm;
+            } else if (refOp === 'add') {
+                depth = refVal + rawValue.distance_cm;
+            }
+            return { snow_depth_cm: depth > 0 ? depth : 0 };
+        } 
+        
+        // Generic calibration for other object-based values
+        if (typeof rawValue === 'object' && rawValue !== null && !Array.isArray(rawValue)) {
             const keys = Object.keys(rawValue);
+            // Calibrate if it's a simple object with one numeric value
             if (keys.length === 1 && typeof rawValue[keys[0]] === 'number') {
                 const key = keys[0];
                 const originalValue = rawValue[key];
-                let calibratedValue = originalValue;
-                if (refOp === 'subtract') calibratedValue = refVal - originalValue;
-                else if (refOp === 'add') calibratedValue = refVal + originalValue;
-                processedValue = { [key]: calibratedValue };
+                let newValue = originalValue;
+
+                if (refOp === 'subtract') newValue = refVal - originalValue;
+                else if (refOp === 'add') newValue = refVal + originalValue;
+                
+                return { [key]: newValue };
             }
+        } 
+        
+        // Generic calibration for primitive number values
+        if (typeof rawValue === 'number') {
+            if (refOp === 'subtract') return refVal - rawValue;
+            if (refOp === 'add') return refVal + rawValue;
         }
-        return processedValue;
+
+        // If no calibration logic matched, return the original raw value
+        return rawValue;
     }
     
     private async performSingleReading(sensor: SensorConfig): Promise<{ rawValue: any, processedValue: any } | null> {
         const driver = this.driverInstances.get(sensor.id);
         if (!driver) return null;
+
+        // Skip reading for virtual sensors unless forced, as they are triggered by commands
+        if (sensor.interface === 'virtual' && sensor.parser_config?.driver === 'image_analyzer') {
+            return null; // Don't perform periodic reads for image analysis sensors
+        }
 
         console.log(`   Okunuyor: ${sensor.name} (${sensor.type})`);
         
