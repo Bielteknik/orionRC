@@ -1,3 +1,4 @@
+
 import { ISensorDriver } from "../types.js";
 import { SerialPort } from 'serialport';
 import { Buffer } from 'buffer';

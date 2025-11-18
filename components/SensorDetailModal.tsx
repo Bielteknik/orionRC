@@ -1,10 +1,8 @@
 
-
-
 import React, { useMemo, useState, useEffect } from 'react';
 import { Sensor } from '../types.ts';
-import { ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, SensorIcon as GenericSensorIcon, XIcon } from './icons/Icons.tsx';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, SensorIcon as GenericSensorIcon, XIcon, ExclamationCircleIcon } from './icons/Icons.tsx';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Scatter } from 'recharts';
 import { useTheme } from './ThemeContext.tsx';
 import { getRawReadingsHistory, getReadingsHistory } from '../services/apiService.ts';
 import { getNumericValue, toDateTimeLocal } from '../utils/helpers.ts';
@@ -17,6 +15,8 @@ interface SensorReading {
     timestamp: string;
     sensorType: string;
     interface?: string;
+    isAnomaly?: boolean;
+    anomalyReason?: string;
 }
 
 interface RawSensorReading {
@@ -132,6 +132,8 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
             const key = roundToNearestSecond(r.timestamp);
             const entry = dataMap.get(key) || { timestamp: r.timestamp };
             entry['İşlenmiş Değer'] = getNumericValue(r.value, r.sensorType, r.interface);
+            entry['isAnomaly'] = r.isAnomaly; // Add anomaly flag for chart
+            entry['anomalyReason'] = r.anomalyReason; // Add reason
             dataMap.set(key, entry);
         });
     
@@ -153,6 +155,46 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
     }, [processedReadings, rawReadings, sensor.type, sensor.interface]);
 
     const latestValue = latestReadings.length > 0 ? formatDisplayValue(latestReadings[0]) : 'N/A';
+    
+    // Custom dot for line chart to show anomalies
+    const CustomDot = (props: any) => {
+        const { cx, cy, payload } = props;
+        if (payload && payload.isAnomaly) {
+            return (
+                <g>
+                    <circle cx={cx} cy={cy} r={6} fill="#EF4444" fillOpacity={0.3} className="animate-ping" />
+                    <circle cx={cx} cy={cy} r={4} fill="#EF4444" stroke="#fff" strokeWidth={1} />
+                </g>
+            );
+        }
+        // Default dot style
+        return <circle cx={cx} cy={cy} r={3} fill="#F97316" stroke="none" />;
+    };
+
+    // Custom Tooltip
+    const CustomTooltip = ({ active, payload, label }: any) => {
+        if (active && payload && payload.length) {
+            const data = payload[0].payload;
+            return (
+                <div className={`p-3 rounded-lg border shadow-lg text-sm ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'}`}>
+                    <p className="font-semibold mb-1">{label}</p>
+                    {payload.map((entry: any, index: number) => (
+                        <div key={index} className="flex items-center gap-2">
+                             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
+                             <span>{entry.name}: {entry.value}</span>
+                        </div>
+                    ))}
+                    {data.isAnomaly && (
+                        <div className="mt-2 text-danger font-semibold text-xs border-t border-gray-200 dark:border-gray-600 pt-1">
+                            ⚠️ {data.anomalyReason || 'Anomali Tespit Edildi'}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+        return null;
+    };
+
 
     return (
         <div className={`fixed inset-0 z-50 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
@@ -207,15 +249,17 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
                                         <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#374151' : '#E5E7EB'} />
                                         <XAxis dataKey="name" tick={{ fontSize: 10, fill: tickColor }} angle={-20} textAnchor="end" height={40} />
                                         <YAxis tick={{ fontSize: 10, fill: tickColor }} unit={sensor.unit} domain={['dataMin - 1', 'dataMax + 1']} />
-                                        <Tooltip 
-                                            contentStyle={{ 
-                                                backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF', 
-                                                border: `1px solid ${theme === 'dark' ? '#374151' : '#E5E7EB'}` 
-                                            }}
-                                            labelStyle={{ color: theme === 'dark' ? '#F3F4F6' : '#111827' }}
-                                        />
+                                        <Tooltip content={<CustomTooltip />} />
                                         <Legend />
-                                        <Line type="monotone" dataKey="İşlenmiş Değer" name="İşlenmiş Değer" stroke="#F97316" strokeWidth={2} dot={false} activeDot={{ r: 6 }} />
+                                        <Line 
+                                            type="monotone" 
+                                            dataKey="İşlenmiş Değer" 
+                                            name="İşlenmiş Değer" 
+                                            stroke="#F97316" 
+                                            strokeWidth={2} 
+                                            dot={<CustomDot />} 
+                                            activeDot={{ r: 6 }} 
+                                        />
                                         <Line type="monotone" dataKey="Ham Değer" name="Ham Değer" stroke="#9CA3AF" strokeWidth={2} strokeDasharray="3 3" dot={false} activeDot={{ r: 6 }} />
                                     </LineChart>
                                 </ResponsiveContainer>
@@ -253,9 +297,19 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
                                             </thead>
                                             <tbody>
                                                 {latestReadings.map(reading => (
-                                                    <tr key={reading.id} className="border-b border-gray-200 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                                                        <td className="px-6 py-3 font-mono text-gray-800 dark:text-gray-200">{new Date(reading.timestamp).toLocaleString('tr-TR')}</td>
-                                                        <td className="px-6 py-3 text-right font-semibold text-gray-900 dark:text-gray-100">{`${formatDisplayValue(reading)} ${reading.unit || ''}`}</td>
+                                                    <tr key={reading.id} className={`border-b border-gray-200 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-900/50 ${reading.isAnomaly ? 'bg-red-50 dark:bg-red-900/20' : ''}`}>
+                                                        <td className="px-6 py-3 font-mono text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                                                            {reading.isAnomaly && (
+                                                                <div className="group relative">
+                                                                    <ExclamationCircleIcon className="w-4 h-4 text-danger cursor-help" />
+                                                                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
+                                                                        {reading.anomalyReason || "Anomali Tespit Edildi"}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            {new Date(reading.timestamp).toLocaleString('tr-TR')}
+                                                        </td>
+                                                        <td className={`px-6 py-3 text-right font-semibold ${reading.isAnomaly ? 'text-danger' : 'text-gray-900 dark:text-gray-100'}`}>{`${formatDisplayValue(reading)} ${reading.unit || ''}`}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>

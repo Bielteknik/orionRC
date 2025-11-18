@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Station, Sensor, Camera, AlertRule, Report, ReportSchedule, Notification } from '../types.ts';
+import { Station, Sensor, Camera, AlertRule, Report, ReportSchedule, Notification, NetworkStats } from '../types.ts';
 
 const API_BASE_URL = '/api';
 
@@ -19,6 +19,10 @@ const handleError = (error: any, context: string): Promise<never> => {
 
 // Agent Status
 export const getAgentStatus = (): Promise<{ status: string; lastUpdate: string | null }> => apiClient.get('/agent-status').then(res => res.data).catch(e => handleError(e, 'fetching agent status'));
+
+// Network Stats
+export const getNetworkStats = (): Promise<NetworkStats> => apiClient.get('/network-stats').then(res => res.data).catch(e => handleError(e, 'fetching network stats'));
+
 
 // Stations
 export const getStations = (): Promise<Station[]> => apiClient.get('/stations').then(res => res.data).catch(e => handleError(e, 'fetching stations'));
@@ -102,3 +106,7 @@ export const deleteReportSchedule = (id: string): Promise<void> => apiClient.del
 export const getNotifications = (): Promise<Notification[]> => apiClient.get('/notifications').then(res => res.data).catch(e => handleError(e, 'fetching notifications'));
 export const markAllNotificationsAsRead = (): Promise<void> => apiClient.post('/notifications/mark-all-read').then(res => res.data).catch(e => handleError(e, 'marking all notifications as read'));
 export const clearAllNotifications = (): Promise<void> => apiClient.delete('/notifications/clear-all').then(res => res.data).catch(e => handleError(e, 'clearing all notifications'));
+
+// Maintenance
+export const cleanDuplicateReadings = (): Promise<{ message: string, deletedCount: number }> => apiClient.post('/maintenance/clean-duplicates').then(res => res.data).catch(e => handleError(e, 'cleaning duplicates'));
+export const cleanInvalidReadings = (): Promise<{ message: string, deletedCount: number }> => apiClient.post('/maintenance/clean-invalid').then(res => res.data).catch(e => handleError(e, 'cleaning invalid readings'));

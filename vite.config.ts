@@ -26,11 +26,6 @@ export default defineConfig(({ mode }) => {
       define: {
         // FIX: Use env.API_KEY as per the coding guidelines to source the API key.
         'process.env.API_KEY': JSON.stringify(env.API_KEY),
-      },
-      build: {
-        rollupOptions: {
-          external: ['xlsx']
-        }
       }
     };
 });

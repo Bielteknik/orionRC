@@ -10,7 +10,7 @@ import Skeleton from '../components/common/Skeleton.tsx';
 import { ArrowLeftIcon, SensorIcon, CameraIcon, SettingsIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, OnlineIcon, OfflineIcon, PlayIcon, PhotographIcon, SearchIcon, ExclamationIcon, DownloadIcon, CalendarIcon, AgentIcon } from '../components/icons/Icons.tsx';
 import SensorDetailModal from '../components/SensorDetailModal.tsx'; // Import the new modal
 import { LineChart, Line, YAxis, ResponsiveContainer, Area } from 'recharts';
-import { getNumericValue, formatTimeAgo } from '../utils/helpers.ts';
+import { getNumericValue, formatTimeAgo, toDateTimeLocal } from '../utils/helpers.ts';
 
 
 interface StationDetailProps {
@@ -39,12 +39,6 @@ const statusInfo: Record<string, { text: string, className: string }> = {
     active: { text: 'Aktif', className: 'bg-gray-800 text-white' },
     inactive: { text: 'Pasif', className: 'bg-gray-200 text-gray-700' },
     maintenance: { text: 'Bakımda', className: 'bg-amber-500/20 text-amber-600' },
-};
-
-const toDateTimeLocal = (date: Date) => {
-  const tzoffset = date.getTimezoneOffset() * 60000;
-  const localISOTime = new Date(date.getTime() - tzoffset).toISOString().slice(0, 16);
-  return localISOTime;
 };
 
 const SensorCard: React.FC<{ sensor: Sensor, historyData: SensorReading[], onClick: () => void }> = ({ sensor, historyData, onClick }) => {

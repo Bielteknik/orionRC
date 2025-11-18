@@ -102,6 +102,63 @@ const agentAuth = (req: ExpressRequest, res: ExpressResponse, next: ExpressNextF
     }
 };
 
+// --- ANOMALY DETECTION HELPER ---
+const detectAnomaly = (currentValue: any, previousValue: any, sensorType: string): { isAnomaly: boolean; reason: string | null } => {
+    if (typeof currentValue !== 'number') {
+        // Extract number from object if possible (e.g. {temperature: 25})
+        if (currentValue && typeof currentValue === 'object') {
+             const val = Object.values(currentValue).find(v => typeof v === 'number');
+             if (typeof val === 'number') currentValue = val;
+             else return { isAnomaly: false, reason: null };
+        } else {
+            return { isAnomaly: false, reason: null };
+        }
+    }
+
+    // 1. Range Check
+    const ranges: Record<string, [number, number]> = {
+        'Sıcaklık': [-50, 80],
+        'Nem': [0, 100],
+        'Rüzgar Hızı': [0, 250], // km/h?
+        'Mesafe': [0, 1000], // cm
+    };
+
+    if (ranges[sensorType]) {
+        const [min, max] = ranges[sensorType];
+        if (currentValue < min || currentValue > max) {
+            return { isAnomaly: true, reason: `Değer Aralığı Dışı (${currentValue} < ${min} veya > ${max})` };
+        }
+    }
+
+    // 2. Spike Check (Requires previous value)
+    if (previousValue !== null && previousValue !== undefined) {
+        let prevVal = previousValue;
+         if (typeof prevVal !== 'number') {
+             if (prevVal && typeof prevVal === 'object') {
+                 const val = Object.values(prevVal).find(v => typeof v === 'number');
+                 if (typeof val === 'number') prevVal = val;
+             }
+        }
+
+        if (typeof prevVal === 'number') {
+             const diff = Math.abs(currentValue - prevVal);
+             // Simple thresholds for sudden change
+             const spikeThresholds: Record<string, number> = {
+                 'Sıcaklık': 15, // 15 degrees change in one reading is weird
+                 'Nem': 40, // 40% jump
+                 'Mesafe': 200, // 2 meters jump without context might be weird, but snow can fall? Keep high.
+             };
+             
+             if (spikeThresholds[sensorType] && diff > spikeThresholds[sensorType]) {
+                  return { isAnomaly: true, reason: `Ani Sıçrama (${prevVal} -> ${currentValue})` };
+             }
+        }
+    }
+
+    return { isAnomaly: false, reason: null };
+};
+
+
 // --- API ROUTER SETUP ---
 const apiRouter = express.Router();
 
@@ -167,15 +224,34 @@ apiRouter.post('/submit-reading', agentAuth, async (req: ExpressRequest, res: Ex
             return res.status(400).json({ error: 'Bad Request: sensor and value fields are required.' });
         }
         
-        const sensor = await db.get("SELECT id FROM sensors WHERE id = ?", sensor_id);
+        const sensor = await db.get("SELECT id, type FROM sensors WHERE id = ?", sensor_id);
         if (!sensor) {
             console.warn(`Reading submitted for unknown sensor ID: ${sensor_id}`);
             return res.status(404).json({ error: 'Sensor not found.' });
         }
+        
+        // Anomaly Detection Logic
+        let isAnomaly = false;
+        let anomalyReason = null;
+
+        // Get the last reading to compare
+        const lastReading = await db.get("SELECT value FROM readings WHERE sensor_id = ? ORDER BY timestamp DESC LIMIT 1", sensor_id);
+        const prevValue = lastReading ? safeJSONParse(lastReading.value, null) : null;
+
+        const anomalyCheck = detectAnomaly(value, prevValue, sensor.type);
+        isAnomaly = anomalyCheck.isAnomaly;
+        anomalyReason = anomalyCheck.reason;
+
+        if (isAnomaly) {
+            console.log(`[ANOMALY DETECTED] Sensor: ${sensor_id} (${sensor.type}), Reason: ${anomalyReason}, Value:`, value);
+        }
 
         // Store the processed value
         const valueStr = JSON.stringify(value);
-        await db.run("INSERT INTO readings (sensor_id, value, timestamp) VALUES (?, ?, ?)", sensor_id, valueStr, timestamp);
+        await db.run(
+            "INSERT INTO readings (sensor_id, value, timestamp, is_anomaly, anomaly_reason) VALUES (?, ?, ?, ?, ?)",
+            sensor_id, valueStr, timestamp, isAnomaly ? 1 : 0, anomalyReason
+        );
         await db.run("UPDATE sensors SET value = ?, last_update = ?, health_status = ? WHERE id = ?", valueStr, timestamp, 'Sağlıklı', sensor_id);
 
         // Store the raw value if it was provided by the agent
@@ -272,6 +348,50 @@ apiRouter.get('/agent-status', (req: ExpressRequest, res: ExpressResponse) => {
     }
     res.json(agentStatus);
 });
+
+// NETWORK STATS ENDPOINT
+apiRouter.get('/network-stats', async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        
+        // 1. Total readings in last hour
+        const readingsCountResult = await db.get(`SELECT COUNT(*) as count FROM readings WHERE timestamp > ?`, oneHourAgo);
+        const readingsLastHour = readingsCountResult?.count || 0;
+        const rpm = Math.round(readingsLastHour / 60); // Readings per minute
+
+        // 2. Active Stations count
+        const stations = await db.all(`SELECT id, last_update FROM stations`);
+        const activeStations = stations.filter(s => {
+            if (!s.last_update) return false;
+            return (new Date().getTime() - new Date(s.last_update).getTime()) < 90000; // 90s threshold
+        }).length;
+        const totalStations = stations.length;
+        const activePercentage = totalStations > 0 ? Math.round((activeStations / totalStations) * 100) : 0;
+
+        // 3. Last Data Packet Time
+        const lastReading = await db.get(`SELECT timestamp FROM readings ORDER BY timestamp DESC LIMIT 1`);
+        const lastPacketTime = lastReading?.timestamp || null;
+
+        // 4. System Load (Mocked slightly based on RPM)
+        let systemLoad = 'Normal';
+        if (rpm > 100) systemLoad = 'Yüksek';
+        else if (rpm > 500) systemLoad = 'Çok Yüksek';
+
+        res.json({
+            readingsLastHour,
+            rpm,
+            activeStations,
+            totalStations,
+            activePercentage,
+            lastPacketTime,
+            systemLoad
+        });
+    } catch (error) {
+        console.error("Error fetching network stats:", error);
+        res.status(500).json({ error: "Failed to fetch network stats." });
+    }
+});
+
 
 // STATIONS
 // FIX: Add explicit types for req and res parameters.
@@ -707,14 +827,14 @@ apiRouter.post('/cameras/:id/capture', async (req: ExpressRequest, res: ExpressR
 apiRouter.get('/readings', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const readings = await db.all(`
-            SELECT r.id, r.sensor_id as sensorId, s.name as sensorName, s.type as sensorType, s.unit, s.interface, st.id as stationId, st.name as stationName, r.value, r.timestamp 
+            SELECT r.id, r.sensor_id as sensorId, s.name as sensorName, s.type as sensorType, s.unit, s.interface, st.id as stationId, st.name as stationName, r.value, r.timestamp, r.is_anomaly as isAnomaly, r.anomaly_reason as anomalyReason
             FROM readings r
             JOIN sensors s ON r.sensor_id = s.id
             JOIN stations st ON s.station_id = st.id
             ORDER BY r.timestamp DESC
             LIMIT 100
         `);
-        res.json(readings.map(r => ({ ...r, value: safeJSONParse(r.value, null) })));
+        res.json(readings.map(r => ({ ...r, value: safeJSONParse(r.value, null), isAnomaly: !!r.isAnomaly })));
     } catch (error) {
         console.error("Error fetching readings:", error);
         res.status(500).json({ error: "Failed to fetch readings." });
@@ -750,18 +870,18 @@ apiRouter.get('/readings/history', async (req: ExpressRequest, res: ExpressRespo
         let dateFilterClause = '';
         const dateParams: string[] = [];
         if (startDate && typeof startDate === 'string') {
-            dateFilterClause += ' AND timestamp >= ?';
+            dateFilterClause += ' AND datetime(timestamp) >= datetime(?)';
             dateParams.push(startDate);
         }
         if (endDate && typeof endDate === 'string') {
-            dateFilterClause += ' AND timestamp <= ?';
+            dateFilterClause += ' AND datetime(timestamp) <= datetime(?)';
             dateParams.push(endDate);
         }
 
         // 3. Fetch processed readings
         const queryParams = [...sensorIdList, ...dateParams];
         const processedReadings = await db.all(`
-            SELECT id, timestamp, sensor_id, value 
+            SELECT id, timestamp, sensor_id, value, is_anomaly, anomaly_reason
             FROM readings
             WHERE sensor_id IN (${placeholders(sensorIdList)}) ${dateFilterClause}
             ORDER BY timestamp DESC
@@ -782,6 +902,8 @@ apiRouter.get('/readings/history', async (req: ExpressRequest, res: ExpressRespo
                 sensorType: sensor.type,
                 interface: sensor.interface,
                 unit: sensor.unit,
+                isAnomaly: !!r.is_anomaly,
+                anomalyReason: r.anomaly_reason
             }
         }).filter(Boolean);
 
@@ -807,11 +929,11 @@ apiRouter.get('/raw-readings/history', async (req: ExpressRequest, res: ExpressR
         const params: (string | undefined)[] = [sensorId];
 
         if (startDate && typeof startDate === 'string') {
-            dateFilterClause += ' AND r.timestamp >= ?';
+            dateFilterClause += ' AND datetime(r.timestamp) >= datetime(?)';
             params.push(startDate);
         }
         if (endDate && typeof endDate === 'string') {
-            dateFilterClause += ' AND r.timestamp <= ?';
+            dateFilterClause += ' AND datetime(r.timestamp) <= datetime(?)';
             params.push(endDate);
         }
 
@@ -1063,6 +1185,54 @@ apiRouter.delete('/notifications/clear-all', async (req: ExpressRequest, res: Ex
         res.status(500).json({ error: "Failed to clear all notifications." });
     }
 });
+
+// --- MAINTENANCE ---
+apiRouter.post('/maintenance/clean-duplicates', async (req, res) => {
+    try {
+        const readingsResult = await db.run(`
+            DELETE FROM readings
+            WHERE id NOT IN (
+                SELECT MIN(id)
+                FROM readings
+                GROUP BY sensor_id, timestamp, value
+            );
+        `);
+        const rawReadingsResult = await db.run(`
+            DELETE FROM raw_readings
+            WHERE id NOT IN (
+                SELECT MIN(id)
+                FROM raw_readings
+                GROUP BY sensor_id, timestamp, raw_value
+            );
+        `);
+        const deletedCount = (readingsResult.changes || 0) + (rawReadingsResult.changes || 0);
+        console.log(`[MAINTENANCE] Deleted ${deletedCount} duplicate readings.`);
+        res.status(200).json({ message: `${deletedCount} adet tekrar eden kayıt silindi.`, deletedCount });
+    } catch (error) {
+        console.error("Error cleaning duplicate readings:", error);
+        res.status(500).json({ error: "Failed to clean duplicate readings." });
+    }
+});
+
+apiRouter.post('/maintenance/clean-invalid', async (req, res) => {
+    try {
+        const readingsResult = await db.run(`
+            DELETE FROM readings
+            WHERE value = '{}' OR value = 'null' OR value = 'undefined';
+        `);
+        const rawReadingsResult = await db.run(`
+            DELETE FROM raw_readings
+            WHERE raw_value = '{}' OR raw_value = 'null' OR raw_value = 'undefined';
+        `);
+        const deletedCount = (readingsResult.changes || 0) + (rawReadingsResult.changes || 0);
+        console.log(`[MAINTENANCE] Deleted ${deletedCount} invalid readings.`);
+        res.status(200).json({ message: `${deletedCount} adet geçersiz kayıt silindi.`, deletedCount });
+    } catch (error) {
+        console.error("Error cleaning invalid readings:", error);
+        res.status(500).json({ error: "Failed to clean invalid readings." });
+    }
+});
+
 
 // ANALYSIS
 const GEMINI_SNOW_DEPTH_PROMPT = `Sen meteorolojik veri için görüntü analizi yapan bir uzmansın. Görevin, kar cetveli içeren bu görüntüden santimetre cinsinden kar derinliğini hassas bir şekilde belirlemek.

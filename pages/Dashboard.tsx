@@ -1,5 +1,6 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+
+import React, { useState, useEffect, useMemo, useCallback, HTMLAttributes } from 'react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, AreaChart, Area } from 'recharts';
 import { Station, Sensor, WidgetConfig, WidgetType } from '../types.ts';
 import { getReadingsHistory } from '../services/apiService.ts';
@@ -9,11 +10,12 @@ import MultiSelectDropdown from '../components/common/MultiSelectDropdown.tsx';
 import AddWidgetModal from '../components/AddWidgetModal.tsx';
 import ChartSettingsModal, { ChartStyle } from '../components/ChartSettingsModal.tsx';
 import WindRoseChart from '../components/WindRoseChart.tsx';
+import NetworkHealthWidget from '../components/NetworkHealthWidget.tsx';
 import { ChartBarIcon, MapIcon, AddIcon, PaletteIcon, XIcon, ThermometerIcon, DropletIcon, WindIcon, PressureIcon, CalendarIcon, SensorIcon as GenericSensorIcon, GaugeIcon } from '../components/icons/Icons.tsx';
 import { getNumericValue } from '../utils/helpers.ts';
 import Skeleton from '../components/common/Skeleton.tsx';
 
-const SENSOR_STYLES: { [key: string]: { icon: React.ReactElement, bg: string, text: string } } = {
+const SENSOR_STYLES: { [key: string]: { icon: React.ReactElement<HTMLAttributes<SVGElement>>, bg: string, text: string } } = {
   'Sıcaklık': { icon: <ThermometerIcon />, bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-600 dark:text-red-400' },
   'Nem': { icon: <DropletIcon />, bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-600 dark:text-blue-400' },
   'Rüzgar Hızı': { icon: <WindIcon />, bg: 'bg-cyan-100 dark:bg-cyan-900/50', text: 'text-cyan-600 dark:text-cyan-400' },
@@ -261,6 +263,7 @@ const Dashboard: React.FC<{
 
     const renderWidget = (widget: WidgetConfig) => {
         const dataForWidget = historyData.filter(d => d.sensorType === widget.config.sensorType);
+        if (!dataForWidget) return null;
 
         switch (widget.type) {
             case 'dataCard':
@@ -308,18 +311,20 @@ const Dashboard: React.FC<{
                     
                     {renderableWidgets.length > 0 ? (
                         <>
-                            {cardWidgets.length > 0 && (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                                    {cardWidgets.map(widget => (
-                                        <div key={widget.id} className="relative group">
-                                            {isLoadingHistory ? <Skeleton className="h-28 rounded-lg"/> : renderWidget(widget)}
-                                            <button onClick={() => handleRemoveWidget(widget.id)} className="absolute top-2 right-2 p-1 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-danger z-10">
-                                                <XIcon className="w-3 h-3"/>
-                                            </button>
-                                        </div>
-                                    ))}
+                             {/* Added Network Health Widget */}
+                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                                <div className="h-full">
+                                    <NetworkHealthWidget />
                                 </div>
-                            )}
+                                {cardWidgets.map(widget => (
+                                    <div key={widget.id} className="relative group h-full">
+                                        {isLoadingHistory ? <Skeleton className="h-full rounded-lg"/> : renderWidget(widget)}
+                                        <button onClick={() => handleRemoveWidget(widget.id)} className="absolute top-2 right-2 p-1 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-danger z-10">
+                                            <XIcon className="w-3 h-3"/>
+                                        </button>
+                                    </div>
+                                ))}
+                             </div>
 
                              {chartWidgets.length > 0 && (
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

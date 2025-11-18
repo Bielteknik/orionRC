@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Card from '../components/common/Card.tsx';
 import { AddIcon, EditIcon, DeleteIcon, StationIcon, BrainIcon } from '../components/icons/Icons.tsx';
 import { AlertRule, Severity, AlertCondition, Station, Sensor } from '../types.ts';
-import { getStations, getSensors, getDefinitions, getAlertRules, addDefinition, updateDefinition, deleteDefinition, getGlobalReadFrequency, setGlobalReadFrequency } from '../services/apiService.ts';
+import { getStations, getSensors, getDefinitions, getAlertRules, addDefinition, updateDefinition, deleteDefinition, getGlobalReadFrequency, setGlobalReadFrequency, cleanDuplicateReadings, cleanInvalidReadings } from '../services/apiService.ts';
 import DefinitionModal from '../components/DefinitionModal.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
 
@@ -141,6 +141,9 @@ const Definitions: React.FC = () => {
         title: string;
     }>({ type: null, item: undefined, title: '' });
 
+    const [maintenanceMessage, setMaintenanceMessage] = useState('');
+    const [isMaintaining, setIsMaintaining] = useState(false);
+
     const fetchData = useCallback(async () => {
         try {
             setIsLoading(true);
@@ -232,6 +235,21 @@ const Definitions: React.FC = () => {
         }
     };
 
+    const handleMaintenanceAction = async (action: 'duplicates' | 'invalid') => {
+        setIsMaintaining(true);
+        setMaintenanceMessage('');
+        try {
+            const apiCall = action === 'duplicates' ? cleanDuplicateReadings : cleanInvalidReadings;
+            const result = await apiCall();
+            setMaintenanceMessage(result.message || 'İşlem tamamlandı.');
+        } catch (error: any) {
+            setMaintenanceMessage(`Bir hata oluştu: ${error.message}`);
+        } finally {
+            setIsMaintaining(false);
+            setTimeout(() => setMaintenanceMessage(''), 8000);
+        }
+    };
+
 
     if (isLoading) {
         return (
@@ -317,6 +335,34 @@ const Definitions: React.FC = () => {
                 </Card>
             </div>
 
+            <div className="lg:col-span-3">
+                <Card>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-4">Veritabanı Bakımı</h3>
+                    {maintenanceMessage && (
+                        <div className={`p-3 rounded-md mb-4 text-sm font-medium ${maintenanceMessage.includes('hata') ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'}`}>
+                            {maintenanceMessage}
+                        </div>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                        <div>
+                            <h4 className="font-semibold text-gray-800">Tekrar Eden Kayıtlar</h4>
+                            <p className="text-sm text-muted mb-3">Aynı sensör için aynı zaman damgasına ve değere sahip birden fazla kaydı bulur ve sadece birini tutar.</p>
+                            <button onClick={() => handleMaintenanceAction('duplicates')} disabled={isMaintaining} className="btn-secondary">
+                                {isMaintaining ? 'Temizleniyor...' : 'Tekrar Edenleri Temizle'}
+                            </button>
+                        </div>
+                        <div className="border-t pt-4 md:border-t-0 md:border-l md:pl-6 border-gray-200">
+                            <h4 className="font-semibold text-gray-800">Geçersiz Kayıtlar</h4>
+                            <p className="text-sm text-muted mb-3">Değeri 'null' veya boş nesne '&#123; &#125;' olan hatalı kayıtları veritabanından siler.</p>
+                            <button onClick={() => handleMaintenanceAction('invalid')} disabled={isMaintaining} className="btn-secondary">
+                                {isMaintaining ? 'Temizleniyor...' : 'Geçersiz Kayıtları Temizle'}
+                            </button>
+                        </div>
+                    </div>
+                     <style>{`.btn-secondary { background-color: #E5E7EB; color: #1F2937; padding: 0.5rem 1rem; border-radius: 0.375rem; font-weight: 600; transition-colors: 0.2s; } .btn-secondary:hover:not(:disabled) { background-color: #D1D5DB; } .btn-secondary:disabled { opacity: 0.7; cursor: not-allowed; }`}</style>
+                </Card>
+            </div>
+            
             <div className="lg:col-span-3">
                 <Card>
                     <div className="flex justify-between items-center mb-4">

@@ -1,3 +1,4 @@
+
 import axios from 'axios';
 import fs from 'fs/promises';
 import path from 'path';
@@ -409,7 +410,8 @@ class Agent {
 
         while (Date.now() < endTime) {
             if (!this.running) break;
-            const reading = await this.performSingleReading(sensor, false); // Verbose false
+            // Pass verbose=false to suppress detailed logs during averaging loop
+            const reading = await this.performSingleReading(sensor, false); 
             if (reading && reading.rawValue !== null && reading.processedValue !== null) {
                 collectedRawValues.push(reading.rawValue);
                 collectedProcessedValues.push(reading.processedValue);

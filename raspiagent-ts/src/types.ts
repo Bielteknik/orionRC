@@ -1,3 +1,4 @@
+
 // Sunucudan gelen cihaz yapılandırması
 export interface DeviceConfig {
     sensors: SensorConfig[];

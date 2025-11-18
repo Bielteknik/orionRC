@@ -1,3 +1,4 @@
+
 import { ISensorDriver } from "../types.js";
 // Use the promisified version of i2c-bus for better async handling
 import i2c, { PromisifiedBus } from 'i2c-bus';

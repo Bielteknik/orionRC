@@ -149,3 +149,28 @@ export interface WidgetConfig {
     type: WidgetType;
     config: any; 
 }
+
+export interface SensorReading {
+    id: string;
+    sensorId: string;
+    stationId: string;
+    sensorName: string;
+    stationName: string;
+    sensorType: string;
+    value: any;
+    unit: string;
+    timestamp: string;
+    interface?: string;
+    isAnomaly?: boolean;
+    anomalyReason?: string;
+}
+
+export interface NetworkStats {
+    readingsLastHour: number;
+    rpm: number;
+    activeStations: number;
+    totalStations: number;
+    activePercentage: number;
+    lastPacketTime: string | null;
+    systemLoad: string;
+}

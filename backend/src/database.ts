@@ -80,6 +80,8 @@ export async function migrate() {
             sensor_id TEXT NOT NULL,
             value TEXT NOT NULL, -- JSON string for processed value
             timestamp TEXT NOT NULL,
+            is_anomaly BOOLEAN DEFAULT 0,
+            anomaly_reason TEXT,
             FOREIGN KEY(sensor_id) REFERENCES sensors(id) ON DELETE CASCADE
         );
 
@@ -167,6 +169,10 @@ export async function migrate() {
     
     // Column for sensor health status
     await addColumn('sensors', 'health_status', "TEXT DEFAULT 'Bilinmiyor'");
+
+    // Columns for Anomaly Detection
+    await addColumn('readings', 'is_anomaly', 'BOOLEAN DEFAULT 0');
+    await addColumn('readings', 'anomaly_reason', 'TEXT');
 
 
     // Seed global settings

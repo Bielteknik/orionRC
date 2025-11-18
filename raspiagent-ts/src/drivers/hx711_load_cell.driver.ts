@@ -1,3 +1,4 @@
+
 import { ISensorDriver } from "../types.js";
 import { SerialPort } from 'serialport';
 import { ReadlineParser } from '@serialport/parser-readline';
@@ -60,19 +61,16 @@ export default class Hx711Driver implements ISensorDriver {
                 
                 if (verbose) console.log(`     -> Ham Veri [HX711]: "${trimmedLine}"`);
 
-                if (trimmedLine.includes('-')) {
-                    if (verbose) console.log(`     -> Ayrıştırılan Veri [HX711]: 0.00 kg ("-" karakteri algılandı)`);
-                    cleanupAndResolve({ weight_kg: 0.0 });
-                    return;
-                }
-
-                const match = trimmedLine.match(/\d*\.?\d+/);
+                // This regex handles positive/negative integers and floats.
+                const match = trimmedLine.match(/-?\d*\.?\d+/);
 
                 if (match && match[0]) {
                     const weight = parseFloat(match[0]);
                     if (!isNaN(weight) && isFinite(weight)) {
-                        if (verbose) console.log(`     -> Ayrıştırılan Veri [HX711]: ${weight} kg`);
-                        cleanupAndResolve({ weight_kg: weight });
+                        // Treat small negative values from sensor drift as zero.
+                        const finalWeight = weight < 0 ? 0 : weight;
+                        if (verbose) console.log(`     -> Ayrıştırılan Veri [HX711]: ${finalWeight.toFixed(2)} kg`);
+                        cleanupAndResolve({ weight_kg: finalWeight });
                         return;
                     }
                 }
