@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, AreaChart, Area } from 'recharts';
 import { Station, Sensor, WidgetConfig, WidgetType } from '../types.ts';
@@ -11,8 +12,8 @@ import WindRoseChart from '../components/WindRoseChart.tsx';
 import { ChartBarIcon, MapIcon, AddIcon, PaletteIcon, XIcon, ThermometerIcon, DropletIcon, WindIcon, PressureIcon, CalendarIcon } from '../components/icons/Icons.tsx';
 import { getNumericValue } from '../utils/helpers.ts';
 
-// FIX: Change React.ReactNode to React.ReactElement to provide a more specific type for cloneElement.
-const SENSOR_ICONS: { [key: string]: React.ReactElement } = {
+// FIX: Changed React.ReactNode to a specific React.ReactElement type to allow cloning with new props.
+const SENSOR_ICONS: { [key: string]: React.ReactElement<React.HTMLAttributes<SVGElement>> } = {
   'Sıcaklık': <ThermometerIcon />,
   'Nem': <DropletIcon />,
   'Rüzgar Hızı': <WindIcon />,
@@ -36,7 +37,7 @@ const DataCard: React.FC<{ title: string, data: any[], unit: string }> = ({ titl
         <div className="bg-primary dark:bg-dark-primary p-4 rounded-lg border border-gray-200 dark:border-gray-700 h-full flex flex-col relative overflow-hidden">
             {icon && (
                 <div className="absolute -right-4 -top-4 text-gray-200 dark:text-gray-700/50">
-                    {/* FIX: Remove unnecessary type assertion for the icon element. */}
+                    {/* FIX: Removed type assertion by fixing the type of SENSOR_ICONS. */}
                     {React.cloneElement(icon, { className: 'w-24 h-24' })}
                 </div>
             )}

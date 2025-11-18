@@ -109,8 +109,6 @@ const WindRoseChart: React.FC<WindRoseChartProps> = ({ historyData }) => {
                             stroke={bin.color} 
                             fill={bin.color} 
                             fillOpacity={0.7}
-                            // FIX: The 'stackId' prop is not valid for the <Radar /> component in recharts.
-                            // The stacking is implicit when multiple <Radar /> components are used.
                         />
                     ))}
                 </RadarChart>

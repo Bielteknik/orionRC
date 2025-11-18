@@ -19,7 +19,6 @@ const AddReportDrawer: React.FC<AddReportDrawerProps> = ({ isOpen, onClose, onSa
     const [reportName, setReportName] = useState('');
     const [reportType, setReportType] = useState('Günlük');
     const [fileFormat, setFileFormat] = useState('XLSX');
-    const [dateRangePreset, setDateRangePreset] = useState('last24h');
     const [customDateRange, setCustomDateRange] = useState({ start: toDateTimeLocal(yesterday), end: toDateTimeLocal(now) });
     const [selectedStations, setSelectedStations] = useState<string[]>([]);
     const [selectedSensorTypes, setSelectedSensorTypes] = useState<string[]>([]);
@@ -48,7 +47,6 @@ const AddReportDrawer: React.FC<AddReportDrawerProps> = ({ isOpen, onClose, onSa
         setReportName('');
         setReportType('Günlük');
         setFileFormat('XLSX');
-        setDateRangePreset('last24h');
         setCustomDateRange({ start: toDateTimeLocal(yesterday), end: toDateTimeLocal(now) });
         setSelectedStations([]);
         setSelectedSensorTypes([]);
@@ -65,7 +63,7 @@ const AddReportDrawer: React.FC<AddReportDrawerProps> = ({ isOpen, onClose, onSa
             reportName,
             reportType,
             fileFormat,
-            dateRangePreset,
+            dateRangePreset: 'custom', // Always use custom now
             customDateRange,
             selectedStations,
             selectedSensorTypes,
@@ -115,28 +113,16 @@ const AddReportDrawer: React.FC<AddReportDrawerProps> = ({ isOpen, onClose, onSa
                     <div className="bg-primary p-5 rounded-lg border border-gray-200 space-y-5">
                         <h3 className="font-semibold text-lg text-gray-800 border-b border-gray-200 pb-2 flex items-center gap-2"><CalendarIcon className="w-5 h-5" /> Filtreleme Kuralları</h3>
                         
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Tarih Aralığı</label>
-                            <select value={dateRangePreset} onChange={e => setDateRangePreset(e.target.value)} className="w-full bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent">
-                                <option value="last24h">Son 24 Saat</option>
-                                <option value="last7d">Son 7 Gün</option>
-                                <option value="last30d">Son 30 Gün</option>
-                                <option value="custom">Özel Aralık</option>
-                            </select>
-                        </div>
-
-                        {dateRangePreset === 'custom' && (
-                            <div className="grid grid-cols-2 gap-4 p-3 bg-secondary rounded-md border border-gray-200">
-                                <div>
-                                    <label htmlFor="start-date" className="text-xs font-medium text-gray-600 mb-1 block">Başlangıç</label>
-                                    <input type="datetime-local" id="start-date" value={customDateRange.start} onChange={e => setCustomDateRange(p => ({...p, start: e.target.value}))} className="w-full bg-white border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent text-sm" />
-                                </div>
-                                <div>
-                                    <label htmlFor="end-date" className="text-xs font-medium text-gray-600 mb-1 block">Bitiş</label>
-                                    <input type="datetime-local" id="end-date" value={customDateRange.end} onChange={e => setCustomDateRange(p => ({...p, end: e.target.value}))} className="w-full bg-white border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent text-sm" />
-                                </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label htmlFor="start-date" className="text-sm font-medium text-gray-600 mb-1 block">Başlangıç Tarihi</label>
+                                <input type="datetime-local" id="start-date" value={customDateRange.start} onChange={e => setCustomDateRange(p => ({...p, start: e.target.value}))} className="w-full bg-white border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent text-sm" />
                             </div>
-                        )}
+                            <div>
+                                <label htmlFor="end-date" className="text-sm font-medium text-gray-600 mb-1 block">Bitiş Tarihi</label>
+                                <input type="datetime-local" id="end-date" value={customDateRange.end} onChange={e => setCustomDateRange(p => ({...p, end: e.target.value}))} className="w-full bg-white border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent text-sm" />
+                            </div>
+                        </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                             <div>
