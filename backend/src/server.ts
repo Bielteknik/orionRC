@@ -179,7 +179,7 @@ apiRouter.post('/submit-reading', agentAuth, async (req: ExpressRequest, res: Ex
         await db.run("UPDATE sensors SET value = ?, last_update = ?, health_status = ? WHERE id = ?", valueStr, timestamp, 'Sağlıklı', sensor_id);
 
         // Store the raw value if it was provided by the agent
-        if (rawValue) {
+        if (rawValue !== undefined) {
             const rawValueStr = JSON.stringify(rawValue);
             await db.run("INSERT INTO raw_readings (sensor_id, raw_value, timestamp) VALUES (?, ?, ?)", sensor_id, rawValueStr, timestamp);
         }
@@ -759,13 +759,14 @@ apiRouter.get('/readings/history', async (req: ExpressRequest, res: ExpressRespo
         }
 
         // 3. Fetch processed readings
+        const queryParams = [...sensorIdList, ...dateParams];
         const processedReadings = await db.all(`
             SELECT id, timestamp, sensor_id, value 
             FROM readings
             WHERE sensor_id IN (${placeholders(sensorIdList)}) ${dateFilterClause}
             ORDER BY timestamp DESC
             LIMIT 1000
-        `, [...sensorIdList, ...dateParams]);
+        `, queryParams);
 
 
         const response = processedReadings.map(r => {
@@ -825,7 +826,7 @@ apiRouter.get('/raw-readings/history', async (req: ExpressRequest, res: ExpressR
             WHERE s.id = ? ${dateFilterClause}
             ORDER BY r.timestamp DESC
             LIMIT 500
-        `, ...params);
+        `, params);
         res.json(readings.map(r => ({ ...r, raw_value: safeJSONParse(r.raw_value, null) })));
     } catch (error) {
         console.error("Error fetching raw reading history:", error);

@@ -9,16 +9,20 @@ import MultiSelectDropdown from '../components/common/MultiSelectDropdown.tsx';
 import AddWidgetModal from '../components/AddWidgetModal.tsx';
 import ChartSettingsModal, { ChartStyle } from '../components/ChartSettingsModal.tsx';
 import WindRoseChart from '../components/WindRoseChart.tsx';
-import { ChartBarIcon, MapIcon, AddIcon, PaletteIcon, XIcon, ThermometerIcon, DropletIcon, WindIcon, PressureIcon, CalendarIcon } from '../components/icons/Icons.tsx';
+import { ChartBarIcon, MapIcon, AddIcon, PaletteIcon, XIcon, ThermometerIcon, DropletIcon, WindIcon, PressureIcon, CalendarIcon, SensorIcon as GenericSensorIcon, GaugeIcon } from '../components/icons/Icons.tsx';
 import { getNumericValue } from '../utils/helpers.ts';
+import Skeleton from '../components/common/Skeleton.tsx';
 
-// FIX: Changed React.ReactNode to a specific React.ReactElement type to allow cloning with new props.
-const SENSOR_ICONS: { [key: string]: React.ReactElement<React.HTMLAttributes<SVGElement>> } = {
-  'Sıcaklık': <ThermometerIcon />,
-  'Nem': <DropletIcon />,
-  'Rüzgar Hızı': <WindIcon />,
-  'Basınç': <PressureIcon />,
+const SENSOR_STYLES: { [key: string]: { icon: React.ReactElement, bg: string, text: string } } = {
+  'Sıcaklık': { icon: <ThermometerIcon />, bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-600 dark:text-red-400' },
+  'Nem': { icon: <DropletIcon />, bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-600 dark:text-blue-400' },
+  'Rüzgar Hızı': { icon: <WindIcon />, bg: 'bg-cyan-100 dark:bg-cyan-900/50', text: 'text-cyan-600 dark:text-cyan-400' },
+  'Basınç': { icon: <GaugeIcon />, bg: 'bg-indigo-100 dark:bg-indigo-900/50', text: 'text-indigo-600 dark:text-indigo-400' },
+  'Mesafe': { icon: <GenericSensorIcon />, bg: 'bg-teal-100 dark:bg-teal-900/50', text: 'text-teal-600 dark:text-teal-400' },
+  'Kar Yüksekliği': { icon: <GenericSensorIcon />, bg: 'bg-sky-100 dark:bg-sky-900/50', text: 'text-sky-600 dark:text-sky-400' },
+  'Ağırlık': { icon: <GenericSensorIcon />, bg: 'bg-slate-100 dark:bg-slate-900/50', text: 'text-slate-600 dark:text-slate-400' },
 };
+
 
 // --- WIDGET COMPONENTS ---
 
@@ -31,20 +35,20 @@ const DataCard: React.FC<{ title: string, data: any[], unit: string }> = ({ titl
         return sum / validReadings.length;
     }, [data]);
 
-    const icon = SENSOR_ICONS[title.replace('Ortalama ', '')];
+    const sensorType = title.replace('Ortalama ', '');
+    const styleInfo = SENSOR_STYLES[sensorType] || { icon: <GenericSensorIcon />, bg: 'bg-gray-100 dark:bg-gray-700/50', text: 'text-gray-600 dark:text-gray-400' };
 
     return (
-        <div className="bg-primary dark:bg-dark-primary p-4 rounded-lg border border-gray-200 dark:border-gray-700 h-full flex flex-col relative overflow-hidden">
-            {icon && (
-                <div className="absolute -right-4 -top-4 text-gray-200 dark:text-gray-700/50">
-                    {/* FIX: Removed type assertion by fixing the type of SENSOR_ICONS. */}
-                    {React.cloneElement(icon, { className: 'w-24 h-24' })}
+        <div className="bg-primary dark:bg-dark-primary p-4 rounded-lg border border-gray-200 dark:border-gray-700 h-full flex items-center gap-4">
+             <div className={`flex-shrink-0 w-14 h-14 flex items-center justify-center rounded-full ${styleInfo.bg}`}>
+                {React.cloneElement(styleInfo.icon, { className: `w-7 h-7 ${styleInfo.text}` })}
+            </div>
+            <div>
+                <p className="font-semibold text-gray-600 dark:text-gray-400">{title}</p>
+                <div>
+                    <span className="text-3xl font-bold text-gray-900 dark:text-gray-100">{avg !== null ? avg.toFixed(1) : '--'}</span>
+                    <span className="text-lg text-muted dark:text-gray-400 ml-1.5">{unit}</span>
                 </div>
-            )}
-            <p className="font-semibold text-gray-600 dark:text-gray-400 z-10">{title}</p>
-            <div className="mt-auto z-10">
-                <span className="text-4xl font-bold text-gray-900 dark:text-gray-100">{avg !== null ? avg.toFixed(1) : '--'}</span>
-                <span className="text-xl text-muted dark:text-gray-400 ml-1.5">{unit}</span>
             </div>
         </div>
     );
@@ -155,7 +159,6 @@ const Dashboard: React.FC<{
     
     const allSensorTypes = useMemo(() => [...new Set(sensors.map(s => s.type))], [sensors]);
 
-    // Initialize filters on mount
     useEffect(() => {
         if (stations.length > 0 && selectedStationIds.length === 0) {
             setSelectedStationIds(stations.map(s => s.id));
@@ -176,7 +179,6 @@ const Dashboard: React.FC<{
 
     }, [stations, sensors, allSensorTypes]);
 
-    // Initialize chart styles
     useEffect(() => {
         const initialStyles: Record<string, ChartStyle> = {};
         stations.forEach((station, index) => {
@@ -226,7 +228,6 @@ const Dashboard: React.FC<{
         };
         setWidgets(prev => [...prev, newWidget]);
         
-        // If a new chart type is added that wasn't selected, add it to filters and refetch
         if (type === 'sensorChart' && !selectedSensorTypes.includes(config.sensorType)) {
             setSelectedSensorTypes(prev => [...prev, config.sensorType]);
         }
@@ -251,9 +252,12 @@ const Dashboard: React.FC<{
             if (widget.type === 'windRose') {
                 return allSensorTypes.includes('Rüzgar Hızı') && allSensorTypes.includes('Rüzgar Yönü');
             }
-            return false; // Hide unknown widget types
+            return false;
         });
     }, [widgets, allSensorTypes]);
+    
+    const cardWidgets = renderableWidgets.filter(w => w.type === 'dataCard');
+    const chartWidgets = renderableWidgets.filter(w => w.type !== 'dataCard');
 
     const renderWidget = (widget: WidgetConfig) => {
         const dataForWidget = historyData.filter(d => d.sensorType === widget.config.sensorType);
@@ -302,33 +306,45 @@ const Dashboard: React.FC<{
                         </div>
                     </div>
                     
-                    <div className="grid grid-cols-12 gap-6">
-                       {renderableWidgets.length > 0 ? (
-                            renderableWidgets.map(widget => (
-                                <div key={widget.id} className={`
-                                    ${widget.type === 'dataCard' ? 'col-span-12 sm:col-span-6 lg:col-span-3' : ''} 
-                                    ${widget.type === 'sensorChart' ? 'col-span-12 lg:col-span-6 min-h-[320px]' : ''}
-                                    ${widget.type === 'windRose' ? 'col-span-12 lg:col-span-6 min-h-[320px]' : ''}
-                                    relative group
-                                `}>
-                                    <div className="bg-primary dark:bg-dark-primary rounded-lg border border-gray-200 dark:border-gray-700 h-full w-full">
-                                        {isLoadingHistory ? <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-full w-full rounded-lg"></div> : renderWidget(widget)}
-                                    </div>
-                                    <button onClick={() => handleRemoveWidget(widget.id)} className="absolute top-2 right-2 p-1.5 bg-gray-500/30 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-danger z-10">
-                                        <XIcon className="w-4 h-4"/>
-                                    </button>
+                    {renderableWidgets.length > 0 ? (
+                        <>
+                            {cardWidgets.length > 0 && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                                    {cardWidgets.map(widget => (
+                                        <div key={widget.id} className="relative group">
+                                            {isLoadingHistory ? <Skeleton className="h-28 rounded-lg"/> : renderWidget(widget)}
+                                            <button onClick={() => handleRemoveWidget(widget.id)} className="absolute top-2 right-2 p-1 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-danger z-10">
+                                                <XIcon className="w-3 h-3"/>
+                                            </button>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))
-                        ) : (
-                             <div className="col-span-12">
-                                <div className="text-center py-16 text-muted border border-dashed rounded-lg bg-primary dark:bg-dark-primary">
-                                    <ChartBarIcon className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-2"/>
-                                    <p className="font-semibold">Dashboard'unuz boş</p>
-                                    <p className="text-sm">Başlamak için 'Widget Ekle' butonuna tıklayarak veri kartları veya grafikler ekleyebilirsiniz.</p>
+                            )}
+
+                             {chartWidgets.length > 0 && (
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    {chartWidgets.map(widget => (
+                                        <div key={widget.id} className="min-h-[350px] relative group">
+                                            <div className="bg-primary dark:bg-dark-primary rounded-lg border border-gray-200 dark:border-gray-700 h-full w-full">
+                                                {isLoadingHistory ? <Skeleton className="h-full w-full rounded-lg"/> : renderWidget(widget)}
+                                            </div>
+                                            <button onClick={() => handleRemoveWidget(widget.id)} className="absolute top-2 right-2 p-1.5 bg-gray-500/30 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-danger z-10">
+                                                <XIcon className="w-4 h-4"/>
+                                            </button>
+                                        </div>
+                                    ))}
                                 </div>
+                            )}
+                        </>
+                    ) : (
+                        <div className="col-span-12">
+                            <div className="text-center py-16 text-muted border border-dashed rounded-lg bg-primary dark:bg-dark-primary">
+                                <ChartBarIcon className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-2"/>
+                                <p className="font-semibold">Dashboard'unuz boş</p>
+                                <p className="text-sm">Başlamak için 'Widget Ekle' butonuna tıklayarak veri kartları veya grafikler ekleyebilirsiniz.</p>
                             </div>
-                        )}
-                    </div>
+                        </div>
+                    )}
                 </div>
             ) : (
                 <div className="h-[75vh] bg-primary dark:bg-dark-primary border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-hidden">
