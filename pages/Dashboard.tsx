@@ -9,14 +9,14 @@ import MultiSelectDropdown from '../components/common/MultiSelectDropdown.tsx';
 import AddWidgetModal from '../components/AddWidgetModal.tsx';
 import ChartSettingsModal, { ChartStyle } from '../components/ChartSettingsModal.tsx';
 import WindRoseChart from '../components/WindRoseChart.tsx';
-import { ChartBarIcon, MapIcon, AddIcon, PaletteIcon, XIcon, ThermometerIcon, DropletIcon, WindIcon, PressureIcon } from '../components/icons/Icons.tsx';
+import { ChartBarIcon, MapIcon, AddIcon, PaletteIcon, XIcon, ThermometerIcon, DropletIcon, WindIcon, PressureIcon, CalendarIcon } from '../components/icons/Icons.tsx';
 import { getNumericValue } from '../utils/helpers.ts';
 
 const SENSOR_ICONS: { [key: string]: React.ReactNode } = {
-  'Sıcaklık': <ThermometerIcon className="w-6 h-6 text-red-500" />,
-  'Nem': <DropletIcon className="w-6 h-6 text-blue-500" />,
-  'Rüzgar Hızı': <WindIcon className="w-6 h-6 text-gray-500" />,
-  'Basınç': <PressureIcon className="w-6 h-6 text-purple-500" />,
+  'Sıcaklık': <ThermometerIcon />,
+  'Nem': <DropletIcon />,
+  'Rüzgar Hızı': <WindIcon />,
+  'Basınç': <PressureIcon />,
 };
 
 // --- WIDGET COMPONENTS ---
@@ -30,14 +30,19 @@ const DataCard: React.FC<{ title: string, data: any[], unit: string }> = ({ titl
         return sum / validReadings.length;
     }, [data]);
 
+    const icon = SENSOR_ICONS[title.replace('Ortalama ', '')];
+
     return (
-        <div className="bg-primary dark:bg-dark-primary p-4 rounded-lg border border-gray-200 dark:border-gray-700 h-full flex flex-col justify-between">
-            <div className="flex items-center justify-between text-muted dark:text-gray-400">
-                <span className="font-semibold text-sm">{title}</span>
-                {SENSOR_ICONS[title.replace('Ortalama ', '')]}
-            </div>
-            <div className="text-right">
-                <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{avg !== null ? avg.toFixed(1) : '--'}<span className="text-lg ml-1">{unit}</span></p>
+        <div className="bg-primary dark:bg-dark-primary p-4 rounded-lg border border-gray-200 dark:border-gray-700 h-full flex flex-col relative overflow-hidden">
+            {icon && (
+                <div className="absolute -right-4 -top-4 text-gray-200 dark:text-gray-700/50">
+                    {React.cloneElement(icon as React.ReactElement, { className: 'w-24 h-24' })}
+                </div>
+            )}
+            <p className="font-semibold text-gray-600 dark:text-gray-400 z-10">{title}</p>
+            <div className="mt-auto z-10">
+                <span className="text-4xl font-bold text-gray-900 dark:text-gray-100">{avg !== null ? avg.toFixed(1) : '--'}</span>
+                <span className="text-xl text-muted dark:text-gray-400 ml-1.5">{unit}</span>
             </div>
         </div>
     );
@@ -48,7 +53,7 @@ const SensorChart: React.FC<{ sensorType: string, data: any[], stations: Station
     const tickColor = theme === 'dark' ? '#9CA3AF' : '#6B7281';
 
     const chartData = useMemo(() => {
-        const stationData: { [key: string]: { [key: string]: any } } = {};
+        const stationData: { [key: string]: any } = {};
         data.forEach(d => {
             const time = new Date(d.timestamp).toLocaleString('tr-TR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' });
             if (!stationData[time]) {
@@ -66,7 +71,7 @@ const SensorChart: React.FC<{ sensorType: string, data: any[], stations: Station
     const stationNames = useMemo(() => [...new Set(data.map(d => stations.find(s => s.id === d.stationId)?.name || d.stationId))], [data, stations]);
 
     return (
-        <div className="h-full w-full p-2 flex flex-col">
+        <div className="h-full w-full p-4 flex flex-col">
             <h3 className="font-semibold text-gray-800 dark:text-gray-200 text-center mb-2">{sensorType} Trendi</h3>
             <div className="flex-grow">
                 <ResponsiveContainer width="100%" height="100%">
@@ -79,8 +84,8 @@ const SensorChart: React.FC<{ sensorType: string, data: any[], stations: Station
                         {stationNames.map((name) => (
                              <defs key={name}>
                                 <linearGradient id={`color-${name.replace(/\s/g, '')}`} x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor={styles[name]?.stroke || '#8884d8'} stopOpacity={0.4}/>
-                                    <stop offset="95%" stopColor={styles[name]?.stroke || '#8884d8'} stopOpacity={0}/>
+                                    <stop offset="5%" stopColor={styles[name]?.stroke || '#8884d8'} stopOpacity={0.3}/>
+                                    <stop offset="95%" stopColor={styles[name]?.stroke || '#8884d8'} stopOpacity={0.05}/>
                                 </linearGradient>
                             </defs>
                         ))}
@@ -109,12 +114,8 @@ const SensorChart: React.FC<{ sensorType: string, data: any[], stations: Station
 const defaultWidgets: WidgetConfig[] = [
     { id: 'avgTemp', type: 'dataCard', config: { sensorType: 'Sıcaklık', unit: '°C' } },
     { id: 'avgHum', type: 'dataCard', config: { sensorType: 'Nem', unit: '%' } },
-    { id: 'avgWind', type: 'dataCard', config: { sensorType: 'Rüzgar Hızı', unit: 'km/h' } },
-    { id: 'avgPres', type: 'dataCard', config: { sensorType: 'Basınç', unit: 'hPa' } },
     { id: 'tempChart', type: 'sensorChart', config: { sensorType: 'Sıcaklık' } },
     { id: 'humChart', type: 'sensorChart', config: { sensorType: 'Nem' } },
-    { id: 'windChart', type: 'sensorChart', config: { sensorType: 'Rüzgar Hızı' } },
-    { id: 'presChart', type: 'sensorChart', config: { sensorType: 'Basınç' } },
 ];
 
 const DEFAULT_COLORS = ['#3b82f6', '#ef4444', '#22c55e', '#a855f7', '#f97316', '#14b8a6'];
@@ -132,7 +133,19 @@ const Dashboard: React.FC<{
     const [historyData, setHistoryData] = useState<any[]>([]);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     
-    const [widgets, setWidgets] = useState<WidgetConfig[]>(defaultWidgets);
+    const [widgets, setWidgets] = useState<WidgetConfig[]>(() => {
+        try {
+            const savedWidgets = localStorage.getItem('dashboardWidgets');
+            return savedWidgets ? JSON.parse(savedWidgets) : defaultWidgets;
+        } catch {
+            return defaultWidgets;
+        }
+    });
+
+    useEffect(() => {
+        localStorage.setItem('dashboardWidgets', JSON.stringify(widgets));
+    }, [widgets]);
+
     const [isWidgetModalOpen, setIsWidgetModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     
@@ -145,7 +158,7 @@ const Dashboard: React.FC<{
         if (stations.length > 0 && selectedStationIds.length === 0) {
             setSelectedStationIds(stations.map(s => s.id));
         }
-        const defaultSensorTypes = ['Sıcaklık', 'Nem', 'Rüzgar Hızı', 'Basınç'];
+        const defaultSensorTypes = ['Sıcaklık', 'Nem'];
         if (sensors.length > 0 && selectedSensorTypes.length === 0) {
             const availableDefaultTypes = defaultSensorTypes.filter(t => allSensorTypes.includes(t));
             setSelectedSensorTypes(availableDefaultTypes);
@@ -153,13 +166,13 @@ const Dashboard: React.FC<{
         
         const endDate = new Date();
         const startDate = new Date();
-        startDate.setDate(endDate.getDate() - 7);
+        startDate.setDate(endDate.getDate() - 1);
         setDateRange({ 
             start: startDate.toISOString().split('T')[0], 
             end: endDate.toISOString().split('T')[0] 
         });
 
-    }, [stations, sensors, allSensorTypes]); // Added allSensorTypes dependency
+    }, [stations, sensors, allSensorTypes]);
 
     // Initialize chart styles
     useEffect(() => {
@@ -186,7 +199,9 @@ const Dashboard: React.FC<{
         try {
             const data = await getReadingsHistory({ 
                 stationIds: selectedStationIds, 
-                sensorTypes: selectedSensorTypes 
+                sensorTypes: selectedSensorTypes,
+                start: dateRange.start ? new Date(dateRange.start).toISOString() : undefined,
+                end: dateRange.end ? new Date(dateRange.end).toISOString() : undefined,
             });
             setHistoryData(data);
         } catch (error) {
@@ -195,7 +210,7 @@ const Dashboard: React.FC<{
         } finally {
             setIsLoadingHistory(false);
         }
-    }, [selectedStationIds, selectedSensorTypes]);
+    }, [selectedStationIds, selectedSensorTypes, dateRange]);
     
     useEffect(() => {
         fetchHistory();
@@ -219,6 +234,7 @@ const Dashboard: React.FC<{
             if(!selectedSensorTypes.includes('Rüzgar Yönü')) typesToAdd.push('Rüzgar Yönü');
             setSelectedSensorTypes(prev => [...prev, ...typesToAdd]);
         }
+        setIsWidgetModalOpen(false);
     };
     
     const handleRemoveWidget = (id: string) => {
@@ -241,43 +257,49 @@ const Dashboard: React.FC<{
     };
 
     return (
-        <div className="space-y-4">
-            <div className="flex justify-between items-center">
-                <div className="border-b border-gray-200 dark:border-gray-700">
+        <div className="space-y-6">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                <div className="border-b border-gray-200 dark:border-gray-700 w-full md:w-auto">
                     <nav className="-mb-px flex space-x-6" aria-label="Tabs">
                         <button onClick={() => setActiveTab('Analitik')} className={`flex items-center gap-2 whitespace-nowrap py-3 px-1 border-b-2 font-semibold text-sm ${activeTab === 'Analitik' ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-gray-700 dark:hover:text-gray-300'}`}><ChartBarIcon className="w-5 h-5"/>Analitik</button>
                         <button onClick={() => setActiveTab('İstasyon Haritası')} className={`flex items-center gap-2 whitespace-nowrap py-3 px-1 border-b-2 font-semibold text-sm ${activeTab === 'İstasyon Haritası' ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-gray-700 dark:hover:text-gray-300'}`}><MapIcon className="w-5 h-5"/>İstasyon Haritası</button>
                     </nav>
                 </div>
                  {activeTab === 'Analitik' && (
-                    <div className="flex items-center gap-2">
-                        <button onClick={() => setIsWidgetModalOpen(true)} className="flex items-center gap-2 bg-accent text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors font-semibold text-sm"><AddIcon className="w-5 h-5"/> Widget Ekle</button>
-                        <button onClick={() => setIsSettingsModalOpen(true)} className="flex items-center gap-2 bg-primary dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors font-semibold text-sm"><PaletteIcon className="w-5 h-5"/> Görünüm</button>
+                    <div className="flex items-center gap-2 w-full md:w-auto">
+                        <button onClick={() => setIsWidgetModalOpen(true)} className="w-full sm:w-auto flex items-center justify-center gap-2 bg-accent text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors font-semibold text-sm"><AddIcon className="w-5 h-5"/> Widget Ekle</button>
+                        <button onClick={() => setIsSettingsModalOpen(true)} className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors font-semibold text-sm"><PaletteIcon className="w-5 h-5"/> Görünüm</button>
                     </div>
                  )}
             </div>
 
             {activeTab === 'Analitik' ? (
-                <div className="space-y-4">
+                <div className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-primary dark:bg-dark-primary rounded-lg border dark:border-gray-700">
                         <MultiSelectDropdown label="İstasyon" options={stationOptions} selected={selectedStationIds} onChange={setSelectedStationIds} />
                         <MultiSelectDropdown label="Sensör Tipi" options={sensorTypeOptions} selected={selectedSensorTypes} onChange={setSelectedSensorTypes} />
-                        <input type="date" value={dateRange.start} onChange={e => setDateRange(p => ({...p, start: e.target.value}))} className="bg-secondary dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-accent"/>
-                        <input type="date" value={dateRange.end} onChange={e => setDateRange(p => ({...p, end: e.target.value}))} className="bg-secondary dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-accent"/>
+                        <div className="relative">
+                            <input type="date" value={dateRange.start} onChange={e => setDateRange(p => ({...p, start: e.target.value}))} className="bg-secondary dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg pl-3 pr-10 py-2 text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-accent w-full"/>
+                            <CalendarIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted pointer-events-none" />
+                        </div>
+                        <div className="relative">
+                            <input type="date" value={dateRange.end} onChange={e => setDateRange(p => ({...p, end: e.target.value}))} className="bg-secondary dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg pl-3 pr-10 py-2 text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-accent w-full"/>
+                            <CalendarIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted pointer-events-none" />
+                        </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 auto-rows-min">
+                    <div className="grid grid-cols-12 gap-6">
                         {widgets.map(widget => (
                             <div key={widget.id} className={`
-                                ${widget.type === 'dataCard' ? 'h-32' : ''} 
-                                ${widget.type === 'sensorChart' ? 'sm:col-span-2 h-80' : ''}
-                                ${widget.type === 'windRose' ? 'sm:col-span-2 h-80' : ''}
+                                ${widget.type === 'dataCard' ? 'col-span-12 sm:col-span-6 lg:col-span-3' : ''} 
+                                ${widget.type === 'sensorChart' ? 'col-span-12 lg:col-span-6 min-h-[320px]' : ''}
+                                ${widget.type === 'windRose' ? 'col-span-12 lg:col-span-6 min-h-[320px]' : ''}
                                 relative group
                             `}>
                                 <div className="bg-primary dark:bg-dark-primary rounded-lg border border-gray-200 dark:border-gray-700 h-full w-full">
                                     {isLoadingHistory ? <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-full w-full rounded-lg"></div> : renderWidget(widget)}
                                 </div>
-                                <button onClick={() => handleRemoveWidget(widget.id)} className="absolute top-2 right-2 p-1.5 bg-gray-500/30 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-danger">
+                                <button onClick={() => handleRemoveWidget(widget.id)} className="absolute top-2 right-2 p-1.5 bg-gray-500/30 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-danger z-10">
                                     <XIcon className="w-4 h-4"/>
                                 </button>
                             </div>
