@@ -1,5 +1,6 @@
 
 
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { Sensor } from '../types.ts';
 import { ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, SensorIcon as GenericSensorIcon, XIcon } from './icons/Icons.tsx';
@@ -78,77 +79,45 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
             if (isMounted) {
                 setDateFilter({ start: initialStartDate, end: initialEndDate });
             }
-
-            const fetchAllData = async () => {
-                try {
-                    const [rawHistory, processedHistory] = await Promise.all([
-                        getRawReadingsHistory(sensor.id),
-                        getReadingsHistory({ 
-                            stationIds: [sensor.stationId], 
-                            sensorTypes: [sensor.type],
-                            start: initialStartDate,
-                            end: initialEndDate
-                        })
-                    ]);
-                    if (isMounted) {
-                        setRawReadings(rawHistory);
-                        setProcessedReadings(processedHistory.filter(r => r.sensorId === sensor.id));
-                    }
-                } catch(err) {
-                     if (isMounted) {
-                        console.error("Could not fetch sensor history:", err);
-                     }
-                }
-            };
-            
-            fetchAllData();
         }
-
         return () => {
             isMounted = false;
         };
     }, [isOpen, sensor]);
     
-    // Refetch processed data when date filter changes
+    // Refetch both processed and raw data when date filter changes
     useEffect(() => {
         let isMounted = true;
         if (isOpen && sensor && dateFilter.start && dateFilter.end) {
-             const fetchProcessed = async () => {
+             const fetchAllData = async () => {
                  try {
-                     const history = await getReadingsHistory({
-                         stationIds: [sensor.stationId],
-                         sensorTypes: [sensor.type],
-                         start: dateFilter.start,
-                         end: dateFilter.end
-                     });
+                     const [rawHistory, processedHistory] = await Promise.all([
+                        getRawReadingsHistory(sensor.id, dateFilter.start, dateFilter.end),
+                        getReadingsHistory({
+                             stationIds: [sensor.stationId],
+                             sensorTypes: [sensor.type],
+                             start: dateFilter.start,
+                             end: dateFilter.end
+                        })
+                     ]);
+
                      if (isMounted) {
-                         setProcessedReadings(history.filter(r => r.sensorId === sensor.id));
+                         setRawReadings(rawHistory);
+                         setProcessedReadings(processedHistory.filter(r => r.sensorId === sensor.id));
                      }
                  } catch (err) {
                       if (isMounted) {
-                         console.error("Could not fetch processed readings on date change:", err);
+                         console.error("Could not fetch sensor history on date change:", err);
                       }
                  }
              };
-             fetchProcessed();
+             fetchAllData();
         }
          return () => { isMounted = false; };
     }, [dateFilter, isOpen, sensor]);
 
 
     if (!isOpen || !sensor) return null;
-
-    const filteredRawReadings = useMemo(() => {
-        if (!rawReadings) return [];
-        const startDate = dateFilter.start ? new Date(dateFilter.start).getTime() : null;
-        const endDate = dateFilter.end ? new Date(dateFilter.end).getTime() : null;
-        return rawReadings.filter(r => {
-            const readingTime = new Date(r.timestamp).getTime();
-            if (startDate && readingTime < startDate) return false;
-            if (endDate && readingTime > endDate) return false;
-            return true;
-        });
-    }, [rawReadings, dateFilter]);
 
     const latestReadings = useMemo(() => {
         return [...processedReadings]
@@ -166,7 +135,7 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
             dataMap.set(key, entry);
         });
     
-        filteredRawReadings.forEach(r => {
+        rawReadings.forEach(r => {
             const key = roundToNearestSecond(r.timestamp);
             const entry = dataMap.get(key) || { timestamp: r.timestamp };
             entry['Ham Değer'] = getNumericValue(r.raw_value, sensor.type, sensor.interface);
@@ -176,12 +145,12 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
         return Array.from(dataMap.values())
             .filter(item => item['İşlenmiş Değer'] !== undefined || item['Ham Değer'] !== undefined)
             .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-            .slice(-50)
+            .slice(-500) // Increase data points for better graph detail
             .map(item => ({
                 ...item,
                 name: new Date(item.timestamp).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
             }));
-    }, [processedReadings, filteredRawReadings, sensor.type, sensor.interface]);
+    }, [processedReadings, rawReadings, sensor.type, sensor.interface]);
 
     const latestValue = latestReadings.length > 0 ? formatDisplayValue(latestReadings[0]) : 'N/A';
 
@@ -300,21 +269,19 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
                             )}
                             {activeTab === 'raw' && (
                                  <>
-                                    {filteredRawReadings.length > 0 ? (
+                                    {rawReadings.length > 0 ? (
                                         <table className="w-full text-sm text-left text-gray-600 dark:text-gray-300">
                                             <thead className="text-xs text-gray-700 dark:text-gray-400 uppercase bg-gray-100 dark:bg-gray-700 sticky top-0">
                                                 <tr>
                                                     <th scope="col" className="px-6 py-3">Zaman Damgası</th>
-                                                    <th scope="col" className="px-6 py-3">Ham Değer</th>
+                                                    <th scope="col" className="px-6 py-3 text-right">Değer</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {filteredRawReadings.map(reading => (
+                                                {rawReadings.map(reading => (
                                                     <tr key={reading.id} className="border-b border-gray-200 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-900/50">
                                                         <td className="px-6 py-3 font-mono text-gray-800 dark:text-gray-200">{new Date(reading.timestamp).toLocaleString('tr-TR')}</td>
-                                                        <td className="px-6 py-3 font-mono text-xs text-gray-800 dark:text-gray-200">
-                                                           <pre className="bg-gray-100 dark:bg-gray-700 p-1 rounded text-xs">{JSON.stringify(reading.raw_value, null, 2)}</pre>
-                                                        </td>
+                                                        <td className="px-6 py-3 text-right font-semibold text-gray-900 dark:text-gray-100">{`${getNumericValue(reading.raw_value, sensor.type, sensor.interface)?.toFixed(2) ?? 'N/A'} ${sensor.unit || ''}`}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>

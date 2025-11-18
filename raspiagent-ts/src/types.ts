@@ -2,7 +2,7 @@
 export interface DeviceConfig {
     sensors: SensorConfig[];
     cameras: CameraConfig[];
-    global_read_frequency_seconds?: number;
+    global_read_frequency_seconds: number;
     gemini_api_key?: string;
 }
 
@@ -13,6 +13,7 @@ export interface SensorConfig {
     type: string;
     is_active: boolean;
     read_frequency: number;
+    read_order?: number;
     interface: 'i2c' | 'serial' | 'virtual' | 'openweather' | 'http' | 'uart';
     parser_config: {
         driver: string;
@@ -49,6 +50,7 @@ export interface ISensorDriver {
 // Sunucuya gönderilecek okuma verisi
 export interface ReadingPayload {
     sensor: string;
+    rawValue: Record<string, any> | null;
     value: Record<string, any>;
 }
 
@@ -58,5 +60,7 @@ export enum AgentState {
     CONFIGURING = "YAPILANDIRILIYOR",
     OFFLINE = "ÇEVRİMDIŞI",
     ONLINE = "ÇEVRİMİÇİ",
+    IDLE = "BEKLEMEDE",
+    READING = "OKUMA YAPIYOR",
     ERROR = "HATALI"
 }

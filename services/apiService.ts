@@ -73,9 +73,9 @@ export const getReadingsHistory = (params: { stationIds: string[], sensorTypes: 
         }
     }).then(res => res.data).catch(e => handleError(e, 'fetching readings history'));
 }
-export const getRawReadingsHistory = (sensorId: string): Promise<any[]> => {
+export const getRawReadingsHistory = (sensorId: string, start?: string, end?: string): Promise<any[]> => {
     return apiClient.get('/raw-readings/history', {
-        params: { sensorId }
+        params: { sensorId, start, end }
     }).then(res => res.data).catch(e => handleError(e, 'fetching raw readings history'));
 }
 

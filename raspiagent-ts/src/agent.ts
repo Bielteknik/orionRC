@@ -33,6 +33,8 @@ const CONFIG_FETCH_INTERVAL = 60000; // 1 minute (for checking config updates)
 const MAIN_LOOP_DEFAULT_INTERVAL = 600000; // 10 minutes (default sensor read cycle)
 const COMMAND_POLL_INTERVAL = 5000; // 5 seconds
 const SYNC_INTERVAL = 30000; // 30 seconds for syncing offline data
+const AVERAGING_DURATION_MS = 60000; // 1 minute for averaging
+const AVERAGING_READ_INTERVAL_MS = 2000; // Read every 2 seconds during averaging
 
 // Local config file structure
 interface LocalConfig {
@@ -87,7 +89,7 @@ class Agent {
     private state: AgentState = AgentState.INITIALIZING;
     private config: DeviceConfig | null = null;
     private driverInstances: Map<string, ISensorDriver> = new Map();
-    private globalReadFrequencySeconds?: number;
+    private globalReadFrequencySeconds: number = 0;
 
     // Properties from local config
     private apiBaseUrl: string = '';
@@ -97,7 +99,9 @@ class Agent {
     
     private running: boolean = false;
     private timers: (ReturnType<typeof setTimeout> | ReturnType<typeof setInterval>)[] = [];
-    private mainLoopInterval: ReturnType<typeof setInterval> | null = null;
+    private mainLoopTimeout: ReturnType<typeof setTimeout> | null = null;
+    private sensorLoopTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
+
 
     constructor(localConfig: LocalConfig) {
         this.apiBaseUrl = localConfig.server.base_url;
@@ -151,8 +155,8 @@ class Agent {
         }
         this.running = true;
         await openDb();
-        await this.fetchConfig(true); // Initial fetch attempt
-        
+        await this.fetchConfig(true); 
+
         // Start other periodic tasks
         this.timers.push(setInterval(() => this.fetchConfig(), CONFIG_FETCH_INTERVAL));
         this.timers.push(setInterval(() => this.pollForCommands(), COMMAND_POLL_INTERVAL));
@@ -163,9 +167,14 @@ class Agent {
         if (!this.running) return;
         this.running = false;
         console.log('🛑 ORION Agent durduruluyor...');
-        if (this.mainLoopInterval) clearInterval(this.mainLoopInterval);
+        
+        if (this.mainLoopTimeout) clearTimeout(this.mainLoopTimeout);
+        this.sensorLoopTimers.forEach(timer => clearInterval(timer));
+        this.sensorLoopTimers.clear();
+
         this.timers.forEach(timer => clearInterval(timer));
         this.timers = [];
+        
         for (const [sensorId, driver] of this.driverInstances.entries()) {
             if (typeof (driver as any).close === 'function') {
                 try {
@@ -208,24 +217,35 @@ class Agent {
         if (isInitial) {
             console.log('🔄️ Sunucudan yapılandırma alınıyor...');
             this.setState(AgentState.CONFIGURING);
-        } else {
-            console.log('🔄️ Sunucudan yapılandırma güncellemeleri kontrol ediliyor...');
         }
 
         try {
             const response = await axios.get(`${this.apiBaseUrl}/config/${this.deviceId}`, {
                 headers: { 'Authorization': `Bearer ${this.authToken}` }
             });
+
+            const newConfigString = JSON.stringify(response.data);
+            const oldConfigString = JSON.stringify(this.config);
+
+            if (newConfigString === oldConfigString && !isInitial) {
+                 if (this.state !== AgentState.ONLINE) {
+                    this.setState(AgentState.ONLINE);
+                    console.log('✅ Sunucu ile bağlantı kuruldu, yapılandırma değişmedi.');
+                 }
+                return;
+            }
+
             this.config = response.data;
             this.geminiApiKey = this.config?.gemini_api_key;
             
-            // Explicitly parse the frequency value to handle potential type mismatches from JSON.
-            const freqFromConfig = this.config?.global_read_frequency_seconds;
-            this.globalReadFrequencySeconds = freqFromConfig !== undefined && freqFromConfig !== null 
-                ? parseInt(String(freqFromConfig), 10) 
-                : undefined;
+            this.globalReadFrequencySeconds = this.config?.global_read_frequency_seconds ?? 0;
 
-            console.log('✅ Sunucudan yapılandırma başarıyla alındı.');
+            if (isInitial) {
+                 console.log('✅ Sunucudan yapılandırma başarıyla alındı.');
+            } else {
+                 console.log('✨ Yapılandırma güncellendi, sürücüler ve döngü yeniden başlatılıyor.');
+            }
+            
             await this.saveConfigToFile(this.config!);
             
             if (this.state !== AgentState.ONLINE) {
@@ -233,26 +253,23 @@ class Agent {
             }
             
             await this.initializeDrivers();
-            this.startMainLoop();
+            this.restartMainLoop();
 
         } catch (error) {
             this.handleApiError(error, isInitial ? 'yapılandırma alınırken' : 'yapılandırma güncellenirken');
             
-            if (isInitial && !this.config) { // Only try cache if we don't have a config yet
+            if (isInitial && !this.config) {
                 console.log('... Sunucuya ulaşılamadı, yerel önbellek deneniyor.');
                 const cachedConfig = await this.loadConfigFromFile();
                 if (cachedConfig) {
                     this.config = cachedConfig;
                     this.geminiApiKey = this.config?.gemini_api_key;
                     
-                    const freqFromConfig = this.config?.global_read_frequency_seconds;
-                    this.globalReadFrequencySeconds = freqFromConfig !== undefined && freqFromConfig !== null 
-                        ? parseInt(String(freqFromConfig), 10) 
-                        : undefined;
+                    this.globalReadFrequencySeconds = this.config?.global_read_frequency_seconds ?? 0;
 
                     this.setState(AgentState.OFFLINE);
                     await this.initializeDrivers();
-                    this.startMainLoop();
+                    this.restartMainLoop();
                 } else {
                     console.error('❌ KRİTİK HATA: Sunucuya ulaşılamıyor ve yerel yapılandırma önbelleği yok. Agent sensörleri okuyamıyor. Bağlantı kurulduğunda tekrar denenecek.');
                     this.setState(AgentState.ERROR);
@@ -264,6 +281,16 @@ class Agent {
     private async initializeDrivers() {
         if (!this.config?.sensors) return;
 
+        // Unload drivers for sensors that are no longer in the config
+        const newSensorIds = new Set(this.config.sensors.map(s => s.id));
+        for (const sensorId of this.driverInstances.keys()) {
+            if (!newSensorIds.has(sensorId)) {
+                this.driverInstances.delete(sensorId);
+                console.log(`   -> Sürücü kaldırıldı: ${sensorId}`);
+            }
+        }
+        
+        // Load new drivers
         for (const sensor of this.config.sensors) {
             const driverName = sensor.parser_config?.driver;
             if (!driverName) {
@@ -282,52 +309,187 @@ class Agent {
             }
         }
     }
-
-    private startMainLoop() {
-        // If a loop is already running, clear it before starting a new one
-        // This ensures the read frequency is updated if the config changes
-        if (this.mainLoopInterval) {
-            clearInterval(this.mainLoopInterval);
-        }
-
-        const cycleTime = this.globalReadFrequencySeconds && this.globalReadFrequencySeconds > 0 
-            ? this.globalReadFrequencySeconds * 1000 
-            : MAIN_LOOP_DEFAULT_INTERVAL;
+    
+    private restartMainLoop() {
+        // Clear all previous loop timers
+        if (this.mainLoopTimeout) clearTimeout(this.mainLoopTimeout);
+        this.sensorLoopTimers.forEach(timer => clearInterval(timer));
+        this.sensorLoopTimers.clear();
         
-        // Run once immediately, then start the interval
-        this.mainLoop(); 
-        this.mainLoopInterval = setInterval(() => this.mainLoop(), cycleTime);
-        console.log(`✅ Ana döngü ${cycleTime / 1000} saniyede bir çalışacak şekilde ayarlandı.`);
-    }
-
-    private async mainLoop() {
-        if (!this.running) return;
-
-        if (!this.config) {
-             console.warn(`Yapılandırma yüklenemediği için okuma döngüsü atlanıyor. Yapılandırma periyodik olarak kontrol edilecek.`);
-             return;
+        if (this.globalReadFrequencySeconds > 0) {
+            console.log(`⚙️ Global frekans modu aktif. Döngü ${this.globalReadFrequencySeconds / 60} dakikada bir çalışacak.`);
+            this.sequentialLoopCycle(); // Start the first cycle immediately
+        } else {
+            console.log(`⚙️ Bireysel sensör frekans modu aktif.`);
+            this.individualSensorLoops();
         }
-        
-        console.log('--- Döngü Başlangıcı ---');
-        
-        const readPromises = this.config.sensors
-            .filter(s => s.is_active)
-            .map(sensor => this.readAndProcessSensor(sensor));
-
-        const results = await Promise.all(readPromises);
-        const validResults = results.filter((r): r is ReadingPayload => r !== null);
-
-        if (validResults.length > 0) {
-             await this.sendReadings(validResults);
-        }
-
-        console.log(`--- Döngü Sonu ---`);
     }
     
-    private async readAndProcessSensor(sensor: SensorConfig): Promise<ReadingPayload | null> {
+    private individualSensorLoops() {
+        if (!this.config?.sensors) return;
+        
+        this.config.sensors.forEach(sensor => {
+            if (sensor.is_active && sensor.read_frequency > 0) {
+                console.log(`   -> ${sensor.name} için ${sensor.read_frequency} saniyede bir okuma planlandı.`);
+                const timer = setInterval(async () => {
+                    if (!this.running) {
+                        clearInterval(timer);
+                        return;
+                    }
+                    const reading = await this.performSingleReading(sensor);
+                    if (reading) {
+                        await addReading(sensor.id, reading.rawValue, reading.processedValue);
+                    }
+                }, sensor.read_frequency * 1000);
+                this.sensorLoopTimers.set(sensor.id, timer);
+            }
+        });
+    }
+    
+    private sequentialLoopCycle = async () => {
+        if (!this.running) return;
+        if (!this.config) {
+            console.warn('Yapılandırma yok, sıralı döngü atlanıyor.');
+            this.scheduleNextSequentialLoop(); // Retry after interval
+            return;
+        }
+
+        console.log('--- Sıralı Okuma Döngüsü Başladı ---');
+        this.setState(AgentState.READING);
+        
+        const sortedSensors = this.config.sensors
+            .filter(s => s.is_active && (s.read_order ?? 0) > 0)
+            .sort((a, b) => (a.read_order ?? 0) - (b.read_order ?? 0));
+
+        if (sortedSensors.length === 0) {
+            console.log('... Sıralı okuma için yapılandırılmış aktif sensör bulunamadı.');
+        } else {
+            for (const sensor of sortedSensors) {
+                const avgReadingPayload = await this.readAndAverageSensor(sensor, AVERAGING_DURATION_MS);
+                if (avgReadingPayload) {
+                    await addReading(sensor.id, avgReadingPayload.rawValue, avgReadingPayload.value);
+                }
+                 // If agent is stopped during a long loop, exit early.
+                if (!this.running) break;
+            }
+        }
+
+        console.log('--- Sıralı Okuma Döngüsü Tamamlandı ---');
+        this.setState(AgentState.IDLE);
+        this.scheduleNextSequentialLoop();
+    }
+
+    private scheduleNextSequentialLoop() {
+        const cycleTime = this.globalReadFrequencySeconds > 0 
+            ? this.globalReadFrequencySeconds * 1000 
+            : MAIN_LOOP_DEFAULT_INTERVAL;
+
+        console.log(`... Sonraki sıralı okuma döngüsü ${cycleTime / 1000 / 60} dakika sonra planlandı.`);
+        this.mainLoopTimeout = setTimeout(this.sequentialLoopCycle, cycleTime);
+    }
+    
+    private async readAndAverageSensor(sensor: SensorConfig, durationMs: number): Promise<ReadingPayload | null> {
+        console.log(`   Ortalama alınıyor: ${sensor.name} (${durationMs / 1000} saniye)`);
+        
+        const collectedRawValues: any[] = [];
+        const collectedProcessedValues: any[] = [];
+        const endTime = Date.now() + durationMs;
+
+        while (Date.now() < endTime) {
+            if (!this.running) break;
+            const reading = await this.performSingleReading(sensor);
+            if (reading && reading.rawValue !== null && reading.processedValue !== null) {
+                collectedRawValues.push(reading.rawValue);
+                collectedProcessedValues.push(reading.processedValue);
+            }
+            await new Promise(r => setTimeout(r, AVERAGING_READ_INTERVAL_MS)); // Wait between reads
+        }
+        
+        if (collectedRawValues.length === 0) {
+             console.log(`     -> Ortalama alınamadı, ${sensor.name} için geçerli okuma yok.`);
+             return null;
+        }
+
+        const avgRaw = this.averageSensorValues(collectedRawValues);
+        const avgProcessed = this.averageSensorValues(collectedProcessedValues);
+        
+        console.log(`     -> Ortalama Sonuç:`, avgProcessed);
+
+        return { sensor: sensor.id, rawValue: avgRaw, value: avgProcessed };
+    }
+    
+    private averageSensorValues(values: any[]): any {
+        if (!values || values.length === 0) return null;
+
+        const sums: { [key: string]: number } = {};
+        const counts: { [key: string]: number } = {};
+
+        for (const value of values) {
+            if (typeof value === 'object' && value !== null) {
+                for (const key in value) {
+                    if (typeof value[key] === 'number' && isFinite(value[key])) {
+                        sums[key] = (sums[key] || 0) + value[key];
+                        counts[key] = (counts[key] || 0) + 1;
+                    }
+                }
+            } else if (typeof value === 'number' && isFinite(value)) {
+                sums['value'] = (sums['value'] || 0) + value;
+                counts['value'] = (counts['value'] || 0) + 1;
+            }
+        }
+
+        const averages: { [key: string]: number } = {};
+        let hasKeys = false;
+        for (const key in sums) {
+            hasKeys = true;
+            if (counts[key] > 0) {
+                averages[key] = sums[key] / counts[key];
+            }
+        }
+        
+        if (!hasKeys) return null; // No numeric values found to average
+
+        // If the original value was just a number, return just a number
+        if (Object.keys(averages).length === 1 && averages.hasOwnProperty('value')) {
+            return averages.value;
+        }
+
+        return averages;
+    }
+    
+    private processRawValue(rawValue: any, sensor: SensorConfig): any {
+        if (rawValue === null || rawValue === undefined) return null;
+
+        let processedValue = { ...rawValue }; // Work on a copy
+
+        const refVal = sensor.reference_value;
+        const refOp = sensor.reference_operation;
+
+        if (sensor.type === 'Kar Yüksekliği' && typeof rawValue.distance_cm === 'number') {
+            if (typeof refVal === 'number' && refOp === 'subtract') {
+                let calculated = refVal - rawValue.distance_cm;
+                processedValue = { snow_depth_cm: calculated > 0 ? calculated : 0 };
+            } else {
+                processedValue = { snow_depth_cm: rawValue.distance_cm };
+            }
+        } else if (typeof rawValue === 'object' && typeof refVal === 'number' && refOp && refOp !== 'none') {
+            const keys = Object.keys(rawValue);
+            if (keys.length === 1 && typeof rawValue[keys[0]] === 'number') {
+                const key = keys[0];
+                const originalValue = rawValue[key];
+                let calibratedValue = originalValue;
+                if (refOp === 'subtract') calibratedValue = refVal - originalValue;
+                else if (refOp === 'add') calibratedValue = refVal + originalValue;
+                processedValue = { [key]: calibratedValue };
+            }
+        }
+        return processedValue;
+    }
+    
+    private async performSingleReading(sensor: SensorConfig): Promise<{ rawValue: any, processedValue: any } | null> {
         const driver = this.driverInstances.get(sensor.id);
         if (!driver) return null;
-        
+
         console.log(`   Okunuyor: ${sensor.name} (${sensor.type})`);
         
         let rawValue = await driver.read(sensor.config);
@@ -337,57 +499,16 @@ class Agent {
             return null;
         }
         
-        // --- Değer İşleme (Kalibrasyon ve Yuvarlama) ---
-        let processedValue: Record<string, any> | number | null = rawValue;
-        const refVal = sensor.reference_value;
-        const refOp = sensor.reference_operation;
+        const processedValue = this.processRawValue(rawValue, sensor);
+        const finalProcessedValue = roundNumericValues(processedValue);
 
-        // Kar Yüksekliği (Mesafe sensöründen) özel işlemi
-        // Bu işlem, sensörün bir nesneye olan mesafesini ölçtüğünü ve karın bu mesafeyi azalttığını varsayar.
-        // Örn: Sensör yerden 300cm yüksekte. Kar yokken 300cm ölçer. 20cm kar varken 280cm ölçer.
-        // Kar Yüksekliği = Referans Yükseklik (300) - Okunan Mesafe (280) = 20cm.
-        if (sensor.type === 'Kar Yüksekliği' && (rawValue as any).distance_cm !== undefined) {
-            const originalNumericValue = (rawValue as any).distance_cm;
-            if (typeof refVal === 'number' && refOp === 'subtract') {
-                let calculatedNumericValue = refVal - originalNumericValue;
-                processedValue = {
-                    snow_depth_cm: calculatedNumericValue > 0 ? calculatedNumericValue : 0
-                };
-            } else {
-                // Eğer referans değeri/işlemi yoksa, ham mesafeyi kar yüksekliği olarak kullan (bu genellikle istenmez ama bir geri dönüş yoludur)
-                processedValue = { snow_depth_cm: originalNumericValue };
-            }
-        } 
-        // Genel kalibrasyon işlemleri
-        else if (typeof processedValue === 'object' && processedValue !== null && typeof refVal === 'number' && refOp && refOp !== 'none') {
-            const keys = Object.keys(processedValue);
-            if (keys.length === 1 && typeof (processedValue as any)[keys[0]] === 'number') {
-                const key = keys[0];
-                const originalValue = (processedValue as any)[key];
-                let calibratedValue = originalValue;
-
-                if (refOp === 'subtract') {
-                    calibratedValue = refVal - originalValue;
-                } else if (refOp === 'add') {
-                    calibratedValue = refVal + originalValue;
-                }
-                
-                processedValue = { [key]: calibratedValue };
-            }
-        }
-        
-        const finalValue = roundNumericValues(processedValue);
-        
-        // Veriyi yerel DB'ye kaydet
-        await addReading(sensor.id, rawValue, finalValue);
-
-        return { sensor: sensor.id, value: finalValue };
+        return { rawValue, processedValue: finalProcessedValue };
     }
-
 
     private async sendReadings(readings: ReadingPayload[]) {
         if (this.state === AgentState.OFFLINE) {
             console.log(`🔌 Çevrimdışı mod: ${readings.length} okuma yerel olarak kaydedildi.`);
+            // Data is already saved by readAndProcessSensor, so nothing more to do here.
             return;
         }
 
@@ -422,6 +543,7 @@ class Agent {
              try {
                 const payload: ReadingPayload = {
                     sensor: reading.sensor_id,
+                    rawValue: JSON.parse(reading.raw_value),
                     value: JSON.parse(reading.processed_value)
                 };
                  await axios.post(`${this.apiBaseUrl}/submit-reading`, payload, {
@@ -481,8 +603,10 @@ class Agent {
                     if (command.payload?.sensor_id) {
                          const sensorToRead = this.config?.sensors.find(s => s.id === command.payload.sensor_id);
                          if (sensorToRead) {
-                             const result = await this.readAndProcessSensor(sensorToRead);
-                             if (result) await this.sendReadings([result]);
+                             const reading = await this.performSingleReading(sensorToRead);
+                             if(reading) {
+                                 await addReading(sensorToRead.id, reading.rawValue, reading.processedValue);
+                             }
                          }
                     }
                     break;
@@ -629,10 +753,12 @@ class Agent {
 
             const payload: ReadingPayload = {
                 sensor: virtualSensorId,
-                value: roundNumericValues({ snow_depth_cm: snowDepth })
+                value: roundNumericValues({ snow_depth_cm: snowDepth }),
+                rawValue: { note: "Gemini analysis result", raw_response: resultJson }
             };
 
-            await this.sendReadings([payload]);
+            await addReading(virtualSensorId, payload.rawValue, payload.value);
+            
             await fs.unlink(outputPath); // Clean up temp file
             
             // Also upload the analysis image for verification
@@ -661,9 +787,10 @@ class Agent {
         
          const payload: ReadingPayload = {
             sensor: virtualSensorId,
-            value: { snow_depth_cm: mockSnowDepth }
+            value: { snow_depth_cm: mockSnowDepth },
+            rawValue: { note: "OpenCV mock result", depth: mockSnowDepth }
         };
-        await this.sendReadings([payload]);
+        await addReading(virtualSensorId, payload.rawValue, payload.value);
     }
 
 }

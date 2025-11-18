@@ -1,8 +1,3 @@
-
-
-
-
-
 // FIX: Resolve Node.js type errors by importing 'Buffer' and 'process' and use aliased Express types for ES modules.
 import { Buffer } from 'buffer';
 import process from 'process';
@@ -69,51 +64,6 @@ const safeJSONParse = (str: string | null | undefined, fallback: any) => {
     }
 };
 
-// Helper to process a raw reading based on sensor calibration rules
-const processRawValue = (rawValue: any, sensor: { type: string, reference_value?: number | null, reference_operation?: string | null }): any => {
-    if (rawValue === null || rawValue === undefined) return null;
-
-    let processedValue = { ...rawValue }; // Work on a copy
-
-    const refVal = sensor.reference_value;
-    const refOp = sensor.reference_operation;
-
-    if (sensor.type === 'Kar Yüksekliği' && typeof rawValue.distance_cm === 'number') {
-        if (typeof refVal === 'number' && refOp === 'subtract') {
-            let calculated = refVal - rawValue.distance_cm;
-            processedValue = { snow_depth_cm: calculated > 0 ? calculated : 0 };
-        } else {
-            processedValue = { snow_depth_cm: rawValue.distance_cm };
-        }
-    } else if (typeof rawValue === 'object' && typeof refVal === 'number' && refOp && refOp !== 'none') {
-        const keys = Object.keys(rawValue);
-        if (keys.length === 1 && typeof rawValue[keys[0]] === 'number') {
-            const key = keys[0];
-            const originalValue = rawValue[key];
-            let calibratedValue = originalValue;
-            if (refOp === 'subtract') calibratedValue = refVal - originalValue;
-            else if (refOp === 'add') calibratedValue = refVal + originalValue;
-            processedValue = { [key]: calibratedValue };
-        }
-    }
-
-    const roundNumericValues = (value: any): any => {
-        if (typeof value === 'number') return parseFloat(value.toFixed(2));
-        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-            const newObj: { [key: string]: any } = {};
-            for (const key in value) {
-                if (Object.prototype.hasOwnProperty.call(value, key)) {
-                    newObj[key] = roundNumericValues(value[key]);
-                }
-            }
-            return newObj;
-        }
-        return value;
-    };
-
-    return roundNumericValues(processedValue);
-};
-
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' })); // Increase limit for base64 image uploads
@@ -168,7 +118,7 @@ apiRouter.get('/config/:deviceId', agentAuth, async (req: ExpressRequest, res: E
             return res.status(404).json({ error: "Station with this device ID not found." });
         }
 
-        const sensorsFromDb = await db.all("SELECT id, name, type, is_active, read_frequency, interface, parser_config, config, reference_value, reference_operation FROM sensors WHERE station_id = ?", deviceId);
+        const sensorsFromDb = await db.all("SELECT id, name, type, is_active, read_frequency, interface, parser_config, config, reference_value, reference_operation, read_order FROM sensors WHERE station_id = ?", deviceId);
         const cameras = await db.all("SELECT id, name, rtsp_url FROM cameras WHERE station_id = ?", deviceId);
         const globalFreq = await db.get("SELECT value FROM global_settings WHERE key = 'global_read_frequency_minutes'");
         
@@ -209,7 +159,7 @@ apiRouter.get('/config/:deviceId', agentAuth, async (req: ExpressRequest, res: E
 // FIX: Add explicit types for req and res parameters.
 apiRouter.post('/submit-reading', agentAuth, async (req: ExpressRequest, res: ExpressResponse) => {
     try {
-        const { sensor: sensor_id, value } = req.body;
+        const { sensor: sensor_id, value, rawValue } = req.body;
         const timestamp = new Date().toISOString();
 
         if (sensor_id === undefined || value === undefined) {
@@ -223,12 +173,16 @@ apiRouter.post('/submit-reading', agentAuth, async (req: ExpressRequest, res: Ex
             return res.status(404).json({ error: 'Sensor not found.' });
         }
 
-        // The agent now sends the already processed value.
-        // We just need to store it.
+        // Store the processed value
         const valueStr = JSON.stringify(value);
-
         await db.run("INSERT INTO readings (sensor_id, value, timestamp) VALUES (?, ?, ?)", sensor_id, valueStr, timestamp);
         await db.run("UPDATE sensors SET value = ?, last_update = ? WHERE id = ?", valueStr, timestamp, sensor_id);
+
+        // Store the raw value if it was provided by the agent
+        if (rawValue) {
+            const rawValueStr = JSON.stringify(rawValue);
+            await db.run("INSERT INTO raw_readings (sensor_id, raw_value, timestamp) VALUES (?, ?, ?)", sensor_id, rawValueStr, timestamp);
+        }
         
         res.status(201).send('OK');
     } catch (error) {
@@ -466,6 +420,7 @@ apiRouter.get('/sensors', async (req: ExpressRequest, res: ExpressResponse) => {
             read_frequency: s.read_frequency,
             referenceValue: s.reference_value,
             referenceOperation: s.reference_operation,
+            readOrder: s.read_order,
         })));
     } catch (error) {
         console.error("Error fetching sensors:", error);
@@ -475,15 +430,15 @@ apiRouter.get('/sensors', async (req: ExpressRequest, res: ExpressResponse) => {
 // FIX: Add explicit types for req and res parameters.
 apiRouter.post('/sensors', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
-        const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation } = req.body;
+        const { name, stationId, interfaceType, parserConfig, interfaceConfig, type, unit, readFrequency, isActive, referenceValue, referenceOperation, readOrder } = req.body;
         const id = `S${Date.now()}`;
         const parserConfigStr = typeof parserConfig === 'string' ? parserConfig : JSON.stringify(parserConfig || {});
         const interfaceConfigStr = typeof interfaceConfig === 'string' ? interfaceConfig : JSON.stringify(interfaceConfig || {});
 
         await db.run(
-            `INSERT INTO sensors (id, name, station_id, type, unit, status, interface, parser_config, config, read_frequency, is_active, last_update, reference_value, reference_operation) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            id, name, stationId, type, unit, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfigStr, interfaceConfigStr, readFrequency, isActive, new Date().toISOString(), referenceValue, referenceOperation
+            `INSERT INTO sensors (id, name, station_id, type, unit, status, interface, parser_config, config, read_frequency, is_active, last_update, reference_value, reference_operation, read_order) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            id, name, stationId, type, unit, isActive ? 'Aktif' : 'Pasif', interfaceType, parserConfigStr, interfaceConfigStr, readFrequency, isActive, new Date().toISOString(), referenceValue, referenceOperation, readOrder
         );
         if (stationId) queueCommand(stationId, 'REFRESH_CONFIG');
         res.status(201).json({ id });
@@ -509,6 +464,7 @@ apiRouter.put('/sensors/:id', async (req: ExpressRequest, res: ExpressResponse) 
         if (fields.readFrequency !== undefined) { updates.push('read_frequency = ?'); params.push(fields.readFrequency); }
         if (fields.referenceValue !== undefined) { updates.push('reference_value = ?'); params.push(fields.referenceValue); }
         if (fields.referenceOperation !== undefined) { updates.push('reference_operation = ?'); params.push(fields.referenceOperation); }
+        if (fields.readOrder !== undefined) { updates.push('read_order = ?'); params.push(fields.readOrder); }
         
         if (fields.parserConfig !== undefined) { 
             updates.push('parser_config = ?'); 
@@ -766,7 +722,7 @@ apiRouter.get('/readings/history', async (req: ExpressRequest, res: ExpressRespo
 
         // 1. Get all relevant sensors
         const sensors = await db.all<SensorForProcessing[]>(`
-            SELECT id, type, name, station_id, interface, unit, reference_value, reference_operation 
+            SELECT id, type, name, station_id, interface, unit
             FROM sensors 
             WHERE station_id IN (${placeholders(stationIdList)}) AND type IN (${placeholders(sensorTypeList)})
         `, [...stationIdList, ...sensorTypeList]);
@@ -780,94 +736,41 @@ apiRouter.get('/readings/history', async (req: ExpressRequest, res: ExpressRespo
         let dateFilterClause = '';
         const dateParams: string[] = [];
         if (startDate && typeof startDate === 'string') {
-            dateFilterClause += ' AND r.timestamp >= ?';
+            dateFilterClause += ' AND timestamp >= ?';
             dateParams.push(startDate);
         }
         if (endDate && typeof endDate === 'string') {
-            dateFilterClause += ' AND r.timestamp <= ?';
+            dateFilterClause += ' AND timestamp <= ?';
             dateParams.push(endDate);
         }
 
-        // 3. Fetch existing processed readings
+        // 3. Fetch processed readings
         const processedReadings = await db.all(`
-            SELECT r.id, r.timestamp, r.sensor_id, r.value 
-            FROM readings r
-            WHERE r.sensor_id IN (${placeholders(sensorIdList)}) ${dateFilterClause.replace('r.timestamp', 'r.timestamp')}
+            SELECT id, timestamp, sensor_id, value 
+            FROM readings
+            WHERE sensor_id IN (${placeholders(sensorIdList)}) ${dateFilterClause}
+            ORDER BY timestamp DESC
+            LIMIT 1000
         `, [...sensorIdList, ...dateParams]);
 
-        // 4. Fetch raw readings for the same filters
-        const rawReadings = await db.all(`
-            SELECT r.id, r.timestamp, r.sensor_id, r.raw_value 
-            FROM raw_readings r
-            WHERE r.sensor_id IN (${placeholders(sensorIdList)}) ${dateFilterClause.replace('r.timestamp', 'r.timestamp')}
-        `, [...sensorIdList, ...dateParams]);
 
-        const readingsMap = new Map<string, any>();
-        
-        // Use a set for quick lookup of existing processed timestamps
-        const processedTimestamps = new Set(processedReadings.map(r => `${r.sensor_id}:${new Date(r.timestamp).toISOString()}`));
-        
-        processedReadings.forEach(r => {
+        const response = processedReadings.map(r => {
             const sensor = sensorMap.get(r.sensor_id);
-            if (sensor) {
-                const key = `${r.sensor_id}:${new Date(r.timestamp).toISOString()}`;
-                readingsMap.set(key, { 
-                    id: r.id,
-                    timestamp: r.timestamp,
-                    sensorId: r.sensor_id,
-                    value: safeJSONParse(r.value, null),
-                    sensorName: sensor.name,
-                    stationId: sensor.station_id,
-                    sensorType: sensor.type,
-                    interface: sensor.interface,
-                    unit: sensor.unit,
-                 });
+            if (!sensor) return null;
+            return {
+                id: r.id,
+                timestamp: r.timestamp,
+                sensorId: r.sensor_id,
+                value: safeJSONParse(r.value, null),
+                sensorName: sensor.name,
+                stationId: sensor.station_id,
+                sensorType: sensor.type,
+                interface: sensor.interface,
+                unit: sensor.unit,
             }
-        });
+        }).filter(Boolean);
 
-        // 5. Process and insert missing readings
-        const newReadingsToInsert: any[] = [];
-        for (const raw of rawReadings) {
-            const key = `${raw.sensor_id}:${new Date(raw.timestamp).toISOString()}`;
-            if (!processedTimestamps.has(key) && !readingsMap.has(key)) {
-                const sensor = sensorMap.get(raw.sensor_id);
-                if (sensor) {
-                    const rawValueObject = safeJSONParse(raw.raw_value, null);
-                    const processedValue = processRawValue(rawValueObject, sensor);
-                    if (processedValue !== null) {
-                        newReadingsToInsert.push({ sensorId: raw.sensor_id, value: JSON.stringify(processedValue), timestamp: raw.timestamp });
-                        readingsMap.set(key, {
-                            id: `processed-raw-${raw.id}`,
-                            timestamp: raw.timestamp,
-                            sensorId: raw.sensor_id,
-                            value: processedValue,
-                            sensorName: sensor.name,
-                            stationId: sensor.station_id,
-                            sensorType: sensor.type,
-                            interface: sensor.interface,
-                            unit: sensor.unit,
-                        });
-                    }
-                }
-            }
-        }
-        
-        // Asynchronously insert new readings into the database without waiting
-        if (newReadingsToInsert.length > 0) {
-            console.log(`[On-the-fly Processing] ${newReadingsToInsert.length} yeni işlenmiş veri veritabanına ekleniyor...`);
-            (async () => {
-                const stmt = await db.prepare("INSERT INTO readings (sensor_id, value, timestamp) VALUES (?, ?, ?)");
-                for (const newReading of newReadingsToInsert) {
-                    await stmt.run(newReading.sensorId, newReading.value, newReading.timestamp);
-                }
-                await stmt.finalize();
-                console.log(`[On-the-fly Processing] ${newReadingsToInsert.length} kayıt eklendi.`);
-            })().catch(e => console.error("[On-the-fly Processing] Veritabanı ekleme hatası:", e));
-        }
-
-        const combinedReadings = Array.from(readingsMap.values()).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-        res.json(combinedReadings.slice(0, 1000)); // Limit response size
+        res.json(response);
 
     } catch (error) {
         console.error("Error fetching and processing reading history:", error);
@@ -878,15 +781,25 @@ apiRouter.get('/readings/history', async (req: ExpressRequest, res: ExpressRespo
 
 // FIX: Add explicit types for req and res parameters.
 apiRouter.get('/raw-readings/history', async (req: ExpressRequest, res: ExpressResponse) => {
-    const { sensorId } = req.query;
+    const { sensorId, start: startDate, end: endDate } = req.query;
 
     if (!sensorId || typeof sensorId !== 'string') {
         return res.status(400).json({ error: 'sensorId query parameter is required.' });
     }
 
     try {
-        // This table is now only populated by the agent, so we query it for debugging.
-        // It's not populated by the main /submit-reading endpoint anymore.
+        let dateFilterClause = '';
+        const params: (string | undefined)[] = [sensorId];
+
+        if (startDate && typeof startDate === 'string') {
+            dateFilterClause += ' AND r.timestamp >= ?';
+            params.push(startDate);
+        }
+        if (endDate && typeof endDate === 'string') {
+            dateFilterClause += ' AND r.timestamp <= ?';
+            params.push(endDate);
+        }
+
         const readings = await db.all(`
             SELECT 
                 r.id, 
@@ -895,10 +808,10 @@ apiRouter.get('/raw-readings/history', async (req: ExpressRequest, res: ExpressR
                 s.id as sensorId
             FROM raw_readings r
             JOIN sensors s ON r.sensor_id = s.id
-            WHERE s.id = ?
+            WHERE s.id = ? ${dateFilterClause}
             ORDER BY r.timestamp DESC
-            LIMIT 100
-        `, sensorId);
+            LIMIT 500
+        `, ...params);
         res.json(readings.map(r => ({ ...r, raw_value: safeJSONParse(r.raw_value, null) })));
     } catch (error) {
         console.error("Error fetching raw reading history:", error);

@@ -56,6 +56,7 @@ export async function migrate() {
             read_frequency INTEGER DEFAULT 600,
             reference_value REAL,
             reference_operation TEXT,
+            read_order INTEGER DEFAULT 0,
             FOREIGN KEY(station_id) REFERENCES stations(id) ON DELETE SET NULL
         );
 
@@ -158,6 +159,10 @@ export async function migrate() {
     // Columns needed for sensor calibration logic
     await addColumn('sensors', 'reference_value', 'REAL');
     await addColumn('sensors', 'reference_operation', 'TEXT');
+    await addColumn('sensors', 'read_order', 'INTEGER DEFAULT 0');
+    
+    // Add missing timestamp to raw_readings if it doesn't exist
+    await addColumn('raw_readings', 'timestamp', 'TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP');
 
     // Seed global settings
     await db.run("INSERT OR IGNORE INTO global_settings (key, value) VALUES (?, ?)", 'global_read_frequency_minutes', '0');
