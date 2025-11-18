@@ -1,8 +1,9 @@
 
+
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Sensor, Station, SensorStatus, Camera } from '../types.ts';
+import { Sensor, Station, SensorStatus, Camera, SensorHealthStatus } from '../types.ts';
 import Card from '../components/common/Card.tsx';
-import { AddIcon, SearchIcon, EditIcon, DeleteIcon, ExclamationIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, SensorIcon as GenericSensorIcon, BrainIcon, RefreshIcon } from '../components/icons/Icons.tsx';
+import { AddIcon, SearchIcon, EditIcon, DeleteIcon, ExclamationIcon, ThermometerIcon, DropletIcon, WindSockIcon, GaugeIcon, SensorIcon as GenericSensorIcon, BrainIcon, RefreshIcon, CalculatorIcon, CheckCircleIcon, ExclamationCircleIcon, XCircleIcon, QuestionMarkCircleIcon } from '../components/icons/Icons.tsx';
 import AddSensorDrawer from '../components/AddSensorDrawer.tsx';
 import Skeleton from '../components/common/Skeleton.tsx';
 import { getSensors, getStations, addSensor, updateSensor, deleteSensor, getDefinitions, forceReadSensor, getCameras } from '../services/apiService.ts';
@@ -48,6 +49,36 @@ const SensorCard: React.FC<{
         return numericValue.toFixed(2);
     }, [sensor.value, sensor.type, sensor.interface]);
 
+    const finalHealthStatus: SensorHealthStatus = useMemo(() => {
+        if (sensor.healthStatus === 'Sağlıklı' && sensor.lastUpdate) {
+            const lastUpdateDate = new Date(sensor.lastUpdate);
+            const now = new Date();
+            const diffSeconds = (now.getTime() - lastUpdateDate.getTime()) / 1000;
+            // Use 3x the read frequency or a minimum of 1 hour as the threshold for staleness
+            const staleThreshold = Math.max(sensor.read_frequency * 3, 3600); 
+    
+            if (diffSeconds > staleThreshold) {
+                return 'Veri Yok';
+            }
+        }
+        return sensor.healthStatus || 'Bilinmiyor';
+    }, [sensor.healthStatus, sensor.lastUpdate, sensor.read_frequency]);
+
+    const healthInfo = useMemo(() => {
+        switch (finalHealthStatus) {
+            case 'Sağlıklı':
+                return { text: 'Sağlıklı', Icon: CheckCircleIcon, className: 'text-success' };
+            case 'Okuma Hatası':
+                return { text: 'Okuma Hatası', Icon: ExclamationCircleIcon, className: 'text-warning' };
+            case 'Veri Yok':
+                 return { text: 'Veri Yok', Icon: XCircleIcon, className: 'text-danger' };
+            default:
+                return { text: 'Bilinmiyor', Icon: QuestionMarkCircleIcon, className: 'text-muted' };
+        }
+    }, [finalHealthStatus]);
+
+    const isCalibrationActive = sensor.referenceOperation && sensor.referenceOperation !== 'none';
+
     return (
         <Card className="p-3 flex flex-col h-full">
             <div className="flex justify-between items-start mb-2">
@@ -55,7 +86,14 @@ const SensorCard: React.FC<{
                     <div className="bg-gray-100 p-2 rounded-lg">{getSensorIcon(sensor)}</div>
                     <div>
                         <h3 className="font-semibold text-gray-900 text-base">{sensor.name}</h3>
-                        <p className="text-xs text-muted">{stationName || 'Atanmamış'}</p>
+                        <div className="flex items-center gap-2">
+                            <p className="text-xs text-muted">{stationName || 'Atanmamış'}</p>
+                            {isCalibrationActive && (
+                                <div title="Kalibrasyon Aktif">
+                                    <CalculatorIcon className="w-3.5 h-3.5 text-blue-500" />
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
                 <div className="flex items-center gap-0">
@@ -83,8 +121,9 @@ const SensorCard: React.FC<{
                 <p className="text-xs text-gray-600">{sensor.type}</p>
             </div>
             <div className="flex justify-between items-center text-xs pt-2 border-t border-gray-200">
-                <span className={`px-2 py-0.5 font-semibold rounded-full ${statusStyles[sensor.status]}`}>
-                    {sensor.status}
+                <span title={`Son Güncelleme: ${sensor.lastUpdate ? new Date(sensor.lastUpdate).toLocaleString('tr-TR') : 'N/A'}`} className={`flex items-center gap-1.5 font-semibold ${healthInfo.className}`}>
+                   <healthInfo.Icon className="w-4 h-4" />
+                   {healthInfo.text}
                 </span>
                 <span className="text-muted">{formatTimeAgo(sensor.lastUpdate)}</span>
             </div>

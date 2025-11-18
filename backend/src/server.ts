@@ -176,7 +176,7 @@ apiRouter.post('/submit-reading', agentAuth, async (req: ExpressRequest, res: Ex
         // Store the processed value
         const valueStr = JSON.stringify(value);
         await db.run("INSERT INTO readings (sensor_id, value, timestamp) VALUES (?, ?, ?)", sensor_id, valueStr, timestamp);
-        await db.run("UPDATE sensors SET value = ?, last_update = ? WHERE id = ?", valueStr, timestamp, sensor_id);
+        await db.run("UPDATE sensors SET value = ?, last_update = ?, health_status = ? WHERE id = ?", valueStr, timestamp, 'Sağlıklı', sensor_id);
 
         // Store the raw value if it was provided by the agent
         if (rawValue) {
@@ -421,6 +421,7 @@ apiRouter.get('/sensors', async (req: ExpressRequest, res: ExpressResponse) => {
             referenceValue: s.reference_value,
             referenceOperation: s.reference_operation,
             readOrder: s.read_order,
+            healthStatus: s.health_status,
         })));
     } catch (error) {
         console.error("Error fetching sensors:", error);
@@ -533,6 +534,17 @@ apiRouter.post('/sensors/:id/read', async (req: ExpressRequest, res: ExpressResp
     } catch (error) {
         console.error(`Error queueing read command for sensor ${id}:`, error);
         res.status(500).json({ error: "Failed to queue read command." });
+    }
+});
+
+apiRouter.post('/sensors/:id/read-failure', agentAuth, async (req: ExpressRequest, res: ExpressResponse) => {
+    const { id } = req.params;
+    try {
+        await db.run("UPDATE sensors SET health_status = ? WHERE id = ?", 'Okuma Hatası', id);
+        res.status(200).send('OK');
+    } catch (error) {
+        console.error(`Error reporting read failure for sensor ${id}:`, error);
+        res.status(500).json({ error: "Failed to report read failure." });
     }
 });
 

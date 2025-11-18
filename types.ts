@@ -65,6 +65,8 @@ export enum SensorStatus {
     Maintenance = 'Bakımda'
 }
 
+export type SensorHealthStatus = 'Sağlıklı' | 'Okuma Hatası' | 'Veri Yok' | 'Bilinmiyor';
+
 export interface Sensor {
   id: string;
   name: string;
@@ -83,6 +85,7 @@ export interface Sensor {
   readOrder?: number;
   referenceValue?: number;
   referenceOperation?: 'add' | 'subtract' | 'none';
+  healthStatus?: SensorHealthStatus;
 }
 
 export enum CameraStatus {

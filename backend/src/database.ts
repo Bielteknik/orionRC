@@ -57,6 +57,7 @@ export async function migrate() {
             reference_value REAL,
             reference_operation TEXT,
             read_order INTEGER DEFAULT 0,
+            health_status TEXT DEFAULT 'Bilinmiyor',
             FOREIGN KEY(station_id) REFERENCES stations(id) ON DELETE SET NULL
         );
 
@@ -163,6 +164,10 @@ export async function migrate() {
     
     // Add missing timestamp to raw_readings if it doesn't exist
     await addColumn('raw_readings', 'timestamp', 'TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP');
+    
+    // Column for sensor health status
+    await addColumn('sensors', 'health_status', "TEXT DEFAULT 'Bilinmiyor'");
+
 
     // Seed global settings
     await db.run("INSERT OR IGNORE INTO global_settings (key, value) VALUES (?, ?)", 'global_read_frequency_minutes', '0');

@@ -401,7 +401,7 @@ class Agent {
     }
     
     private async readAndAverageSensor(sensor: SensorConfig, durationMs: number): Promise<ReadingPayload | null> {
-        console.log(`   Ortalama alınıyor: ${sensor.name} (${durationMs / 1000} saniye)`);
+        process.stdout.write(`   Ortalama alınıyor: ${sensor.name} (${durationMs / 1000} saniye) `);
         
         const collectedRawValues: any[] = [];
         const collectedProcessedValues: any[] = [];
@@ -409,33 +409,52 @@ class Agent {
 
         while (Date.now() < endTime) {
             if (!this.running) break;
-            const reading = await this.performSingleReading(sensor);
+            const reading = await this.performSingleReading(sensor, false); // Verbose false
             if (reading && reading.rawValue !== null && reading.processedValue !== null) {
                 collectedRawValues.push(reading.rawValue);
                 collectedProcessedValues.push(reading.processedValue);
             }
+            process.stdout.write('.');
             await new Promise(r => setTimeout(r, AVERAGING_READ_INTERVAL_MS)); // Wait between reads
         }
+        process.stdout.write('\n');
         
         if (collectedRawValues.length === 0) {
-             console.log(`     -> Ortalama alınamadı, ${sensor.name} için geçerli okuma yok.`);
+             console.log(`   -> Ortalama Sonuç (${sensor.name}): Geçerli okuma yok.`);
+             this.reportReadFailure(sensor.id);
              return null;
         }
 
-        const avgRaw = this.averageSensorValues(collectedRawValues);
-        const avgProcessed = this.averageSensorValues(collectedProcessedValues);
+        const avgRaw = this.averageSensorValues(collectedRawValues, sensor.type);
+        const avgProcessed = this.averageSensorValues(collectedProcessedValues, sensor.type);
         
-        console.log(`     -> Ortalama Sonuç:`, avgProcessed);
+        console.log(`   -> Ortalama Sonuç (${sensor.name}): ${collectedRawValues.length} okuma tamamlandı. Ortalama Değer:`, avgProcessed);
+
 
         return { sensor: sensor.id, rawValue: avgRaw, value: avgProcessed };
     }
     
-    private averageSensorValues(values: any[]): any {
+    private averageSensorValues(values: any[], sensorType: string): any {
         if (!values || values.length === 0) return null;
-
+    
+        // Special handling for weight sensors to filter out zeros unless they are predominant
+        if (sensorType === 'Ağırlık') {
+            const zeroCount = values.filter(v => v && v.weight_kg === 0).length;
+            const nonZeroValues = values.filter(v => v && v.weight_kg > 0);
+    
+            // If more than 95% of readings are zero, the actual weight is likely zero
+            if (zeroCount / values.length > 0.95) {
+                return { weight_kg: 0 };
+            }
+            // Otherwise, filter out the zeros as they are likely noise/transient errors
+            if (nonZeroValues.length > 0) {
+                values = nonZeroValues;
+            }
+        }
+    
         const sums: { [key: string]: number } = {};
         const counts: { [key: string]: number } = {};
-
+    
         for (const value of values) {
             if (typeof value === 'object' && value !== null) {
                 for (const key in value) {
@@ -449,7 +468,7 @@ class Agent {
                 counts['value'] = (counts['value'] || 0) + 1;
             }
         }
-
+    
         const averages: { [key: string]: number } = {};
         let hasKeys = false;
         for (const key in sums) {
@@ -459,86 +478,76 @@ class Agent {
             }
         }
         
-        if (!hasKeys) return null; // No numeric values found to average
-
-        // If the original value was just a number, return just a number
+        if (!hasKeys) return null;
+    
         if (Object.keys(averages).length === 1 && averages.hasOwnProperty('value')) {
             return averages.value;
         }
-
+    
         return averages;
     }
     
     private processRawValue(rawValue: any, sensor: SensorConfig): any {
         if (rawValue === null || rawValue === undefined) return null;
-
+    
         const refVal = sensor.reference_value;
         const refOp = sensor.reference_operation;
-        
-        // Per UI convention, a reference value of 999 means "do not calibrate".
-        if (typeof refVal !== 'number' || refVal === 999 || !refOp || refOp === 'none') {
-            // No calibration is applied, but we might still need to rename the key for snow depth
-            if (sensor.type === 'Kar Yüksekliği' && typeof rawValue.distance_cm === 'number') {
-                // Here, we just convert distance to snow_depth without calibration
-                return { snow_depth_cm: rawValue.distance_cm };
-            }
-            return rawValue; // Return raw value as is
+    
+        // If "Use for Snow Measurement" is selected, the config is automatically set.
+        // We give this logic precedence.
+        if (sensor.type === 'Mesafe' && refOp === 'subtract' && sensor.parser_config?.driver === 'dfrobot_ult') {
+             if (typeof rawValue.distance_cm === 'number') {
+                const depth = refVal! - rawValue.distance_cm;
+                 // Return snow_depth_cm, which is what the frontend expects for this case
+                return { snow_depth_cm: depth > 0 ? depth : 0 };
+             }
         }
-
-        // --- Apply Calibration ---
-        
-        // Special case for Distance sensor being converted to Snow Depth
-        if (sensor.type === 'Kar Yüksekliği' && typeof rawValue.distance_cm === 'number') {
-            let depth = rawValue.distance_cm;
-            if (refOp === 'subtract') {
-                depth = refVal - rawValue.distance_cm;
-            } else if (refOp === 'add') {
-                depth = refVal + rawValue.distance_cm;
-            }
-            return { snow_depth_cm: depth > 0 ? depth : 0 };
-        } 
-        
-        // Generic calibration for other object-based values
+    
+        // Standard calibration logic
+        if (typeof refVal !== 'number' || refVal === 999 || !refOp || refOp === 'none') {
+            return rawValue; // Return raw value as is, no calibration
+        }
+    
+        // Generic calibration for object-based values
         if (typeof rawValue === 'object' && rawValue !== null && !Array.isArray(rawValue)) {
             const keys = Object.keys(rawValue);
-            // Calibrate if it's a simple object with one numeric value
             if (keys.length === 1 && typeof rawValue[keys[0]] === 'number') {
                 const key = keys[0];
                 const originalValue = rawValue[key];
                 let newValue = originalValue;
-
+    
                 if (refOp === 'subtract') newValue = refVal - originalValue;
                 else if (refOp === 'add') newValue = refVal + originalValue;
                 
                 return { [key]: newValue };
             }
-        } 
-        
+        }
+    
         // Generic calibration for primitive number values
         if (typeof rawValue === 'number') {
             if (refOp === 'subtract') return refVal - rawValue;
             if (refOp === 'add') return refVal + rawValue;
         }
-
+    
         // If no calibration logic matched, return the original raw value
         return rawValue;
     }
     
-    private async performSingleReading(sensor: SensorConfig): Promise<{ rawValue: any, processedValue: any } | null> {
+    private async performSingleReading(sensor: SensorConfig, verbose: boolean = true): Promise<{ rawValue: any, processedValue: any } | null> {
         const driver = this.driverInstances.get(sensor.id);
         if (!driver) return null;
 
-        // Skip reading for virtual sensors unless forced, as they are triggered by commands
         if (sensor.interface === 'virtual' && sensor.parser_config?.driver === 'image_analyzer') {
-            return null; // Don't perform periodic reads for image analysis sensors
+            return null; 
         }
 
-        console.log(`   Okunuyor: ${sensor.name} (${sensor.type})`);
+        if (verbose) console.log(`   Okunuyor: ${sensor.name} (${sensor.type})`);
         
-        let rawValue = await driver.read(sensor.config);
+        let rawValue = await (driver as any).read(sensor.config, verbose);
 
         if (rawValue === null) {
-            console.log(`     -> OKUMA BAŞARISIZ: ${sensor.name} sensöründen veri alınamadı.`);
+            if (verbose) console.log(`     -> OKUMA BAŞARISIZ: ${sensor.name} sensöründen veri alınamadı.`);
+            this.reportReadFailure(sensor.id);
             return null;
         }
         
@@ -546,6 +555,18 @@ class Agent {
         const finalProcessedValue = roundNumericValues(processedValue);
 
         return { rawValue, processedValue: finalProcessedValue };
+    }
+
+    private async reportReadFailure(sensorId: string) {
+        if (this.state === AgentState.OFFLINE) return;
+        try {
+            await axios.post(`${this.apiBaseUrl}/sensors/${sensorId}/read-failure`, {}, {
+                headers: { 'Authorization': `Bearer ${this.authToken}` }
+            });
+            console.log(`     -> OKUMA HATASI RAPORLANDI: ${sensorId}`);
+        } catch (error) {
+            this.handleApiError(error, `sensör ${sensorId} için okuma hatası raporlanırken`);
+        }
     }
 
     private async sendReadings(readings: ReadingPayload[]) {
