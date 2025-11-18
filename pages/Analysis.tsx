@@ -92,7 +92,8 @@ const ComparativeSnowDepthAnalysis: React.FC<{ stations: Station[], sensors: Sen
         
         return sourceCamera.photos.filter(photoUrl => {
             const filename = photoUrl.split('/').pop() || '';
-            const datePartMatch = filename.match(/^(\d{4}-\d{2}-\d{2})/);
+            // Removed ^ anchor to match date anywhere in filename
+            const datePartMatch = filename.match(/(\d{4}-\d{2}-\d{2})/);
             if (datePartMatch) {
                 return datePartMatch[1] === photoDateFilter;
             }

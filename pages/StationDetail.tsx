@@ -1,5 +1,4 @@
 
-
 import React, { useMemo, useState, useEffect } from 'react';
 import { Station, Sensor, Camera, SensorStatus, CameraStatus } from '../types.ts';
 import { getStations, getSensors, getCameras, getReadingsHistory, restartAgent, stopAgent } from '../services/apiService.ts';
@@ -304,7 +303,8 @@ const StationDetail: React.FC<StationDetailProps> = ({ stationId, onBack, onView
     
     return selectedCamera.photos.filter(photoUrl => {
         const filename = photoUrl.split('/').pop() || '';
-        const datePartMatch = filename.match(/^(\d{4}-\d{2}-\d{2})/);
+        // Removed ^ anchor to match date anywhere in filename
+        const datePartMatch = filename.match(/(\d{4}-\d{2}-\d{2})/);
         if (datePartMatch) {
             return datePartMatch[1] === photoDateFilter;
         }
