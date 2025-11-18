@@ -1,5 +1,3 @@
-
-
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Sensor, Station, SensorStatus, Camera, SensorHealthStatus } from '../types.ts';
 import Card from '../components/common/Card.tsx';
