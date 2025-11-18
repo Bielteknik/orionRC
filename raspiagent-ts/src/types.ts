@@ -44,7 +44,7 @@ export interface AgentCommand {
 
 // Sensör sürücülerinin uygulayacağı arayüz
 export interface ISensorDriver {
-    read(config: any): Promise<Record<string, any> | null>;
+    read(config: any, verbose?: boolean): Promise<Record<string, any> | null>;
 }
 
 // Sunucuya gönderilecek okuma verisi

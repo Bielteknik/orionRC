@@ -45,16 +45,30 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
     
     // State for AI Snow Sensor
     const [sourceCameraId, setSourceCameraId] = useState('');
+    const [isForSnowDepth, setIsForSnowDepth] = useState(false);
+
     const isSnowSensor = useMemo(() => sensorType === 'Kar Yüksekliği' && interfaceType === 'virtual', [sensorType, interfaceType]);
+    const isDistanceSensor = useMemo(() => sensorType === 'Mesafe' && interfaceType !== 'virtual', [sensorType, interfaceType]);
     const stationMap = useMemo(() => new Map(stations.map(s => [s.id, s.name])), [stations]);
 
     const title = sensorToEdit ? 'Sensör Ayarlarını Düzenle' : 'Yeni Sensör Ekle';
+    
+    useEffect(() => {
+        if (isDistanceSensor && isForSnowDepth) {
+            setReferenceOperation('subtract');
+        } else if (isDistanceSensor && !isForSnowDepth && sensorToEdit?.referenceOperation !== 'add') {
+             setReferenceValue('999');
+             setReferenceOperation('none');
+        }
+    }, [isForSnowDepth, isDistanceSensor, sensorToEdit]);
 
     useEffect(() => {
         if (referenceValue === '999' || referenceValue === '') {
-            setReferenceOperation('none');
+            if (!isForSnowDepth) {
+                setReferenceOperation('none');
+            }
         }
-    }, [referenceValue]);
+    }, [referenceValue, isForSnowDepth]);
 
     useEffect(() => {
         const handleEsc = (event: KeyboardEvent) => {
@@ -80,11 +94,15 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
         setSourceCameraId('');
         setReferenceValue('999');
         setReferenceOperation('none');
+        setIsForSnowDepth(false);
     };
 
     useEffect(() => {
         if (isOpen) {
             if (sensorToEdit) {
+                const isSnowConfig = sensorToEdit.type === 'Mesafe' && sensorToEdit.interface !== 'virtual' && sensorToEdit.referenceOperation === 'subtract';
+                setIsForSnowDepth(isSnowConfig);
+
                 setName(sensorToEdit.name);
                 setStationId(sensorToEdit.stationId);
                 setSensorType(sensorToEdit.type);
@@ -94,7 +112,7 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
                 setInterfaceConfig(JSON.stringify(sensorToEdit.config, null, 2) || '{}');
                 setParserConfig(JSON.stringify(sensorToEdit.parser_config, null, 2) || '{}');
                 setReadFrequency(String(sensorToEdit.read_frequency || 600));
-                setReferenceValue(String(sensorToEdit.referenceValue ?? '999'));
+                setReferenceValue(String(sensorToEdit.referenceValue ?? (isSnowConfig ? '' : '999')));
                 setReferenceOperation(sensorToEdit.referenceOperation || 'none');
 
 
@@ -177,7 +195,7 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
         }
     }, [parserConfig, isSnowSensor]);
 
-    const isFormInvalid = !name.trim() || !stationId || (isSnowSensor && !sourceCameraId) || (!isSnowSensor && (!!interfaceConfigError || !!parserConfigError));
+    const isFormInvalid = !name.trim() || !stationId || (isSnowSensor && !sourceCameraId) || (!isSnowSensor && (!!interfaceConfigError || !!parserConfigError)) || (isDistanceSensor && isForSnowDepth && !referenceValue);
 
     const handleClose = () => {
         onClose();
@@ -190,6 +208,10 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
         }
         if (isSnowSensor && !sourceCameraId) {
             setError('Yapay Zeka Kar Sensörü için bir Kaynak Kamera seçmelisiniz.');
+            return;
+        }
+        if (isDistanceSensor && isForSnowDepth && (!referenceValue || parseFloat(referenceValue) <= 0)) {
+            setError('Lütfen sensörün yerden yüksekliği için geçerli bir değer girin.');
             return;
         }
         if (isFormInvalid) return;
@@ -272,6 +294,15 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
                                     </select>
                                 </div>
                             </div>
+                            {isDistanceSensor && (
+                                <div className="md:col-span-2 border-t border-gray-200 pt-5">
+                                    <label className="flex items-center space-x-3 cursor-pointer">
+                                        <input type="checkbox" checked={isForSnowDepth} onChange={e => setIsForSnowDepth(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-accent focus:ring-accent" />
+                                        <span className="text-sm font-medium text-gray-800">Kar Yüksekliği Ölçümü İçin Kullan</span>
+                                    </label>
+                                    <p className="text-xs text-muted mt-1 ml-7">Bu seçenek, sensörün okuduğu mesafeyi bir referans noktasından (sensörün yerden yüksekliği) çıkararak kar yüksekliğini hesaplar.</p>
+                                </div>
+                            )}
                         </div>
 
                         {isSnowSensor ? (
@@ -302,30 +333,41 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
                             </div>
                         ) : (
                             <>
-                                <div className="border-t border-gray-200 pt-5 space-y-5">
-                                    <h4 className="text-base font-semibold text-gray-800">Kalibrasyon Ayarları (Opsiyonel)</h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5 items-start">
+                                {isForSnowDepth ? (
+                                    <div className="border-t border-gray-200 pt-5 space-y-5">
+                                        <h4 className="text-base font-semibold text-gray-800">Kar Yüksekliği Ayarı</h4>
                                         <div>
-                                            <label htmlFor="reference-value" className="block text-sm font-medium text-gray-700 mb-1.5">Referans Değeri</label>
-                                            <input type="number" id="reference-value" value={referenceValue} onChange={e => setReferenceValue(e.target.value)} className="w-full bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent" />
-                                             <p className="text-xs text-muted mt-1">"999" girilirse işlem yapılmaz.</p>
-                                        </div>
-                                         <div>
-                                            <label htmlFor="reference-operation" className="block text-sm font-medium text-gray-700 mb-1.5">Uygulanacak İşlem</label>
-                                            <select 
-                                                id="reference-operation" 
-                                                value={referenceOperation} 
-                                                onChange={e => setReferenceOperation(e.target.value)} 
-                                                className="w-full bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                                                disabled={referenceValue === '999' || referenceValue === ''}
-                                            >
-                                                <option value="none">İşlem Yok</option>
-                                                <option value="subtract">Referanstan Çıkar (Ref - Okunan)</option>
-                                                <option value="add">Referansa Ekle (Ref + Okunan)</option>
-                                            </select>
+                                            <label htmlFor="reference-value-snow" className="block text-sm font-medium text-gray-700 mb-1.5">Sensörün Yerden Yüksekliği (cm) *</label>
+                                            <input type="number" id="reference-value-snow" value={referenceValue === '999' ? '' : referenceValue} onChange={e => setReferenceValue(e.target.value)} placeholder="Örn: 355" className="w-full md:w-1/2 bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent" />
+                                            <p className="text-xs text-muted mt-1">Agent, bu değerden sensörün okuduğu mesafeyi çıkararak kar yüksekliğini hesaplar.</p>
                                         </div>
                                     </div>
-                                </div>
+                                ) : (
+                                    <div className="border-t border-gray-200 pt-5 space-y-5">
+                                        <h4 className="text-base font-semibold text-gray-800">Kalibrasyon Ayarları (Opsiyonel)</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5 items-start">
+                                            <div>
+                                                <label htmlFor="reference-value" className="block text-sm font-medium text-gray-700 mb-1.5">Referans Değeri</label>
+                                                <input type="number" id="reference-value" value={referenceValue} onChange={e => setReferenceValue(e.target.value)} className="w-full bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent" />
+                                                 <p className="text-xs text-muted mt-1">"999" girilirse işlem yapılmaz.</p>
+                                            </div>
+                                             <div>
+                                                <label htmlFor="reference-operation" className="block text-sm font-medium text-gray-700 mb-1.5">Uygulanacak İşlem</label>
+                                                <select 
+                                                    id="reference-operation" 
+                                                    value={referenceOperation} 
+                                                    onChange={e => setReferenceOperation(e.target.value)} 
+                                                    className="w-full bg-secondary border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                                    disabled={referenceValue === '999' || referenceValue === ''}
+                                                >
+                                                    <option value="none">İşlem Yok</option>
+                                                    <option value="subtract">Referanstan Çıkar (Ref - Okunan)</option>
+                                                    <option value="add">Referansa Ekle (Ref + Okunan)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="border-t border-gray-200 pt-5">
                                     <label htmlFor="interface-config" className="block text-sm font-medium text-gray-700 mb-1.5">Arayüz Yapılandırması (JSON)</label>
                                     <textarea id="interface-config" value={interfaceConfig} onChange={e => setInterfaceConfig(e.target.value)} rows={4} className={`w-full bg-secondary border rounded-md px-3 py-2 focus:outline-none focus:ring-2 font-mono text-sm ${interfaceConfigError ? 'border-danger focus:ring-danger' : 'border-gray-300 focus:ring-accent'}`}></textarea>

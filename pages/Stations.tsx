@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Station, Sensor, Camera } from '../types.ts';
 import Card from '../components/common/Card.tsx';
 import { AddIcon, SearchIcon, LocationPinIcon, SensorIcon, CameraIcon, SettingsIcon, ExclamationIcon, DeleteIcon } from '../components/icons/Icons.tsx';
-import AddStationDrawer from '../components/AddStationModal.tsx';
+import AddStationModal from '../components/AddStationModal.tsx';
 import { getUnassignedSensors, getUnassignedCameras, addStation, deleteStation, updateStation } from '../services/apiService.ts';
 import LocationPickerMap from '../components/common/LocationPickerMap.tsx';
 import DeleteConfirmationModal from '../components/DeleteConfirmationModal.tsx';
@@ -296,7 +296,7 @@ const Stations: React.FC<StationsProps> = ({ stations, onViewDetails, onDataChan
                 </div>
             </Card>
         )}
-        <AddStationDrawer 
+        <AddStationModal 
             isOpen={isAddDrawerOpen} 
             onClose={() => setIsAddDrawerOpen(false)} 
             onSave={handleSaveStation} 

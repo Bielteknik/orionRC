@@ -3,7 +3,7 @@ import LocationPickerMap from './common/LocationPickerMap.tsx';
 import { SensorIcon, CameraIcon } from './icons/Icons.tsx';
 import { Sensor, Camera } from '../types.ts';
 
-interface AddStationDrawerProps {
+interface AddStationModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (newStationData: { id: string; name: string; location: string; locationCoords: { lat: number; lng: number; }; selectedSensorIds: string[]; selectedCameraIds: string[] }) => void;
@@ -13,7 +13,7 @@ interface AddStationDrawerProps {
 
 const INITIAL_CENTER = { lat: 39.9086, lng: 41.2655 };
 
-const AddStationDrawer: React.FC<AddStationDrawerProps> = ({ 
+const AddStationModal: React.FC<AddStationModalProps> = ({ 
     isOpen, 
     onClose, 
     onSave,
@@ -218,4 +218,4 @@ const AddStationDrawer: React.FC<AddStationDrawerProps> = ({
   );
 };
 
-export default AddStationDrawer;
+export default AddStationModal;

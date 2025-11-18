@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, AreaChart, Area } from 'recharts';
 import { Station, Sensor, WidgetConfig, WidgetType } from '../types.ts';
@@ -12,7 +11,8 @@ import WindRoseChart from '../components/WindRoseChart.tsx';
 import { ChartBarIcon, MapIcon, AddIcon, PaletteIcon, XIcon, ThermometerIcon, DropletIcon, WindIcon, PressureIcon, CalendarIcon } from '../components/icons/Icons.tsx';
 import { getNumericValue } from '../utils/helpers.ts';
 
-const SENSOR_ICONS: { [key: string]: React.ReactNode } = {
+// FIX: Change React.ReactNode to React.ReactElement to provide a more specific type for cloneElement.
+const SENSOR_ICONS: { [key: string]: React.ReactElement } = {
   'Sıcaklık': <ThermometerIcon />,
   'Nem': <DropletIcon />,
   'Rüzgar Hızı': <WindIcon />,
@@ -36,7 +36,8 @@ const DataCard: React.FC<{ title: string, data: any[], unit: string }> = ({ titl
         <div className="bg-primary dark:bg-dark-primary p-4 rounded-lg border border-gray-200 dark:border-gray-700 h-full flex flex-col relative overflow-hidden">
             {icon && (
                 <div className="absolute -right-4 -top-4 text-gray-200 dark:text-gray-700/50">
-                    {React.cloneElement(icon as React.ReactElement, { className: 'w-24 h-24' })}
+                    {/* FIX: Remove unnecessary type assertion for the icon element. */}
+                    {React.cloneElement(icon, { className: 'w-24 h-24' })}
                 </div>
             )}
             <p className="font-semibold text-gray-600 dark:text-gray-400 z-10">{title}</p>
@@ -78,7 +79,7 @@ const SensorChart: React.FC<{ sensorType: string, data: any[], stations: Station
                     <AreaChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 20 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#374151' : '#E5E7EB'} />
                         <XAxis dataKey="name" tick={{ fontSize: 9, fill: tickColor }} angle={-25} textAnchor="end" />
-                        <YAxis tick={{ fontSize: 10, fill: tickColor }} unit={data[0]?.unit || ''}/>
+                        <YAxis tick={{ fontSize: 10, fill: tickColor }} unit={data?.[0]?.unit || ''}/>
                         <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF', border: `1px solid ${theme === 'dark' ? '#374151' : '#E5E7EB'}` }}/>
                         <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '20px' }}/>
                         {stationNames.map((name) => (
@@ -241,6 +242,18 @@ const Dashboard: React.FC<{
         setWidgets(prev => prev.filter(w => w.id !== id));
     };
 
+    const renderableWidgets = useMemo(() => {
+        return widgets.filter(widget => {
+            if (widget.type === 'dataCard' || widget.type === 'sensorChart') {
+                return allSensorTypes.includes(widget.config.sensorType);
+            }
+            if (widget.type === 'windRose') {
+                return allSensorTypes.includes('Rüzgar Hızı') && allSensorTypes.includes('Rüzgar Yönü');
+            }
+            return false; // Hide unknown widget types
+        });
+    }, [widgets, allSensorTypes]);
+
     const renderWidget = (widget: WidgetConfig) => {
         const dataForWidget = historyData.filter(d => d.sensorType === widget.config.sensorType);
 
@@ -289,21 +302,31 @@ const Dashboard: React.FC<{
                     </div>
                     
                     <div className="grid grid-cols-12 gap-6">
-                        {widgets.map(widget => (
-                            <div key={widget.id} className={`
-                                ${widget.type === 'dataCard' ? 'col-span-12 sm:col-span-6 lg:col-span-3' : ''} 
-                                ${widget.type === 'sensorChart' ? 'col-span-12 lg:col-span-6 min-h-[320px]' : ''}
-                                ${widget.type === 'windRose' ? 'col-span-12 lg:col-span-6 min-h-[320px]' : ''}
-                                relative group
-                            `}>
-                                <div className="bg-primary dark:bg-dark-primary rounded-lg border border-gray-200 dark:border-gray-700 h-full w-full">
-                                    {isLoadingHistory ? <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-full w-full rounded-lg"></div> : renderWidget(widget)}
+                       {renderableWidgets.length > 0 ? (
+                            renderableWidgets.map(widget => (
+                                <div key={widget.id} className={`
+                                    ${widget.type === 'dataCard' ? 'col-span-12 sm:col-span-6 lg:col-span-3' : ''} 
+                                    ${widget.type === 'sensorChart' ? 'col-span-12 lg:col-span-6 min-h-[320px]' : ''}
+                                    ${widget.type === 'windRose' ? 'col-span-12 lg:col-span-6 min-h-[320px]' : ''}
+                                    relative group
+                                `}>
+                                    <div className="bg-primary dark:bg-dark-primary rounded-lg border border-gray-200 dark:border-gray-700 h-full w-full">
+                                        {isLoadingHistory ? <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-full w-full rounded-lg"></div> : renderWidget(widget)}
+                                    </div>
+                                    <button onClick={() => handleRemoveWidget(widget.id)} className="absolute top-2 right-2 p-1.5 bg-gray-500/30 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-danger z-10">
+                                        <XIcon className="w-4 h-4"/>
+                                    </button>
                                 </div>
-                                <button onClick={() => handleRemoveWidget(widget.id)} className="absolute top-2 right-2 p-1.5 bg-gray-500/30 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-danger z-10">
-                                    <XIcon className="w-4 h-4"/>
-                                </button>
+                            ))
+                        ) : (
+                             <div className="col-span-12">
+                                <div className="text-center py-16 text-muted border border-dashed rounded-lg bg-primary dark:bg-dark-primary">
+                                    <ChartBarIcon className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-2"/>
+                                    <p className="font-semibold">Dashboard'unuz boş</p>
+                                    <p className="text-sm">Başlamak için 'Widget Ekle' butonuna tıklayarak veri kartları veya grafikler ekleyebilirsiniz.</p>
+                                </div>
                             </div>
-                        ))}
+                        )}
                     </div>
                 </div>
             ) : (

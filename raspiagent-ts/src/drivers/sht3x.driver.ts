@@ -29,43 +29,32 @@ const calculateCRC = (data: Buffer): number => {
 };
 
 export default class Sht3xDriver implements ISensorDriver {
-    async read(config: { address: string; bus?: number }): Promise<Record<string, any> | null> {
+    async read(config: { address: string; bus?: number }, verbose: boolean = true): Promise<Record<string, any> | null> {
         const address = parseInt(config.address, 16);
         const busNumber = config.bus || 1;
         const maxRetries = 3;
 
         if (isNaN(address)) {
-            console.error("     -> HATA (SHT3x): Geçersiz I2C adresi belirtilmiş.");
+            if (verbose) console.error("     -> HATA (SHT3x): Geçersiz I2C adresi belirtilmiş.");
             return null;
         }
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             let i2cBus: PromisifiedBus | null = null;
             try {
-                console.log(`     -> SHT3x okunuyor... Adres: 0x${address.toString(16)}, Bus: ${busNumber} (Deneme ${attempt}/${maxRetries})`);
+                if (verbose) console.log(`     -> SHT3x okunuyor... Adres: 0x${address.toString(16)}, Bus: ${busNumber} (Deneme ${attempt}/${maxRetries})`);
                 
                 // Open I2C bus asynchronously
                 i2cBus = await i2c.openPromisified(busNumber);
 
-                // FIX: Removed soft reset. It might put the sensor in an
-                // unresponsive state for a short period, causing the subsequent
-                // write command to time out. A reset on every read is often
-                // unnecessary.
-                /*
-                // 1. Send Soft Reset to ensure sensor is in a known state
-                const resetBuffer = Buffer.from(CMD_SOFT_RESET);
-                await i2cBus.i2cWrite(address, resetBuffer.length, resetBuffer);
-                await new Promise(resolve => setTimeout(resolve, RESET_DELAY));
-                */
-
-                // 2. Send measurement command
+                // Send measurement command
                 const writeBuffer = Buffer.from(CMD_MEASURE_HPM);
                 await i2cBus.i2cWrite(address, writeBuffer.length, writeBuffer);
 
                 // Wait for the sensor to perform the measurement
                 await new Promise(resolve => setTimeout(resolve, MEASUREMENT_DELAY));
 
-                // 3. Read 6 bytes of data: [Temp MSB, Temp LSB, Temp CRC, Hum MSB, Hum LSB, Hum CRC]
+                // Read 6 bytes of data: [Temp MSB, Temp LSB, Temp CRC, Hum MSB, Hum LSB, Hum CRC]
                 const readBuffer = Buffer.alloc(6);
                 await i2cBus.i2cRead(address, readBuffer.length, readBuffer);
 
@@ -76,13 +65,15 @@ export default class Sht3xDriver implements ISensorDriver {
                 const receivedHumCRC = readBuffer[5];
 
                 if (tempCRC !== receivedTempCRC || humCRC !== receivedHumCRC) {
-                     console.warn(`     -> UYARI (SHT3x): CRC kontrolü başarısız!`);
-                     console.warn(`     -> Ham Veri Buffer: <${readBuffer.toString('hex')}>`);
-                     console.warn(`     -> Sıcaklık: Hesaplanan CRC=0x${tempCRC.toString(16)}, Alınan CRC=0x${receivedTempCRC.toString(16)}`);
-                     console.warn(`     -> Nem:      Hesaplanan CRC=0x${humCRC.toString(16)}, Alınan CRC=0x${receivedHumCRC.toString(16)}`);
+                     if (verbose) {
+                        console.warn(`     -> UYARI (SHT3x): CRC kontrolü başarısız!`);
+                        console.warn(`     -> Ham Veri Buffer: <${readBuffer.toString('hex')}>`);
+                        console.warn(`     -> Sıcaklık: Hesaplanan CRC=0x${tempCRC.toString(16)}, Alınan CRC=0x${receivedTempCRC.toString(16)}`);
+                        console.warn(`     -> Nem:      Hesaplanan CRC=0x${humCRC.toString(16)}, Alınan CRC=0x${receivedHumCRC.toString(16)}`);
+                     }
                      
                      if (attempt === maxRetries) {
-                         console.error("     -> HATA (SHT3x): Maksimum deneme sayısına ulaşıldı, okuma başarısız.");
+                         if (verbose) console.error("     -> HATA (SHT3x): Maksimum deneme sayısına ulaşıldı, okuma başarısız.");
                          return null;
                      }
                      await new Promise(resolve => setTimeout(resolve, 100)); // Short delay before retrying
@@ -101,15 +92,17 @@ export default class Sht3xDriver implements ISensorDriver {
                     humidity: parseFloat(humidity.toFixed(2))
                 };
                 
-                console.log(`     -> Okunan Değer:`, result);
+                if (verbose) console.log(`     -> Okunan Değer:`, result);
                 return result;
 
             } catch (error: any) {
                  if (attempt === maxRetries) {
-                    console.error(`     -> HATA (SHT3x): Maksimum deneme sayısına ulaşıldıktan sonra I2C bus (${busNumber}) üzerinden 0x${address.toString(16)} adresli cihaza erişilemedi.`, error.message);
-                    console.error(`     -> ÖNERİ: 1) Raspberry Pi'de I2C arayüzünün 'sudo raspi-config' ile etkinleştirildiğinden emin olun.`);
-                    console.error(`     -> ÖNERİ: 2) Sensörün kablo bağlantılarını (SDA, SCL, VCC, GND) kontrol edin.`);
-                    console.error(`     -> ÖNERİ: 3) 'i2cdetect -y ${busNumber}' komutunu çalıştırarak sensörün 0x${address.toString(16)} adresinde göründüğünü doğrulayın.`);
+                    if (verbose) {
+                        console.error(`     -> HATA (SHT3x): Maksimum deneme sayısına ulaşıldıktan sonra I2C bus (${busNumber}) üzerinden 0x${address.toString(16)} adresli cihaza erişilemedi.`, error.message);
+                        console.error(`     -> ÖNERİ: 1) Raspberry Pi'de I2C arayüzünün 'sudo raspi-config' ile etkinleştirildiğinden emin olun.`);
+                        console.error(`     -> ÖNERİ: 2) Sensörün kablo bağlantılarını (SDA, SCL, VCC, GND) kontrol edin.`);
+                        console.error(`     -> ÖNERİ: 3) 'i2cdetect -y ${busNumber}' komutunu çalıştırarak sensörün 0x${address.toString(16)} adresinde göründüğünü doğrulayın.`);
+                    }
                     return null;
                 }
                  await new Promise(resolve => setTimeout(resolve, 100)); // Wait before retrying on error
