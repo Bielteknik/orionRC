@@ -1,7 +1,12 @@
 import axios from 'axios';
 import { Station, Sensor, Camera, AlertRule, Report, ReportSchedule, Notification, NetworkStats } from '../types.ts';
 
-const API_BASE_URL = '/api';
+// Use absolute URL for API calls to ensure compatibility with all Axios versions and environments.
+// In development (Vite), window.location.origin is localhost:3000, which gets proxied.
+// In production, it's the domain serving the app.
+const API_BASE_URL = typeof window !== 'undefined' 
+    ? `${window.location.origin}/api` 
+    : '/api';
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL,

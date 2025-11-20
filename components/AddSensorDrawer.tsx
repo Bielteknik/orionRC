@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Station, Sensor, SensorStatus, Camera } from '../types.ts';
-import { SerialPortIcon, CpuChipIcon, HttpIcon, BrainIcon } from './icons/Icons.tsx';
+import { SerialPortIcon, CpuChipIcon, HttpIcon, BrainIcon, FileIcon } from './icons/Icons.tsx';
 import { SnowRulerDayIcon, SnowRulerNightIcon } from './icons/RulerIcons.tsx';
 import { useTheme } from './ThemeContext.tsx';
 
@@ -18,10 +19,12 @@ interface AddSensorDrawerProps {
 const interfaceIcons: { [key: string]: React.ReactNode } = {
     'serial': <SerialPortIcon className="w-5 h-5 text-muted" />,
     'uart': <SerialPortIcon className="w-5 h-5 text-muted" />,
+    'arduSht': <SerialPortIcon className="w-5 h-5 text-muted" />, // Reusing SerialPortIcon
     'i2c': <CpuChipIcon className="w-5 h-5 text-muted" />,
     'http': <HttpIcon className="w-5 h-5 text-muted" />,
     'virtual': <BrainIcon className="w-5 h-5 text-muted" />,
     'openweather': <HttpIcon className="w-5 h-5 text-muted" />,
+    'json_file': <FileIcon className="w-5 h-5 text-muted" />,
 };
 
 const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSave, stations, sensorTypes, cameras, sensorToEdit }) => {
@@ -147,12 +150,18 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
         } else if (interfaceType === 'uart') {
              setInterfaceConfig('{\n  "port": "/dev/ttyS0",\n  "baudrate": 9600\n}');
              setParserConfig('{\n  "driver": "hx711_uart"\n}');
+        } else if (interfaceType === 'arduSht') {
+             setInterfaceConfig('{\n  "port": "/dev/ttyUSB0",\n  "baudrate": 9600,\n  "data_folder": "/home/bielteknik/orionRC/py/veriler/shtData"\n}');
+             setParserConfig('{\n  "driver": "arduSht"\n}');
         } else if (interfaceType === 'virtual') {
             setInterfaceConfig('{\n  "source_camera_id": "cam_...",\n  "script": "image_analyzer.py"\n}');
             setParserConfig('{\n  "driver": "image_analyzer"\n}');
         } else if (interfaceType === 'openweather') {
             setInterfaceConfig('{} \n// Bu alan sunucu tarafından otomatik olarak doldurulacaktır.');
             setParserConfig('{\n  "driver": "openweather"\n}');
+        } else if (interfaceType === 'json_file') {
+            setInterfaceConfig('{\n  "folder_path": "/home/pi/veriler"\n}');
+            setParserConfig('{\n  "driver": "json_monitor"\n}');
         } else {
             setInterfaceConfig('{}');
             setParserConfig('{}');
@@ -287,10 +296,12 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
                                     <select id="interface-type" value={interfaceType} onChange={e => setInterfaceType(e.target.value)} className="w-full appearance-none bg-secondary border border-gray-300 rounded-md pl-10 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent">
                                         <option value="serial">Seri Port</option>
                                         <option value="uart">UART</option>
+                                        <option value="arduSht">Arduino SHT (USB & JSON Kayıt)</option>
                                         <option value="i2c">I2C</option>
                                         <option value="http">HTTP</option>
                                         <option value="virtual">Yapay Zeka (Görüntü İşleme)</option>
                                         <option value="openweather">OpenWeather API</option>
+                                        <option value="json_file">Yerel JSON Dosyası</option>
                                     </select>
                                 </div>
                             </div>
