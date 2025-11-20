@@ -137,9 +137,12 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
         }
     }, [isOpen, sensorToEdit, sensorTypes]);
 
-    // Automatically set example config when interface type changes for a new sensor
+    // Automatically set example config when interface type changes
     useEffect(() => {
-        if (sensorToEdit || isSnowSensor) return; // Don't override when editing or if it's the special snow sensor case
+        if (isSnowSensor) return; // Don't override if it's the special snow sensor case
+        
+        // If we are editing, only change config if the user explicitly changes the interface type
+        if (sensorToEdit && interfaceType === sensorToEdit.interface) return;
 
         if (interfaceType === 'i2c') {
             setInterfaceConfig('{\n  "address": "0x44",\n  "bus": 1\n}');
