@@ -2,25 +2,24 @@
 import { ISensorDriver } from "../types.js";
 import { SerialPort } from 'serialport';
 import { ReadlineParser } from '@serialport/parser-readline';
-import fs from 'fs/promises';
-import path from 'path';
 
 /**
  * Arduino Uno ile USB (Serial) üzerinden haberleşen sürücü (arduSht).
+ * Dosya kayıt özelliği kaldırılmıştır. Sadece anlık veri okur ve sisteme iletir.
+ * 
  * 1. Portu açar.
  * 2. 'R' komutunu gönderir.
- * 3. Arduino'dan gelen basit formatlı cevabı (Örn: "23.50,45.20") bekler.
- * 4. Veriyi virgül ile ayırarak işler.
- * 5. Belirtilen klasöre (örn: veriler/shtData) o günün tarihiyle JSON olarak kaydeder.
+ * 3. Arduino'dan gelen satırları dinler.
+ * 4. Debug mesajlarını eler, sadece "Sayı,Sayı" formatını (Örn: 6.91,26.15) yakalar.
+ * 5. Veriyi ayrıştırır (temperature, humidity).
  * 6. Arduino'ya 'S' komutunu gönderir.
- * 7. Veriyi sunucuya dönmek üzere hazırlar.
+ * 7. Veriyi sisteme döner.
  */
 export default class ArduShtDriver implements ISensorDriver {
     
-    public read(config: { port: string; baudrate?: number; data_folder?: string }, verbose: boolean = true): Promise<Record<string, any> | null> {
+    public read(config: { port: string; baudrate?: number }, verbose: boolean = true): Promise<Record<string, any> | null> {
         return new Promise((resolve) => {
-            // Varsayılan klasör kullanıcının belirttiği yol olarak ayarlandı
-            const { port, baudrate = 9600, data_folder = "/home/bielteknik/orionRC/py/veriler/shtData" } = config;
+            const { port, baudrate = 9600 } = config;
 
             if (!port) {
                 if (verbose) console.error("     -> HATA (ArduSht): Yapılandırmada 'port' belirtilmemiş.");
@@ -55,89 +54,39 @@ export default class ArduShtDriver implements ISensorDriver {
                 resolve(value);
             };
             
-            const saveDataToFile = async (data: any) => {
-                try {
-                    // Klasörün varlığını kontrol et, yoksa oluştur
-                    await fs.mkdir(data_folder, { recursive: true });
-
-                    // Dosya adını oluştur (DDMMYYYY.json)
-                    const now = new Date();
-                    const day = String(now.getDate()).padStart(2, '0');
-                    const month = String(now.getMonth() + 1).padStart(2, '0');
-                    const year = now.getFullYear();
-                    const filename = `${day}${month}${year}.json`;
-                    const filePath = path.join(data_folder, filename);
-
-                    // Veriye zaman damgası ekle
-                    const record = {
-                        tarih: `${day}.${month}.${year}`,
-                        saat: now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
-                        ...data
-                    };
-
-                    // Mevcut dosyayı oku veya yeni liste başlat
-                    let fileData = [];
-                    try {
-                        const content = await fs.readFile(filePath, 'utf-8');
-                        fileData = JSON.parse(content);
-                        if (!Array.isArray(fileData)) fileData = [];
-                    } catch (e) {
-                        // Dosya yoksa veya bozuksa boş dizi ile başla
-                        fileData = [];
-                    }
-
-                    fileData.push(record);
-
-                    // Dosyaya yaz
-                    await fs.writeFile(filePath, JSON.stringify(fileData, null, 4), 'utf-8');
-                    if (verbose) console.log(`     -> Veri dosyaya kaydedildi: ${filePath}`);
-
-                } catch (err: any) {
-                    console.error(`     -> HATA (ArduSht): Dosya yazma hatası: ${err.message}`);
-                }
-            };
-
-            const onData = async (line: string) => {
+            const onData = (line: string) => {
                 const trimmedLine = line.trim();
                 if (!trimmedLine) return;
                 
-                if (verbose) console.log(`     -> Arduino Yanıtı: "${trimmedLine}"`);
+                // Regex: Başlangıçta opsiyonel eksi, sayılar, opsiyonel ondalık, virgül, ikinci sayı
+                // Örn: "6.91,26.15"
+                const dataRegex = /^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/;
+                const match = trimmedLine.match(dataRegex);
 
-                // Beklenen format: "23.50,45.20" (Sıcaklık,Nem)
-                const parts = trimmedLine.split(',');
+                if (match) {
+                    const temperature = parseFloat(match[1]);
+                    const humidity = parseFloat(match[2]);
 
-                if (parts.length >= 2) {
-                    const temperature = parseFloat(parts[0]);
-                    const humidity = parseFloat(parts[1]);
+                    if (verbose) console.log(`     -> Arduino Verisi Yakalandı: Sıcaklık=${temperature}, Nem=${humidity}`);
 
-                    if (!isNaN(temperature) && !isNaN(humidity)) {
-                        const result: any = {
-                            temperature: temperature,
-                            humidity: humidity
-                        };
+                    const result: any = {
+                        temperature: temperature,
+                        humidity: humidity
+                    };
+                    
+                    // Arduino'ya 'S' (Stop/Success) komutu gönder
+                    if (verbose) console.log("     -> Veri işlendi, 'S' komutu gönderiliyor...");
+                    
+                    serialPort.write('S', (err: any) => {
+                        if (err && verbose) console.error('     -> HATA: S komutu gönderilemedi:', err);
                         
-                        const fileRecord = {
-                            sicaklik_c: temperature,
-                            nem_yuzde: humidity
-                        };
+                        // 'S' gönderildikten sonra (biraz bekleyip) bağlantıyı kapatıp veriyi dönüyoruz
+                        setTimeout(() => cleanupAndResolve(result), 100);
+                    });
 
-                        // Dosyaya kaydet
-                        await saveDataToFile(fileRecord);
-
-                        // Arduino'ya 'S' (Stop/Success) komutu gönder
-                        if (verbose) console.log("     -> Veri alındı, 'S' komutu gönderiliyor...");
-                        serialPort.write('S', (err: any) => {
-                            if (err && verbose) console.error('     -> HATA: S komutu gönderilemedi:', err);
-                            
-                            // Komut gönderildikten sonra (başarılı veya başarısız) işlemi bitir
-                            cleanupAndResolve(result);
-                        });
-
-                    } else {
-                         if (verbose) console.warn("     -> UYARI (ArduSht): Gelen veri sayısal değil.");
-                    }
                 } else {
-                    if (verbose) console.warn("     -> UYARI (ArduSht): Beklenen format (Sıcaklık,Nem) sağlanamadı.");
+                    // Veri formatına uymayan satırlar (Debug mesajları vb.)
+                    if (verbose) console.log(`     -> (Arduino Info): "${trimmedLine}"`);
                 }
             };
 

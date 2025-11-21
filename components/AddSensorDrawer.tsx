@@ -154,7 +154,7 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
              setInterfaceConfig('{\n  "port": "/dev/ttyS0",\n  "baudrate": 9600\n}');
              setParserConfig('{\n  "driver": "hx711_uart"\n}');
         } else if (interfaceType === 'arduSht') {
-             setInterfaceConfig('{\n  "port": "/dev/ttyUSB0",\n  "baudrate": 9600,\n  "data_folder": "/home/bielteknik/orionRC/py/veriler/shtData"\n}');
+             setInterfaceConfig('{\n  "port": "/dev/ttyUSB0",\n  "baudrate": 9600\n}');
              setParserConfig('{\n  "driver": "arduSht"\n}');
         } else if (interfaceType === 'virtual') {
             setInterfaceConfig('{\n  "source_camera_id": "cam_...",\n  "script": "image_analyzer.py"\n}');
