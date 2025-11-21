@@ -142,8 +142,14 @@ export default class ArduShtDriver implements ISensorDriver {
             };
 
             const onError = (err: Error | null) => {
-                if(err && verbose) {
-                    console.error(`     -> HATA (ArduSht): Seri port hatası:`, err.message);
+                if (err) {
+                    if (verbose) {
+                        console.error(`     -> HATA (ArduSht): Seri port hatası: ${err.message}`);
+                        // Meşgul hatası için özel ipucu
+                        if (err.message.includes('busy') || err.message.includes('Device or resource busy') || (err as any).code === 'EBUSY') {
+                            console.error(`     -> ⚠️ İPUCU: Port (${port}) şu anda meşgul. Arduino IDE Serial Monitor veya başka bir uygulama açık olabilir. Lütfen kapatın.`);
+                        }
+                    }
                 }
                 cleanupAndResolve(null);
             };
