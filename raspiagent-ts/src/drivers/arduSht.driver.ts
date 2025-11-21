@@ -5,15 +5,10 @@ import { ReadlineParser } from '@serialport/parser-readline';
 
 /**
  * Arduino Uno ile USB (Serial) üzerinden haberleşen sürücü (arduSht).
- * Dosya kayıt özelliği kaldırılmıştır. Sadece anlık veri okur ve sisteme iletir.
  * 
- * 1. Portu açar.
- * 2. 'R' komutunu gönderir.
- * 3. Arduino'dan gelen satırları dinler.
- * 4. Debug mesajlarını eler, sadece "Sayı,Sayı" formatını (Örn: 6.91,26.15) yakalar.
- * 5. Veriyi ayrıştırır (temperature, humidity).
- * 6. Arduino'ya 'S' komutunu gönderir.
- * 7. Veriyi sisteme döner.
+ * GÜNCELLEME:
+ * - 'temperature = X, humidity = Y' formatını okur.
+ * - 'S' komutu gönderme işlemi kaldırıldı.
  */
 export default class ArduShtDriver implements ISensorDriver {
     
@@ -40,6 +35,7 @@ export default class ArduShtDriver implements ISensorDriver {
             const cleanupAndResolve = (value: Record<string, any> | null) => {
                 if (timeout) clearTimeout(timeout);
                 
+                // Remove listeners
                 parser.removeAllListeners('data');
                 serialPort.removeAllListeners('error');
                 serialPort.removeAllListeners('open');
@@ -58,9 +54,9 @@ export default class ArduShtDriver implements ISensorDriver {
                 const trimmedLine = line.trim();
                 if (!trimmedLine) return;
                 
-                // Regex: Başlangıçta opsiyonel eksi, sayılar, opsiyonel ondalık, virgül, ikinci sayı
-                // Örn: "6.91,26.15"
-                const dataRegex = /^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/;
+                // Yeni Regex: "temperature = 19.74, humidity = 21.03" formatını yakalar.
+                // Büyük/küçük harf duyarsızdır.
+                const dataRegex = /temperature\s*=\s*(-?\d+(?:\.\d+)?).*humidity\s*=\s*(-?\d+(?:\.\d+)?)/i;
                 const match = trimmedLine.match(dataRegex);
 
                 if (match) {
@@ -74,15 +70,8 @@ export default class ArduShtDriver implements ISensorDriver {
                         humidity: humidity
                     };
                     
-                    // Arduino'ya 'S' (Stop/Success) komutu gönder
-                    if (verbose) console.log("     -> Veri işlendi, 'S' komutu gönderiliyor...");
-                    
-                    serialPort.write('S', (err: any) => {
-                        if (err && verbose) console.error('     -> HATA: S komutu gönderilemedi:', err);
-                        
-                        // 'S' gönderildikten sonra (biraz bekleyip) bağlantıyı kapatıp veriyi dönüyoruz
-                        setTimeout(() => cleanupAndResolve(result), 100);
-                    });
+                    // Artık 'S' komutu göndermiyoruz, veriyi aldık ve işlemi bitiriyoruz.
+                    cleanupAndResolve(result);
 
                 } else {
                     // Veri formatına uymayan satırlar (Debug mesajları vb.)
@@ -94,7 +83,6 @@ export default class ArduShtDriver implements ISensorDriver {
                 if (err) {
                     if (verbose) {
                         console.error(`     -> HATA (ArduSht): Seri port hatası: ${err.message}`);
-                        // Meşgul hatası için özel ipucu
                         if (err.message.includes('busy') || err.message.includes('Device or resource busy') || (err as any).code === 'EBUSY') {
                             console.error(`     -> ⚠️ İPUCU: Port (${port}) şu anda meşgul. Arduino IDE Serial Monitor veya başka bir uygulama açık olabilir. Lütfen kapatın.`);
                         }
@@ -103,10 +91,11 @@ export default class ArduShtDriver implements ISensorDriver {
                 cleanupAndResolve(null);
             };
 
+            // Zaman aşımı 15 saniye
             timeout = setTimeout(() => {
-                if (verbose) console.warn(`     -> UYARI (ArduSht): Zaman aşımı. Arduino 'R' komutuna yanıt vermedi.`);
+                if (verbose) console.warn(`     -> UYARI (ArduSht): Zaman aşımı (15sn). Beklenen formatta veri gelmedi.`);
                 cleanupAndResolve(null);
-            }, 5000); // 5 saniye bekle
+            }, 15000);
 
             serialPort.on('error', onError);
             parser.on('data', onData);
@@ -114,11 +103,11 @@ export default class ArduShtDriver implements ISensorDriver {
             serialPort.open((err: Error | null) => {
                 if (err) return onError(err);
                 
-                // Arduino'nun resetlenmesi için kısa bir bekleme
+                // Arduino'nun resetlenmesi için bekleme süresi (2.5 saniye)
                 setTimeout(() => {
                     serialPort.write('R');
                     if (verbose) console.log("     -> 'R' komutu gönderildi.");
-                }, 2000); 
+                }, 2500); 
             });
         });
     }
