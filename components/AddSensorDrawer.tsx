@@ -85,7 +85,8 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
         setName('');
         setStationId('');
         setInterfaceType('serial');
-        setInterfaceConfig('{\n  "port": "/dev/ttyMESAFE",\n  "baudrate": 9600\n}');
+        // Default templates for new sensor
+        setInterfaceConfig('{\n  "port": "/dev/ttyUSB0",\n  "baudrate": 9600\n}');
         setParserConfig('{\n  "driver": "dfrobot_ult"\n}');
         setSensorType(sensorTypes[0] || '');
         setUnit('');
@@ -100,6 +101,7 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
         setIsForSnowDepth(false);
     };
 
+    // Load data when modal opens
     useEffect(() => {
         if (isOpen) {
             if (sensorToEdit) {
@@ -112,12 +114,12 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
                 setUnit(sensorToEdit.unit || '');
                 setIsActive(sensorToEdit.status === SensorStatus.Active);
                 setInterfaceType(sensorToEdit.interface || 'serial');
+                // Directly load config from DB without side-effects
                 setInterfaceConfig(JSON.stringify(sensorToEdit.config, null, 2) || '{}');
                 setParserConfig(JSON.stringify(sensorToEdit.parser_config, null, 2) || '{}');
                 setReadFrequency(String(sensorToEdit.read_frequency || 600));
                 setReferenceValue(String(sensorToEdit.referenceValue ?? (isSnowConfig ? '' : '999')));
                 setReferenceOperation(sensorToEdit.referenceOperation || 'none');
-
 
                 // If editing a snow sensor, parse the source camera ID
                 if (sensorToEdit.type === 'Kar Yüksekliği' && sensorToEdit.interface === 'virtual') {
@@ -137,41 +139,46 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
         }
     }, [isOpen, sensorToEdit, sensorTypes]);
 
-    // Automatically set example config when interface type changes
-    useEffect(() => {
-        if (isSnowSensor) return; // Don't override if it's the special snow sensor case
-        
-        // If we are editing, only change config if the user explicitly changes the interface type
-        if (sensorToEdit && interfaceType === sensorToEdit.interface) return;
-
-        if (interfaceType === 'i2c') {
+    // Helper to update configs based on selected interface
+    const updateConfigsForInterface = (type: string) => {
+        if (type === 'i2c') {
             setInterfaceConfig('{\n  "address": "0x44",\n  "bus": 1\n}');
             setParserConfig('{\n  "driver": "sht3x"\n}');
-        } else if (interfaceType === 'serial') {
+        } else if (type === 'serial') {
              setInterfaceConfig('{\n  "port": "/dev/ttyUSB0",\n  "baudrate": 9600\n}');
              setParserConfig('{\n  "driver": "dfrobot_ult"\n}');
-        } else if (interfaceType === 'uart') {
+        } else if (type === 'uart') {
              setInterfaceConfig('{\n  "port": "/dev/ttyS0",\n  "baudrate": 9600\n}');
              setParserConfig('{\n  "driver": "hx711_uart"\n}');
-        } else if (interfaceType === 'arduSht') {
+        } else if (type === 'arduSht') {
              setInterfaceConfig('{\n  "port": "/dev/ttyUSB0",\n  "baudrate": 9600\n}');
              setParserConfig('{\n  "driver": "arduSht"\n}');
-        } else if (interfaceType === 'virtual') {
+        } else if (type === 'virtual') {
             setInterfaceConfig('{\n  "source_camera_id": "cam_...",\n  "script": "image_analyzer.py"\n}');
             setParserConfig('{\n  "driver": "image_analyzer"\n}');
-        } else if (interfaceType === 'openweather') {
+        } else if (type === 'openweather') {
             setInterfaceConfig('{} \n// Bu alan sunucu tarafından otomatik olarak doldurulacaktır.');
             setParserConfig('{\n  "driver": "openweather"\n}');
-        } else if (interfaceType === 'json_file') {
+        } else if (type === 'json_file') {
             setInterfaceConfig('{\n  "folder_path": "/home/pi/veriler"\n}');
             setParserConfig('{\n  "driver": "json_monitor"\n}');
         } else {
             setInterfaceConfig('{}');
             setParserConfig('{}');
         }
-    }, [interfaceType, sensorToEdit, isSnowSensor]);
+    };
 
-    // Effect to auto-generate JSON for the snow sensor
+    // Handle manual interface change
+    const handleInterfaceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newType = e.target.value;
+        setInterfaceType(newType);
+        // Only update configs when user MANUALLY changes the interface type
+        if (!isSnowSensor) {
+            updateConfigsForInterface(newType);
+        }
+    };
+
+    // Effect to auto-generate JSON for the snow sensor (Special case)
     useEffect(() => {
         if (isSnowSensor) {
             setInterfaceConfig(JSON.stringify({
@@ -229,13 +236,27 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
         if (isFormInvalid) return;
 
         setError('');
+        
+        // Parse configs before sending to ensure valid objects/strings
+        let parsedInterfaceConfig = interfaceConfig;
+        let parsedParserConfig = parserConfig;
+        
+        try {
+             // Minify JSON to remove comments/whitespace if valid
+             parsedInterfaceConfig = JSON.stringify(JSON.parse(interfaceConfig));
+             parsedParserConfig = JSON.stringify(JSON.parse(parserConfig));
+        } catch (e) {
+            // Should be caught by validation effects, but as failsafe
+            console.error("Invalid JSON on save", e);
+        }
+
         onSave({
             id: sensorToEdit?.id,
             name,
             stationId,
             interfaceType,
-            parserConfig,
-            interfaceConfig,
+            parserConfig: parsedParserConfig,
+            interfaceConfig: parsedInterfaceConfig,
             type: sensorType,
             unit,
             readFrequency: parseInt(readFrequency, 10) || 600,
@@ -296,7 +317,7 @@ const AddSensorDrawer: React.FC<AddSensorDrawerProps> = ({ isOpen, onClose, onSa
                                      <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                                         {interfaceIcons[interfaceType]}
                                     </div>
-                                    <select id="interface-type" value={interfaceType} onChange={e => setInterfaceType(e.target.value)} className="w-full appearance-none bg-secondary border border-gray-300 rounded-md pl-10 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent">
+                                    <select id="interface-type" value={interfaceType} onChange={handleInterfaceChange} className="w-full appearance-none bg-secondary border border-gray-300 rounded-md pl-10 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent">
                                         <option value="serial">Seri Port</option>
                                         <option value="uart">UART</option>
                                         <option value="arduSht">Arduino SHT (USB & JSON Kayıt)</option>
