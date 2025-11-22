@@ -18,24 +18,38 @@ const CameraDetail: React.FC<CameraDetailProps> = ({ cameraId, onBack }) => {
   const [error, setError] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [photoDateFilter, setPhotoDateFilter] = useState(new Date().toISOString().split('T')[0]);
+  
   const pollingIntervalRef = useRef<number | null>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
+  
+  // En son fotoğrafın URL'ini tutmak için ref (Sayısından daha güvenilir)
+  const lastKnownPhotoRef = useRef<string | null>(null);
 
   const fetchData = async (isPolling = false) => {
     if (!isPolling) setIsLoading(true);
     try {
-        setError(null);
+        if (!isPolling) setError(null);
         const [camerasData, stationsData] = await Promise.all([getCameras(), getStations()]);
         const currentCamera = camerasData.find(c => c.id === cameraId);
+        
         if (currentCamera) {
             const currentStation = stationsData.find(s => s.id === currentCamera.stationId);
             setCamera(currentCamera);
             setStation(currentStation || null);
 
-            // If polling, check if a new photo has arrived
-            if (isPolling && camera && currentCamera.photos.length > camera.photos.length) {
-                if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-                setIsCapturing(false);
+            // Polling yapılıyorsa ve en son fotoğraf değiştiyse işlemi bitir
+            if (isPolling) {
+                const newestPhoto = currentCamera.photos.length > 0 ? currentCamera.photos[0] : null;
+                
+                // Eğer yeni gelen fotoğraf, işlem başındaki fotoğraftan farklıysa işlem tamamdır
+                if (newestPhoto !== lastKnownPhotoRef.current) {
+                    console.log("Yeni fotoğraf algılandı, polling durduruluyor.");
+                    if (pollingIntervalRef.current) {
+                        window.clearInterval(pollingIntervalRef.current);
+                        pollingIntervalRef.current = null;
+                    }
+                    setIsCapturing(false);
+                }
             }
 
         } else {
@@ -44,7 +58,11 @@ const CameraDetail: React.FC<CameraDetailProps> = ({ cameraId, onBack }) => {
     } catch (err) {
         setError('Kamera detayları yüklenirken bir hata oluştu.');
         console.error(err);
-        if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+        // Hata durumunda polling'i durdur
+        if (pollingIntervalRef.current) {
+            window.clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+        }
         setIsCapturing(false);
     } finally {
         if (!isPolling) setIsLoading(false);
@@ -54,44 +72,56 @@ const CameraDetail: React.FC<CameraDetailProps> = ({ cameraId, onBack }) => {
   useEffect(() => {
     fetchData();
     return () => { // Cleanup on unmount
-        if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+        if (pollingIntervalRef.current) {
+            window.clearInterval(pollingIntervalRef.current);
+        }
     };
   }, [cameraId]);
   
   const filteredPhotos = useMemo(() => {
     if (!camera?.photos) return [];
-    if (!photoDateFilter) return camera.photos;
-    
+    // Regex ile tarih filtresi (YYYY-MM-DD formatını dosya adının herhangi bir yerinde arar)
+    const dateRegex = new RegExp(photoDateFilter);
     return camera.photos.filter(photoUrl => {
         const filename = photoUrl.split('/').pop() || '';
-        // Removed ^ anchor to match date anywhere in filename
-        const datePartMatch = filename.match(/(\d{4}-\d{2}-\d{2})/);
-        if (datePartMatch) {
-            return datePartMatch[1] === photoDateFilter;
-        }
-        return false;
+        return dateRegex.test(filename);
     });
   }, [camera, photoDateFilter]);
 
   const handleCapture = async () => {
     if (!camera) return;
+    
+    // Mevcut en son fotoğrafı kaydet (Yoksa null)
+    lastKnownPhotoRef.current = camera.photos.length > 0 ? camera.photos[0] : null;
+    
     setIsCapturing(true);
     try {
         await captureCameraImage(camera.id);
-        // Start polling for the new image
+        
+        // Yeni görüntüyü kontrol etmek için polling başlat
+        // Önceki interval varsa temizle
+        if (pollingIntervalRef.current) window.clearInterval(pollingIntervalRef.current);
+        
         pollingIntervalRef.current = window.setInterval(() => {
             fetchData(true);
-        }, 3000); // Poll every 3 seconds
-        // Set a timeout to stop polling after a while
+        }, 3000); // 3 saniyede bir kontrol et
+
+        // Zaman aşımı (60 saniye)
         setTimeout(() => {
             if (pollingIntervalRef.current) {
-                clearInterval(pollingIntervalRef.current);
-                if (isCapturing) {
-                    setIsCapturing(false);
-                    alert("Fotoğraf yakalama zaman aşımına uğradı. Lütfen agent'ın çalıştığından ve bağlı olduğundan emin olun.");
-                }
+                window.clearInterval(pollingIntervalRef.current);
+                pollingIntervalRef.current = null;
+                // Eğer hala capturing durumundaysa (yani fotoğraf gelmediyse) durdur ve uyar
+                setIsCapturing(prev => {
+                    if (prev) {
+                        alert("Fotoğraf yakalama zaman aşımı. Agent yanıt vermedi veya işlem çok uzun sürdü.");
+                        return false;
+                    }
+                    return prev;
+                });
             }
-        }, 60000); // 1 minute timeout
+        }, 60000); 
+
     } catch (error) {
         console.error("Failed to initiate capture:", error);
         alert("Fotoğraf çekme komutu gönderilemedi.");
