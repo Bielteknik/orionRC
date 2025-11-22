@@ -47,10 +47,6 @@ const formatDisplayValue = (reading: SensorReading): string => {
     if (numericValue !== null) {
         return numericValue.toFixed(2);
     }
-    // Handle special non-numeric cases like from weight sensor
-    if (reading.value && typeof reading.value === 'object' && 'weight_kg' in reading.value && reading.value.weight_kg === 'N/A') {
-        return 'N/A';
-    }
     return 'N/A';
 };
 
@@ -126,6 +122,7 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
     
     const chartData = useMemo(() => {
         const dataMap = new Map<number, any>();
+        // Saniye hassasiyetinde yuvarlama
         const roundToNearestSecond = (iso: string) => Math.round(new Date(iso).getTime() / 1000);
     
         processedReadings.forEach(r => {
@@ -167,8 +164,7 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
                 </g>
             );
         }
-        // Default dot style
-        return <circle cx={cx} cy={cy} r={3} fill="#F97316" stroke="none" />;
+        return <circle cx={cx} cy={cy} r={0} fill="none" stroke="none" />;
     };
 
     // Custom Tooltip
@@ -248,7 +244,7 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
                                     <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#374151' : '#E5E7EB'} />
                                         <XAxis dataKey="name" tick={{ fontSize: 10, fill: tickColor }} angle={-20} textAnchor="end" height={40} />
-                                        <YAxis tick={{ fontSize: 10, fill: tickColor }} unit={sensor.unit} domain={['dataMin - 1', 'dataMax + 1']} />
+                                        <YAxis tick={{ fontSize: 10, fill: tickColor }} unit={sensor.unit} domain={['auto', 'auto']} />
                                         <Tooltip content={<CustomTooltip />} />
                                         <Legend />
                                         <Line 
@@ -258,9 +254,10 @@ const SensorDetailModal: React.FC<SensorDetailModalProps> = ({ isOpen, onClose, 
                                             stroke="#F97316" 
                                             strokeWidth={2} 
                                             dot={<CustomDot />} 
+                                            connectNulls={true} // Important for sparse data
                                             activeDot={{ r: 6 }} 
                                         />
-                                        <Line type="monotone" dataKey="Ham Değer" name="Ham Değer" stroke="#9CA3AF" strokeWidth={2} strokeDasharray="3 3" dot={false} activeDot={{ r: 6 }} />
+                                        <Line type="monotone" dataKey="Ham Değer" name="Ham Değer" stroke="#9CA3AF" strokeWidth={2} strokeDasharray="3 3" dot={false} connectNulls={true} activeDot={{ r: 6 }} />
                                     </LineChart>
                                 </ResponsiveContainer>
                             </div>

@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect, useMemo, useCallback, HTMLAttributes } from 'react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, AreaChart, Area } from 'recharts';
 import { Station, Sensor, WidgetConfig, WidgetType } from '../types.ts';
@@ -69,6 +70,7 @@ const SensorChart: React.FC<{ sensorType: string, data: any[], stations: Station
             }
             const stationName = stations.find(s => s.id === d.stationId)?.name || d.stationId;
             const numericValue = getNumericValue(d.value, d.sensorType, d.interface);
+            // Only add valid numeric values
             if (numericValue !== null) {
                 stationData[time][stationName] = numericValue;
             }
@@ -86,7 +88,7 @@ const SensorChart: React.FC<{ sensorType: string, data: any[], stations: Station
                     <AreaChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 20 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#374151' : '#E5E7EB'} />
                         <XAxis dataKey="name" tick={{ fontSize: 9, fill: tickColor }} angle={-25} textAnchor="end" />
-                        <YAxis tick={{ fontSize: 10, fill: tickColor }} unit={data?.[0]?.unit || ''}/>
+                        <YAxis tick={{ fontSize: 10, fill: tickColor }} unit={data?.[0]?.unit || ''} domain={['auto', 'auto']}/>
                         <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF', border: `1px solid ${theme === 'dark' ? '#374151' : '#E5E7EB'}` }}/>
                         <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '20px' }}/>
                         {stationNames.map((name) => (
@@ -106,6 +108,7 @@ const SensorChart: React.FC<{ sensorType: string, data: any[], stations: Station
                                 fill={`url(#color-${name.replace(/\s/g, '')})`}
                                 strokeWidth={2} 
                                 activeDot={{ r: 6 }} 
+                                connectNulls={true}
                                 dot={false}
                             />
                         ))}
@@ -171,12 +174,17 @@ const Dashboard: React.FC<{
             setSelectedSensorTypes(availableDefaultTypes);
         }
         
-        const endDate = new Date();
-        const startDate = new Date();
-        startDate.setDate(endDate.getDate() - 1);
+        // Initialize date range to cover "today" fully, ensuring recent data appears
+        const now = new Date();
+        const todayStr = now.toISOString().split('T')[0];
+        // Set yesterday as start to show a trend
+        const yesterday = new Date();
+        yesterday.setDate(now.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+
         setDateRange({ 
-            start: startDate.toISOString().split('T')[0], 
-            end: endDate.toISOString().split('T')[0] 
+            start: yesterdayStr, 
+            end: todayStr 
         });
 
     }, [stations, sensors, allSensorTypes]);
@@ -203,11 +211,17 @@ const Dashboard: React.FC<{
         }
         setIsLoadingHistory(true);
         try {
+            // Ensure the end date covers the entire end day by appending time if just a date string
+            let endDateTime = dateRange.end;
+            if (endDateTime && endDateTime.length === 10) {
+                endDateTime += 'T23:59:59';
+            }
+
             const data = await getReadingsHistory({ 
                 stationIds: selectedStationIds, 
                 sensorTypes: selectedSensorTypes,
                 start: dateRange.start ? new Date(dateRange.start).toISOString() : undefined,
-                end: dateRange.end ? new Date(dateRange.end).toISOString() : undefined,
+                end: endDateTime ? new Date(endDateTime).toISOString() : undefined,
             });
             setHistoryData(data);
         } catch (error) {
