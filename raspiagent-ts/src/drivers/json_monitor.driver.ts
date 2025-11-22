@@ -1,12 +1,15 @@
-
 import { ISensorDriver } from "../types.js";
 import fs from 'fs/promises';
 import path from 'path';
 
 /**
  * Yerel bir klasördeki günlük JSON dosyalarını izleyen sürücü.
- * Dosya formatı: DDMMYYYY.json (Örn: 19112025.json)
+ * Dosya formatı: DDMMYYYY.json (Örn: 22112025.json)
  * İçerik formatı: Array (Son eleman en güncel veridir)
+ * 
+ * GÜNCELLEME:
+ * - Veri yapısı: [ { "anlik_durum": { ... } }, ... ]
+ * - Sayı formatı: "11,6" (Virgüllü string) -> 11.6 (Number) dönüşümü yapıldı.
  */
 export default class JsonMonitorDriver implements ISensorDriver {
     
@@ -21,7 +24,7 @@ export default class JsonMonitorDriver implements ISensorDriver {
         // Bugünün tarihini DDMMYYYY formatında oluştur
         const now = new Date();
         const day = String(now.getDate()).padStart(2, '0');
-        const month = String(now.getMonth() + 1).padStart(2, '0'); // Aylar 0-11 arasıdır
+        const month = String(now.getMonth() + 1).padStart(2, '0'); 
         const year = now.getFullYear();
         const filename = `${day}${month}${year}.json`;
         
@@ -36,18 +39,17 @@ export default class JsonMonitorDriver implements ISensorDriver {
                 return null;
             }
 
-            // Dosyayı oku
             const fileContent = await fs.readFile(filePath, 'utf-8');
             
             if (!fileContent.trim()) {
-                return null; // Dosya boş
+                return null; 
             }
 
             let jsonData;
             try {
                 jsonData = JSON.parse(fileContent);
             } catch (e) {
-                if (verbose) console.error(`     -> HATA (JSON Monitor): JSON ayrıştırılamadı. Dosya bozuk olabilir.`);
+                if (verbose) console.error(`     -> HATA (JSON Monitor): JSON ayrıştırılamadı.`);
                 return null;
             }
 
@@ -56,27 +58,42 @@ export default class JsonMonitorDriver implements ISensorDriver {
                 return null;
             }
 
-            // Dizideki son elemanı (en güncel veriyi) al
-            const latestEntry = jsonData[jsonData.length - 1];
+            // Dizideki son elemanı al
+            const latestEntryRoot = jsonData[jsonData.length - 1];
+            
+            // "anlik_durum" alt nesnesini kontrol et
+            const data = latestEntryRoot.anlik_durum || latestEntryRoot;
 
-            if (verbose) console.log(`     -> JSON Dosyasından Okunan:`, latestEntry);
+            if (verbose) console.log(`     -> JSON Dosyasından Okunan (Ham):`, data);
 
-            // Veri formatını sistem standartlarına dönüştür (Mapping)
-            // Sizin formatınız: { "tarih": "...", "saat": "...", "sicaklik_c": 4.7, "hadise": "...", "nem_yuzde": 24 }
-            const mappedData: any = {
-                // Orijinal verileri koru
-                ...latestEntry,
+            // Helper to parse Turkish float string "11,6" -> 11.6
+            const parseTurkishFloat = (val: any): number | null => {
+                if (typeof val === 'number') return val;
+                if (typeof val === 'string') {
+                    if (!val.trim()) return null; // Boş string ise null dön
+                    const normalized = val.replace(',', '.');
+                    const num = parseFloat(normalized);
+                    return isNaN(num) ? null : num;
+                }
+                return null;
             };
 
-            // Sistemdeki widget'ların (grafiklerin) tanıması için standart anahtarları ekle
-            if (typeof latestEntry.sicaklik_c === 'number') {
-                mappedData.temperature = latestEntry.sicaklik_c;
-            }
-            if (typeof latestEntry.nem_yuzde === 'number') {
-                mappedData.humidity = latestEntry.nem_yuzde;
+            const mappedData: any = { ...data };
+
+            // Sistem standartlarına dönüştür
+            if (data.sicaklik !== undefined) {
+                const temp = parseTurkishFloat(data.sicaklik);
+                if (temp !== null) mappedData.temperature = temp;
             }
             
-            // Tarih ve saati birleştirip timestamp olarak ekleyebiliriz ama server zaten geliş zamanını kaydediyor.
+            // Nem verisi bazen "nem", bazen "nem_yuzde" olabilir, her ikisini de kontrol et
+            const rawHum = data.nem !== undefined ? data.nem : data.nem_yuzde;
+            if (rawHum !== undefined) {
+                const hum = parseTurkishFloat(rawHum);
+                if (hum !== null) mappedData.humidity = hum;
+            }
+            
+            if (verbose) console.log(`     -> İşlenmiş Veri:`, mappedData);
             
             return mappedData;
 

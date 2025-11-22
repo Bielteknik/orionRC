@@ -9,6 +9,7 @@ import { ReadlineParser } from '@serialport/parser-readline';
  * GÜNCELLEME:
  * - 'temperature = X, humidity = Y' formatını okur.
  * - 'S' komutu gönderme işlemi kaldırıldı.
+ * - Zaman aşımı 15 saniyeye çıkarıldı.
  */
 export default class ArduShtDriver implements ISensorDriver {
     
