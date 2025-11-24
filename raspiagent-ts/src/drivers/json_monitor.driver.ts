@@ -1,3 +1,4 @@
+
 import { ISensorDriver } from "../types.js";
 import fs from 'fs/promises';
 import path from 'path';
@@ -78,7 +79,6 @@ export default class JsonMonitorDriver implements ISensorDriver {
 
             for (let i = jsonData.length - 1; i >= 0; i--) {
                 const entryRoot = jsonData[i];
-                // "anlik_durum" alt nesnesini kontrol et (veya direkt kök)
                 const entry = entryRoot.anlik_durum || entryRoot;
 
                 // Sıcaklık henüz bulunmadıysa ve bu kayıtta varsa al
@@ -89,7 +89,6 @@ export default class JsonMonitorDriver implements ISensorDriver {
 
                 // Nem henüz bulunmadıysa ve bu kayıtta varsa al
                 if (lastValidHum === null) {
-                    // Nem verisi bazen "nem", bazen "nem_yuzde" olabilir, her ikisini de kontrol et
                     const rawHum = entry.nem !== undefined ? entry.nem : entry.nem_yuzde;
                     if (rawHum !== undefined) {
                         const hum = parseTurkishFloat(rawHum);

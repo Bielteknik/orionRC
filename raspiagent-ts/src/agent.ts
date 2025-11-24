@@ -35,7 +35,7 @@ const MAIN_LOOP_DEFAULT_INTERVAL = 600000; // 10 minutes (default sensor read cy
 const COMMAND_POLL_INTERVAL = 5000; // 5 seconds
 const SYNC_INTERVAL = 30000; // 30 seconds for syncing offline data
 const AVERAGING_DURATION_MS = 60000; // 1 minute for averaging
-const AVERAGING_READ_INTERVAL_MS = 2000; // Read every 2 seconds during averaging
+const AVERAGING_READ_INTERVAL_MS = 4000; // Increased to 4 seconds to prevent serial port busy errors
 
 // Local config file structure
 interface LocalConfig {
@@ -410,8 +410,8 @@ class Agent {
 
         while (Date.now() < endTime) {
             if (!this.running) break;
-            // Pass verbose=false to suppress detailed logs during averaging loop
-            const reading = await this.performSingleReading(sensor, false); 
+            // Enable verbose (true) to see errors during averaging if they occur
+            const reading = await this.performSingleReading(sensor, true); 
             if (reading && reading.rawValue !== null && reading.processedValue !== null) {
                 collectedRawValues.push(reading.rawValue);
                 collectedProcessedValues.push(reading.processedValue);
@@ -444,8 +444,10 @@ class Agent {
             const zeroCount = values.filter(v => v && v.weight_kg === 0).length;
             const nonZeroValues = values.filter(v => v && v.weight_kg > 0);
     
-            // If more than 95% of readings are zero, the actual weight is likely zero
-            if (zeroCount / values.length > 0.95) {
+            // If more than 50% of readings are near zero (less than 0.5kg threshold), consider it empty
+            const nearZeroCount = values.filter(v => v && v.weight_kg < 0.5).length;
+
+            if (nearZeroCount / values.length > 0.5) {
                 return { weight_kg: 0 };
             }
             // Otherwise, filter out the zeros as they are likely noise/transient errors
