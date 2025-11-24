@@ -10,6 +10,7 @@ import path from 'path';
  * GÜNCELLEME:
  * - Veri yapısı: [ { "anlik_durum": { ... } }, ... ]
  * - Sayı formatı: "11,6" (Virgüllü string) -> 11.6 (Number) dönüşümü yapıldı.
+ * - AKILLI OKUMA: Eğer son kayıtta değer boşsa (""), geriye doğru gidip en son geçerli değeri bulur.
  */
 export default class JsonMonitorDriver implements ISensorDriver {
     
@@ -58,14 +59,6 @@ export default class JsonMonitorDriver implements ISensorDriver {
                 return null;
             }
 
-            // Dizideki son elemanı al
-            const latestEntryRoot = jsonData[jsonData.length - 1];
-            
-            // "anlik_durum" alt nesnesini kontrol et
-            const data = latestEntryRoot.anlik_durum || latestEntryRoot;
-
-            if (verbose) console.log(`     -> JSON Dosyasından Okunan (Ham):`, data);
-
             // Helper to parse Turkish float string "11,6" -> 11.6
             const parseTurkishFloat = (val: any): number | null => {
                 if (typeof val === 'number') return val;
@@ -78,24 +71,48 @@ export default class JsonMonitorDriver implements ISensorDriver {
                 return null;
             };
 
-            const mappedData: any = { ...data };
+            // --- AKILLI ARAMA ---
+            // Diziyi sondan başa doğru tarayarak en son geçerli sıcaklık ve nem değerlerini bulalım.
+            let lastValidTemp: number | null = null;
+            let lastValidHum: number | null = null;
 
-            // Sistem standartlarına dönüştür
-            if (data.sicaklik !== undefined) {
-                const temp = parseTurkishFloat(data.sicaklik);
-                if (temp !== null) mappedData.temperature = temp;
+            for (let i = jsonData.length - 1; i >= 0; i--) {
+                const entryRoot = jsonData[i];
+                // "anlik_durum" alt nesnesini kontrol et (veya direkt kök)
+                const entry = entryRoot.anlik_durum || entryRoot;
+
+                // Sıcaklık henüz bulunmadıysa ve bu kayıtta varsa al
+                if (lastValidTemp === null && entry.sicaklik !== undefined) {
+                    const temp = parseTurkishFloat(entry.sicaklik);
+                    if (temp !== null) lastValidTemp = temp;
+                }
+
+                // Nem henüz bulunmadıysa ve bu kayıtta varsa al
+                if (lastValidHum === null) {
+                    // Nem verisi bazen "nem", bazen "nem_yuzde" olabilir, her ikisini de kontrol et
+                    const rawHum = entry.nem !== undefined ? entry.nem : entry.nem_yuzde;
+                    if (rawHum !== undefined) {
+                        const hum = parseTurkishFloat(rawHum);
+                        if (hum !== null) lastValidHum = hum;
+                    }
+                }
+
+                // İkisini de bulduysak döngüden çık
+                if (lastValidTemp !== null && lastValidHum !== null) break;
             }
+
+            const result: any = {};
+            if (lastValidTemp !== null) result.temperature = lastValidTemp;
+            if (lastValidHum !== null) result.humidity = lastValidHum;
             
-            // Nem verisi bazen "nem", bazen "nem_yuzde" olabilir, her ikisini de kontrol et
-            const rawHum = data.nem !== undefined ? data.nem : data.nem_yuzde;
-            if (rawHum !== undefined) {
-                const hum = parseTurkishFloat(rawHum);
-                if (hum !== null) mappedData.humidity = hum;
+            if (Object.keys(result).length === 0) {
+                 if (verbose) console.warn(`     -> UYARI (JSON Monitor): Dosyada geçerli sayısal veri bulunamadı.`);
+                 return null;
             }
+
+            if (verbose) console.log(`     -> İşlenmiş Veri (Akıllı Arama):`, result);
             
-            if (verbose) console.log(`     -> İşlenmiş Veri:`, mappedData);
-            
-            return mappedData;
+            return result;
 
         } catch (error: any) {
             if (verbose) console.error(`     -> HATA (JSON Monitor): Dosya okuma hatası: ${error.message}`);
